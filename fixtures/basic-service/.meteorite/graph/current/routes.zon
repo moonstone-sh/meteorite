@@ -1,0 +1,244 @@
+.{
+    .{
+        .id = "health",
+        .method = .GET,
+        .raw_path = "/health",
+        .path = .{
+            .segments = .{
+                .{
+                    .literal = "health",
+                },
+            },
+        },
+        .query = .{},
+        .handler = .{
+            .zig = "handlers.health",
+        },
+        .source = .{
+            .file = "src/app.lua",
+            .line = 5,
+            .column = 1,
+        },
+        .memory = .{
+            .max_body_bytes = 0,
+            .request_arena_bytes = 262144,
+        },
+    },
+    .{
+        .id = "get_user",
+        .method = .GET,
+        .raw_path = "/users/:id",
+        .path = .{
+            .segments = .{
+                .{
+                    .literal = "users",
+                },
+                .{
+                    .param = .{
+                        .name = "id",
+                        .type = .u64,
+                    },
+                },
+            },
+        },
+        .query = .{},
+        .handler = .{
+            .zig = "handlers.get_user",
+        },
+        .source = .{
+            .file = "src/app.lua",
+            .line = 6,
+            .column = 1,
+        },
+        .memory = .{
+            .max_body_bytes = 0,
+            .request_arena_bytes = 262144,
+        },
+    },
+    .{
+        .id = "echo",
+        .method = .POST,
+        .raw_path = "/echo",
+        .path = .{
+            .segments = .{
+                .{
+                    .literal = "echo",
+                },
+            },
+        },
+        .query = .{},
+        .handler = .{
+            .zig = "handlers.echo",
+        },
+        .source = .{
+            .file = "src/app.lua",
+            .line = 10,
+            .column = 1,
+        },
+        .memory = .{
+            .max_body_bytes = 8192,
+            .request_arena_bytes = 16384,
+        },
+    },
+    .{
+        .id = "get_device",
+        .method = .GET,
+        .raw_path = "/devices/:device_id",
+        .path = .{
+            .segments = .{
+                .{
+                    .literal = "devices",
+                },
+                .{
+                    .param = .{
+                        .name = "device_id",
+                        .type = .string,
+                        .max_len = 64,
+                        .pattern_id = "device_id",
+                    },
+                },
+            },
+        },
+        .query = .{},
+        .handler = .{
+            .zig = "handlers.get_device",
+        },
+        .source = .{
+            .file = "src/app.lua",
+            .line = 22,
+            .column = 1,
+        },
+        .memory = .{
+            .max_body_bytes = 0,
+            .request_arena_bytes = 262144,
+        },
+    },
+    .{
+        .id = "file",
+        .method = .GET,
+        .raw_path = "/files/:name",
+        .path = .{
+            .segments = .{
+                .{
+                    .literal = "files",
+                },
+                .{
+                    .param = .{
+                        .name = "name",
+                        .type = .string,
+                        .max_len = 80,
+                        .pattern_id = "file_name",
+                    },
+                },
+            },
+        },
+        .query = .{},
+        .handler = .{
+            .zig = "handlers.file",
+        },
+        .source = .{
+            .file = "src/app.lua",
+            .line = 28,
+            .column = 1,
+        },
+        .memory = .{
+            .max_body_bytes = 0,
+            .request_arena_bytes = 262144,
+        },
+    },
+    .{
+        .id = "slug",
+        .method = .GET,
+        .raw_path = "/slugs/:slug",
+        .path = .{
+            .segments = .{
+                .{
+                    .literal = "slugs",
+                },
+                .{
+                    .param = .{
+                        .name = "slug",
+                        .type = .slug,
+                        .max_len = 64,
+                    },
+                },
+            },
+        },
+        .query = .{},
+        .handler = .{
+            .zig = "handlers.slug",
+        },
+        .source = .{
+            .file = "src/app.lua",
+            .line = 34,
+            .column = 1,
+        },
+        .memory = .{
+            .max_body_bytes = 0,
+            .request_arena_bytes = 262144,
+        },
+    },
+    .{
+        .id = "uuid",
+        .method = .GET,
+        .raw_path = "/uuids/:id",
+        .path = .{
+            .segments = .{
+                .{
+                    .literal = "uuids",
+                },
+                .{
+                    .param = .{
+                        .name = "id",
+                        .type = .uuid,
+                    },
+                },
+            },
+        },
+        .query = .{},
+        .handler = .{
+            .zig = "handlers.uuid",
+        },
+        .source = .{
+            .file = "src/app.lua",
+            .line = 38,
+            .column = 1,
+        },
+        .memory = .{
+            .max_body_bytes = 0,
+            .request_arena_bytes = 262144,
+        },
+    },
+    .{
+        .id = "hex",
+        .method = .GET,
+        .raw_path = "/hex/:digest",
+        .path = .{
+            .segments = .{
+                .{
+                    .literal = "hex",
+                },
+                .{
+                    .param = .{
+                        .name = "digest",
+                        .type = .hex,
+                        .exact_len = 32,
+                    },
+                },
+            },
+        },
+        .query = .{},
+        .handler = .{
+            .zig = "handlers.hex",
+        },
+        .source = .{
+            .file = "src/app.lua",
+            .line = 42,
+            .column = 1,
+        },
+        .memory = .{
+            .max_body_bytes = 0,
+            .request_arena_bytes = 262144,
+        },
+    },
+}

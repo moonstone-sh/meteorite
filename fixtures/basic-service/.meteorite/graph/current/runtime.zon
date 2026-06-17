@@ -1,0 +1,5 @@
+.{
+    .mode = .release_static,
+    .backend = .std_http,
+    .lua_runtime = false,
+}

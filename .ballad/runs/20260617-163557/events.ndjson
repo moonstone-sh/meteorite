@@ -1,0 +1,2 @@
+{"id":"native_1","type":"task_started","tool":"moon","kind":"native","timestamp":"2026-06-17T19:35:57Z"}
+{"id":"native_1","timestamp":"2026-06-17T19:35:57Z","type":"task_failed","kind":"native","exit_code":256}

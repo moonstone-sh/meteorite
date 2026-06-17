@@ -1,0 +1,24 @@
+[package]
+name = "moonstone/meteorite"
+version = "0.1.0"
+kind = "bin"
+description = "Source package for moonstone/meteorite"
+
+[[artifacts]]
+id = "source"
+kind = "source"
+target = "source"
+format = "tar.zst"
+url = "blobs/b3/10/55/10552c5194f863bb4c92de237f937c89b386e700585feb9187985e70bd4f32ef.tar.zst"
+hash = "b3:10552c5194f863bb4c92de237f937c89b386e700585feb9187985e70bd4f32ef"
+recipe_hash = "b3:be1823936e7cdb3251aad2236b5ed006ad3be6bf1ed53fa19893f7cabdb60960"
+bytes = 14318
+
+[artifacts.materialize]
+command = "zig build install-server -- dist/server"
+type = "command"
+
+[artifacts.materialize.collect]
+bins = [ { name = "meteorite", path = "dist/server" } ]
+headers = [  ]
+lua_modules = [ { name = "meteorite/init.lua", path = "src/meteorite/init.lua" }, { name = "meteorite/route.lua", path = "src/meteorite/route.lua" }, { name = "meteorite/schema.lua", path = "src/meteorite/schema.lua" }, { name = "meteorite/patterns.lua", path = "src/meteorite/patterns.lua" }, { name = "meteorite/zon.lua", path = "src/meteorite/zon.lua" }, { name = "meteorite/emitter.lua", path = "src/meteorite/emitter.lua" }, { name = "meteorite/ballad.lua", path = "src/meteorite/ballad.lua" } ]

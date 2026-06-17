@@ -1,0 +1,8 @@
+.{
+    .backend = "std.http",
+    .http = true,
+    .methods = .{
+        "GET",
+        "POST",
+    },
+}
