@@ -45,13 +45,12 @@ pub fn listen(config: ListenConfig) !Server {
     };
 }
 
-pub fn accept(server: *Server) !Request {
-    var req = Request{ .stream = try server.inner.accept(server.io) };
+pub fn accept(server: *Server, req: *Request) !void {
+    req.* = Request{ .stream = try server.inner.accept(server.io) };
     req.reader = req.stream.reader(server.io, &req.recv_buffer);
     req.writer = req.stream.writer(server.io, &req.send_buffer);
     req.server = std.http.Server.init(&req.reader.interface, &req.writer.interface);
     req.inner = try req.server.receiveHead();
-    return req;
 }
 
 pub fn method(req: *Request) Method {

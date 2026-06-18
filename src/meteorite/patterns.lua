@@ -1,10 +1,21 @@
 local patterns = {}
 local next_auto_id = 1
 
+---@class MeteoritePatternInternal
+---@field id string
+---@field kind "pattern"
+---@field name string
+---@field type "pattern"
+---@field pattern_id string
+---@field ranges {integer, integer}[]
+---@field min integer
+---@field max integer
+---@field report table
+
 local function parse_size(value, default)
   if value == nil then return default end
   if type(value) == "number" then return value end
-  local n, unit = tostring(value):match("^(%d+)%s*([kKmMgG]?[bB]?)$")
+  local n, unit = tostring(value):match("^(%%d+)%%s*([kKmMgG]?[bB]?)$")
   assert(n, "invalid memory size: " .. tostring(value))
   n = tonumber(n)
   unit = unit:lower()
@@ -15,7 +26,7 @@ local function parse_size(value, default)
 end
 
 local function parse_simple_bounded(pattern)
-  local class, min, max = pattern:match("^%^%[([^%]]+)%]%{(%d+),(%d+)%}%$$")
+  local class, min, max = pattern:match("^%^%%[([^%%]]+)%%]%%{(%d+),(%d+)%%}%%$$")
   if not class then return nil end
   local ranges = {}
   local i = 1
@@ -46,6 +57,10 @@ local function auto_id()
   return id
 end
 
+---@param name? string
+---@param source string
+---@param opts? {max_dfa_states?: integer, max_dfa_bytes?: number|string}
+---@return MeteoritePatternInternal
 function patterns.define(name, source, opts)
   if source == nil then
     source = name
@@ -79,22 +94,24 @@ function patterns.define(name, source, opts)
     }, "\n"))
   end
   return {
-    kind = "pattern",
     id = name,
-    source = source,
-    parsed = parsed,
+    kind = "pattern",
+    name = name,
+    type = "pattern",
+    pattern_id = name,
+    ranges = parsed.ranges,
+    min = parsed.min,
+    max = parsed.max,
     report = {
       pattern = source,
-      strategy = "class_dfa",
+      strategy = "bounded_dfa",
       input_bound = parsed.max,
       alphabet_classes = class_count,
-      nfa_states = 4,
+      nfa_states = parsed.max + 1,
       dfa_states = dfa_states,
       transition_table_bytes = dfa_states * class_count * state_width,
       class_map_bytes = 256,
       estimated_bytes = estimated,
-      linear_time = true,
-      backtracking = false,
     },
   }
 end

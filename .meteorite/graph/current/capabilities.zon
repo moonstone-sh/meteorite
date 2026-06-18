@@ -1,6 +1,17 @@
 .{
     .backend = "std.http",
-    .http = true,
+    .declared = .{
+        .http = .{
+            .db = .{
+                .base_url = "http://localhost:8888",
+                .max_response_bytes = 65536,
+                .timeout_ms = 1500,
+            },
+        },
+        .zig = .{
+            .data_cruncher = "native/src/helpers/data_cruncher.zig",
+        },
+    },
     .methods = .{
         "GET",
         "POST",

@@ -1,6 +1,6 @@
 [
   {
-    "id": "device_id",
+    "id": "pattern_1",
     "pattern": "^[a-z0-9_-]{1,64}$",
     "strategy": "class_dfa",
     "input_bound": 64,
@@ -14,7 +14,7 @@
     "backtracking": false
   },
   {
-    "id": "file_name",
+    "id": "pattern_2",
     "pattern": "^[a-z0-9_.-]{1,80}$",
     "strategy": "class_dfa",
     "input_bound": 80,

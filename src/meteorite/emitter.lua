@@ -175,6 +175,10 @@ local function emit_luals_aids(graph, output)
   local aid_dir = output .. "/../../aids/lua"
   mkdir_p(aid_dir)
   local lines = {
+    "---@meta",
+    "",
+    "---@diagnostic disable: missing-return, lowercase-global",
+    "",
     "---@class MeteoriteContext",
     "---@field params table",
     "---@field query table",
@@ -191,20 +195,39 @@ local function emit_luals_aids(graph, output)
     "function Context:body() end",
     "",
     "---@param name string",
+    "---@return MeteoriteHttpClient",
     "function Context:http(name) end",
     "",
     "---@param name string",
+    "---@return MeteoriteAuthClient",
     "function Context:auth(name) end",
     "",
     "---@param name string",
+    "---@return MeteoriteZigClient",
     "function Context:zig(name) end",
     "",
     "---@param key string",
+    "---@return any",
     "function Context:get(key) end",
     "",
     "---@param key string",
     "---@param value any",
     "function Context:set(key, value) end",
+    "",
+    "---@class MeteoriteHttpClient",
+    "---@field get fun(self: MeteoriteHttpClient, path: string, opts?: table): table",
+    "---@field post fun(self: MeteoriteHttpClient, path: string, opts?: table): table",
+    "---@field put fun(self: MeteoriteHttpClient, path: string, opts?: table): table",
+    "---@field delete fun(self: MeteoriteHttpClient, path: string, opts?: table): table",
+    "local HttpClient = {}",
+    "",
+    "---@class MeteoriteAuthClient",
+    "---@field headers fun(self: MeteoriteAuthClient): table<string, string>",
+    "local AuthClient = {}",
+    "",
+    "---@class MeteoriteZigClient",
+    "---@field [string] function",
+    "local ZigClient = {}",
     "",
   }
   for _, route in ipairs(graph.routes) do
@@ -240,7 +263,7 @@ local function emit_luals_aids(graph, output)
   local route_lines = {
     "---@meta",
     "",
-    "---@diagnostic disable: missing-return",
+    "---@diagnostic disable: missing-return, lowercase-global",
     "",
   }
   for _, route in ipairs(graph.routes) do
@@ -752,12 +775,14 @@ local function emit_bindings(graph, output)
   lines[#lines + 1] = "pub const ValidatorId = enum { none };"
   lines[#lines + 1] = ""
   lines[#lines + 1] = "pub fn callHandler(comptime id: HandlerId, ctx: anytype) !void {"
+  if #infos == 0 then lines[#lines + 1] = "    _ = ctx;" end
   lines[#lines + 1] = "    return switch (id) {"
   for _, info in ipairs(infos) do lines[#lines + 1] = "        ." .. info.symbol .. " => handlers." .. info.symbol .. "(ctx)," end
   lines[#lines + 1] = "    };"
   lines[#lines + 1] = "}"
   lines[#lines + 1] = ""
   lines[#lines + 1] = "pub fn callRoute(comptime route_id: []const u8, raw_ctx: anytype) !void {"
+  if #route_infos == 0 then lines[#lines + 1] = "    _ = raw_ctx;" end
   for _, info in ipairs(route_infos) do
     lines[#lines + 1] = "    if (comptime std.mem.eql(u8, route_id, " .. zig_string(info.route_id) .. ")) return handlers." .. info.symbol .. "(try mt.ctx." .. info.route_ident .. ".from(raw_ctx));"
   end
@@ -790,6 +815,7 @@ local function emit_pattern_tables(graph, lines)
   lines[#lines + 1] = ""
   lines[#lines + 1] = "pub const patterns = struct {"
   lines[#lines + 1] = "    pub fn match(comptime id: PatternId, input: []const u8) bool {"
+  if #graph.patterns == 0 then lines[#lines + 1] = "        _ = input;" end
   lines[#lines + 1] = "        return switch (id) {"
   lines[#lines + 1] = "            .none => true,"
   for _, pattern in ipairs(graph.patterns) do lines[#lines + 1] = "            ." .. zig_ident(pattern.id) .. " => " .. zig_ident(pattern.id) .. ".match(input)," end

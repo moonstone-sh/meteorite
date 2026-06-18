@@ -63,7 +63,8 @@ pub fn compile(comptime spec: anytype) type {
             });
 
             while (true) {
-                var request = backend.accept(&server) catch |err| switch (err) {
+                var request: backend.Request = undefined;
+                backend.accept(&server, &request) catch |err| switch (err) {
                     error.HttpConnectionClosing => continue,
                     else => {
                         std.debug.print("accept failed: {s}\n", .{@errorName(err)});
@@ -95,8 +96,8 @@ pub fn compile(comptime spec: anytype) type {
                         switch (route.handler) {
                             .zig_symbol => return graph.bindings.callRoute(route.id, &ctx),
                             .zig_file => |handler| return ctx.text(501, handler.path),
-                            .inline_lua => |handler| return callLuaHandler(handler.id, &ctx),
-                            .lua_file => |handler| return callLuaHandler(handler.path, &ctx),
+                            .inline_lua => |handler| return callLuaHandler(handler, &ctx),
+                            .lua_file => |handler| return callLuaHandler(handler, &ctx),
                         }
                     }
                 }
@@ -105,9 +106,16 @@ pub fn compile(comptime spec: anytype) type {
             return backend.respondText(request, 404, "not found");
         }
 
-        fn callLuaHandler(comptime id: []const u8, ctx: anytype) !void {
+        fn callLuaHandler(comptime handler: anytype, ctx: anytype) !void {
             if (@hasField(@TypeOf(spec), "lua_runtime")) {
-                return spec.lua_runtime.call(id, ctx);
+                return spec.lua_runtime.call(.{
+                    .id = handler.id,
+                    .path = switch (@TypeOf(handler)) {
+                        graph.InlineLuaHandler => handler.chunk_path,
+                        graph.LuaFileHandler => handler.path,
+                        else => @compileError("unsupported Lua handler type"),
+                    },
+                }, ctx);
             }
             return ctx.text(501, "handler requires Lua runtime");
         }

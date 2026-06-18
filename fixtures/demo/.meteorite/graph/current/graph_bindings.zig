@@ -12,11 +12,13 @@ pub const HandlerId = enum {
 pub const ValidatorId = enum { none };
 
 pub fn callHandler(comptime id: HandlerId, ctx: anytype) !void {
+    _ = ctx;
     return switch (id) {
     };
 }
 
 pub fn callRoute(comptime route_id: []const u8, raw_ctx: anytype) !void {
+    _ = raw_ctx;
     @compileError("missing generated route handler binding for route `" ++ route_id ++ "`");
 }
 

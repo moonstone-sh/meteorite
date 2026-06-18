@@ -1,5 +1,19 @@
 local schema = {}
 
+---@class MeteoriteSchemaBase
+---@field type string
+---@field optional boolean
+---@field decode boolean
+---@field max_len? integer
+---@field exact_len? integer
+---@field min? integer
+---@field max? integer
+---@field pattern? any
+---@field validator? any
+
+---@param kind string
+---@param opts? table
+---@return MeteoriteSchemaBase
 function schema.scalar(kind, opts)
   opts = opts or {}
   local out = {

@@ -12,16 +12,33 @@
         },
         .query = .{},
         .handler = .{
-            .zig = "handlers.health",
+            .zig_symbol = .{
+                .id = "health",
+                .symbol = "handlers.health",
+            },
         },
         .source = .{
             .file = "src/app.lua",
-            .line = 5,
+            .line = 17,
             .column = 1,
+        },
+        .capabilities = .{},
+        .execution = .{
+            .class = .default,
+            .may_block = false,
+            .requires_lua = false,
+            .requires_worker_pool = false,
         },
         .memory = .{
             .max_body_bytes = 0,
             .request_arena_bytes = 262144,
+        },
+        .runtime = .{
+            .execution_class = .default,
+            .requires_auth = false,
+            .requires_http = false,
+            .requires_lua = false,
+            .requires_zig_capability = false,
         },
     },
     .{
@@ -43,16 +60,33 @@
         },
         .query = .{},
         .handler = .{
-            .zig = "handlers.get_user",
+            .zig_symbol = .{
+                .id = "get_user",
+                .symbol = "handlers.get_user",
+            },
         },
         .source = .{
             .file = "src/app.lua",
-            .line = 6,
+            .line = 18,
             .column = 1,
+        },
+        .capabilities = .{},
+        .execution = .{
+            .class = .default,
+            .may_block = false,
+            .requires_lua = false,
+            .requires_worker_pool = false,
         },
         .memory = .{
             .max_body_bytes = 0,
             .request_arena_bytes = 262144,
+        },
+        .runtime = .{
+            .execution_class = .default,
+            .requires_auth = false,
+            .requires_http = false,
+            .requires_lua = false,
+            .requires_zig_capability = false,
         },
     },
     .{
@@ -68,16 +102,33 @@
         },
         .query = .{},
         .handler = .{
-            .zig = "handlers.echo",
+            .zig_symbol = .{
+                .id = "echo",
+                .symbol = "handlers.echo",
+            },
         },
         .source = .{
             .file = "src/app.lua",
-            .line = 10,
+            .line = 22,
             .column = 1,
+        },
+        .capabilities = .{},
+        .execution = .{
+            .class = .default,
+            .may_block = false,
+            .requires_lua = false,
+            .requires_worker_pool = false,
         },
         .memory = .{
             .max_body_bytes = 8192,
             .request_arena_bytes = 16384,
+        },
+        .runtime = .{
+            .execution_class = .default,
+            .requires_auth = false,
+            .requires_http = false,
+            .requires_lua = false,
+            .requires_zig_capability = false,
         },
     },
     .{
@@ -94,23 +145,40 @@
                         .name = "device_id",
                         .type = .string,
                         .max_len = 64,
-                        .pattern_id = "device_id",
+                        .pattern_id = "pattern_1",
                     },
                 },
             },
         },
         .query = .{},
         .handler = .{
-            .zig = "handlers.get_device",
+            .zig_symbol = .{
+                .id = "get_device",
+                .symbol = "handlers.get_device",
+            },
         },
         .source = .{
             .file = "src/app.lua",
-            .line = 22,
+            .line = 34,
             .column = 1,
+        },
+        .capabilities = .{},
+        .execution = .{
+            .class = .default,
+            .may_block = false,
+            .requires_lua = false,
+            .requires_worker_pool = false,
         },
         .memory = .{
             .max_body_bytes = 0,
             .request_arena_bytes = 262144,
+        },
+        .runtime = .{
+            .execution_class = .default,
+            .requires_auth = false,
+            .requires_http = false,
+            .requires_lua = false,
+            .requires_zig_capability = false,
         },
     },
     .{
@@ -127,23 +195,40 @@
                         .name = "name",
                         .type = .string,
                         .max_len = 80,
-                        .pattern_id = "file_name",
+                        .pattern_id = "pattern_2",
                     },
                 },
             },
         },
         .query = .{},
         .handler = .{
-            .zig = "handlers.file",
+            .zig_symbol = .{
+                .id = "file",
+                .symbol = "handlers.file",
+            },
         },
         .source = .{
             .file = "src/app.lua",
-            .line = 28,
+            .line = 40,
             .column = 1,
+        },
+        .capabilities = .{},
+        .execution = .{
+            .class = .default,
+            .may_block = false,
+            .requires_lua = false,
+            .requires_worker_pool = false,
         },
         .memory = .{
             .max_body_bytes = 0,
             .request_arena_bytes = 262144,
+        },
+        .runtime = .{
+            .execution_class = .default,
+            .requires_auth = false,
+            .requires_http = false,
+            .requires_lua = false,
+            .requires_zig_capability = false,
         },
     },
     .{
@@ -166,16 +251,33 @@
         },
         .query = .{},
         .handler = .{
-            .zig = "handlers.slug",
+            .zig_symbol = .{
+                .id = "slug",
+                .symbol = "handlers.slug",
+            },
         },
         .source = .{
             .file = "src/app.lua",
-            .line = 34,
+            .line = 46,
             .column = 1,
+        },
+        .capabilities = .{},
+        .execution = .{
+            .class = .default,
+            .may_block = false,
+            .requires_lua = false,
+            .requires_worker_pool = false,
         },
         .memory = .{
             .max_body_bytes = 0,
             .request_arena_bytes = 262144,
+        },
+        .runtime = .{
+            .execution_class = .default,
+            .requires_auth = false,
+            .requires_http = false,
+            .requires_lua = false,
+            .requires_zig_capability = false,
         },
     },
     .{
@@ -197,16 +299,33 @@
         },
         .query = .{},
         .handler = .{
-            .zig = "handlers.uuid",
+            .zig_symbol = .{
+                .id = "uuid",
+                .symbol = "handlers.uuid",
+            },
         },
         .source = .{
             .file = "src/app.lua",
-            .line = 38,
+            .line = 50,
             .column = 1,
+        },
+        .capabilities = .{},
+        .execution = .{
+            .class = .default,
+            .may_block = false,
+            .requires_lua = false,
+            .requires_worker_pool = false,
         },
         .memory = .{
             .max_body_bytes = 0,
             .request_arena_bytes = 262144,
+        },
+        .runtime = .{
+            .execution_class = .default,
+            .requires_auth = false,
+            .requires_http = false,
+            .requires_lua = false,
+            .requires_zig_capability = false,
         },
     },
     .{
@@ -229,16 +348,91 @@
         },
         .query = .{},
         .handler = .{
-            .zig = "handlers.hex",
+            .zig_symbol = .{
+                .id = "hex",
+                .symbol = "handlers.hex",
+            },
         },
         .source = .{
             .file = "src/app.lua",
-            .line = 42,
+            .line = 54,
             .column = 1,
+        },
+        .capabilities = .{},
+        .execution = .{
+            .class = .default,
+            .may_block = false,
+            .requires_lua = false,
+            .requires_worker_pool = false,
         },
         .memory = .{
             .max_body_bytes = 0,
             .request_arena_bytes = 262144,
+        },
+        .runtime = .{
+            .execution_class = .default,
+            .requires_auth = false,
+            .requires_http = false,
+            .requires_lua = false,
+            .requires_zig_capability = false,
+        },
+    },
+    .{
+        .id = "search",
+        .method = .GET,
+        .raw_path = "/search",
+        .path = .{
+            .segments = .{
+                .{
+                    .literal = "search",
+                },
+            },
+        },
+        .query = .{
+            .{
+                .name = "exact",
+                .type = .bool,
+                .optional = true,
+            },
+            .{
+                .name = "page",
+                .type = .u64,
+                .optional = true,
+            },
+            .{
+                .name = "q",
+                .type = .string,
+                .max_len = 80,
+            },
+        },
+        .handler = .{
+            .zig_symbol = .{
+                .id = "search",
+                .symbol = "handlers.search",
+            },
+        },
+        .source = .{
+            .file = "src/app.lua",
+            .line = 58,
+            .column = 1,
+        },
+        .capabilities = .{},
+        .execution = .{
+            .class = .default,
+            .may_block = false,
+            .requires_lua = false,
+            .requires_worker_pool = false,
+        },
+        .memory = .{
+            .max_body_bytes = 0,
+            .request_arena_bytes = 262144,
+        },
+        .runtime = .{
+            .execution_class = .default,
+            .requires_auth = false,
+            .requires_http = false,
+            .requires_lua = false,
+            .requires_zig_capability = false,
         },
     },
 }

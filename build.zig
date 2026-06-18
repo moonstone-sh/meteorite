@@ -33,6 +33,16 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const bridge_module = b.createModule(.{
+        .root_source_file = b.path("native/src/bridge.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    bridge_module.addIncludePath(b.path(".moonstone/env/libexec/lua/files/include"));
+    bridge_module.addLibraryPath(b.path(".moonstone/env/libexec/lua/files/lib"));
+    bridge_module.linkSystemLibrary("lua", .{});
+    bridge_module.linkSystemLibrary("m", .{});
+
     handlers_module.addImport("meteorite_graph", ctx_module);
     graph_module.addImport("meteorite_handlers", handlers_module);
     graph_module.addImport("meteorite_validators", validators_module);
@@ -47,6 +57,7 @@ pub fn build(b: *std.Build) void {
             .imports = &.{
                 .{ .name = "meteorite_graph", .module = graph_module },
                 .{ .name = "meteorite.zig", .module = meteorite_module },
+                .{ .name = "bridge.zig", .module = bridge_module },
             },
         }),
     });
