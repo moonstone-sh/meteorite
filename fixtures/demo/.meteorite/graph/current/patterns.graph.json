@@ -1,0 +1,16 @@
+[
+  {
+    "id": "pattern_1",
+    "pattern": "^[a-z0-9_-]{1,64}$",
+    "strategy": "class_dfa",
+    "input_bound": 64,
+    "alphabet_classes": 5,
+    "nfa_states": 4,
+    "dfa_states": 66,
+    "transition_table_bytes": 660,
+    "class_map_bytes": 256,
+    "estimated_bytes": 982,
+    "linear_time": true,
+    "backtracking": false
+  }
+]

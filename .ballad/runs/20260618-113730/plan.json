@@ -1,0 +1,1 @@
+{"order":["node_1","node_2","node_3"],"sinks":[{"id":"node_3","options":{"out":"dist/registry/meteorite"},"method":"artifact","label":"artifact"}],"reachable":{"node_3":true,"node_1":true,"node_2":true},"total_progress_weight":3}

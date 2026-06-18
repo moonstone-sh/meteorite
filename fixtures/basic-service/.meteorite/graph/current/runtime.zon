@@ -2,4 +2,8 @@
     .mode = .release_static,
     .backend = .std_http,
     .lua_runtime = false,
+    .workers = .{
+        .lua_state = .single_locked,
+        .strategy = .auto,
+    },
 }

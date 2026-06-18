@@ -2,19 +2,31 @@ local m = require("meteorite")
 
 local app = m.app({ name = "basic-service" })
 
+app:capability("http", {
+  db = {
+    base_url = "http://localhost:8888",
+    timeout_ms = 1500,
+    max_response_bytes = 65536,
+  },
+})
+
+app:capability("zig", {
+  data_cruncher = "native/src/helpers/data_cruncher.zig",
+})
+
 app:get("/health", "handlers.health")
 app:get("/users/:id", {
   params = { id = m.u64() },
 }, "handlers.get_user")
 
 app:post("/echo", {
-  memory = {
-    max_body = "8kb",
-    request_arena = "16kb",
+  body = {
+    max = "8kb",
   },
+  memory = { request_arena = "16kb" },
 }, "handlers.echo")
 
-local device_id = m.pattern("device_id", "^[a-z0-9_-]{1,64}$", {
+local device_id = m.pattern("^[a-z0-9_-]{1,64}$", {
   max_dfa_states = 128,
   max_dfa_bytes = "8kb",
 })
@@ -27,7 +39,7 @@ app:get("/devices/:device_id", {
 
 app:get("/files/:name", {
   params = {
-    name = m.string({ max = 80, pattern = m.pattern("file_name", "^[a-z0-9_.-]{1,80}$") }),
+    name = m.string({ max = 80, pattern = m.pattern("^[a-z0-9_.-]{1,80}$") }),
   },
 }, "handlers.file")
 
@@ -42,5 +54,13 @@ app:get("/uuids/:id", {
 app:get("/hex/:digest", {
   params = { digest = m.hex({ len = 32 }) },
 }, "handlers.hex")
+
+app:get("/search", {
+  query = {
+    q = m.string({ max = 80 }),
+    page = m.u64({ optional = true }),
+    exact = m.bool({ optional = true }),
+  },
+}, "handlers.search")
 
 return app

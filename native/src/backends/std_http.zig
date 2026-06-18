@@ -67,6 +67,11 @@ pub fn path(req: *Request) []const u8 {
     return if (std.mem.indexOfScalar(u8, target, '?')) |idx| target[0..idx] else target;
 }
 
+pub fn query(req: *Request) []const u8 {
+    const target = req.inner.head.target;
+    return if (std.mem.indexOfScalar(u8, target, '?')) |idx| target[idx + 1 ..] else "";
+}
+
 pub fn header(req: *Request, name: []const u8) ?[]const u8 {
     var it = req.inner.iterateHeaders();
     while (it.next()) |h| {

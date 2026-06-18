@@ -14,4 +14,5 @@ abi = "5.4"
 
 [scripts]
 "graph" = "lua src/meteorite/cli.lua graph src/main.lua .meteorite/graph/current release-static"
+"dev" = "luajit ../../src/meteorite/cli.lua graph src/main.lua .meteorite/graph/current dev && zig build install-server -- dist/server && ./dist/server"
 "build" = "zig build install-server"

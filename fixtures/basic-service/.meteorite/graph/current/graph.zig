@@ -1,28 +1,42 @@
 pub const bindings = @import("graph_bindings.zig");
+pub const ctx = @import("meteorite_ctx").ctx;
 
 pub const max_request_arena_bytes = 262144;
 pub const Method = enum { GET, POST, OTHER };
 pub const Segment = union(enum) { literal: []const u8, param: []const u8 };
-pub const Handler = union(enum) { zig: bindings.HandlerId, lua: []const u8, inline_lua: void };
+pub const ZigSymbolHandler = struct { id: bindings.HandlerId, symbol: []const u8 };
+pub const ZigFileHandler = struct { id: []const u8, path: []const u8, decl: []const u8 = "handle" };
+pub const LuaFileHandler = struct { id: []const u8, path: []const u8 };
+pub const InlineLuaHandler = struct { id: []const u8, chunk_path: []const u8, source_file: []const u8, source_line: u32, source_column: u32 };
+pub const Handler = union(enum) { zig_symbol: ZigSymbolHandler, zig_file: ZigFileHandler, lua_file: LuaFileHandler, inline_lua: InlineLuaHandler };
+pub const ExecutionClass = enum { default, lua, blocking_io, cpu };
+pub const RouteRuntime = struct { requires_lua: bool = false, requires_http: bool = false, requires_auth: bool = false, requires_zig_capability: bool = false, execution_class: ExecutionClass = .default };
+pub const RouteExecution = struct { class: ExecutionClass = .default, may_block: bool = false, requires_lua: bool = false, requires_worker_pool: bool = false };
+pub const CapabilityRef = union(enum) { http: []const u8, auth: []const u8, zig: []const u8, lua: []const u8, worker: []const u8 };
+pub const WorkerStrategy = enum { auto, single_thread, io_plus_workers, per_core, pinned_appliance };
+pub const LuaStateStrategy = enum { single_locked, per_worker };
+pub const ThreadCount = union(enum) { auto, fixed: u16 };
+pub const RuntimeWorkers = struct { strategy: WorkerStrategy = .auto, io_threads: ThreadCount = .auto, worker_threads: ThreadCount = .auto, lua_state: LuaStateStrategy = .single_locked };
+pub const runtime_workers = RuntimeWorkers{};
 pub const ParamKind = enum { string, slug, u64, i32, uuid, hex, bool, pattern };
-pub const ParamSpec = struct { name: []const u8, kind: ParamKind = .string, max_len: usize = 0, exact_len: usize = 0, pattern: ?PatternId = null };
-pub const Route = struct { id: []const u8, method: Method, raw_path: []const u8, path: []const Segment, params: []const ParamSpec, max_body_bytes: usize, request_arena_bytes: usize, handler: Handler };
+pub const ParamSpec = struct { name: []const u8, kind: ParamKind = .string, max_len: usize = 0, exact_len: usize = 0, optional: bool = false, pattern: ?PatternId = null };
+pub const Route = struct { id: []const u8, method: Method, raw_path: []const u8, path: []const Segment, params: []const ParamSpec, query: []const ParamSpec, max_body_bytes: usize, request_arena_bytes: usize, handler: Handler, runtime: RouteRuntime = .{}, execution: RouteExecution = .{}, capabilities: []const CapabilityRef = &.{} };
 
 pub const PatternId = enum { none,
-    device_id,
-    file_name,
+    pattern_1,
+    pattern_2,
 };
 
 pub const patterns = struct {
     pub fn match(comptime id: PatternId, input: []const u8) bool {
         return switch (id) {
             .none => true,
-            .device_id => device_id.match(input),
-            .file_name => file_name.match(input),
+            .pattern_1 => pattern_1.match(input),
+            .pattern_2 => pattern_2.match(input),
         };
     }
 
-    const device_id_class_map = [_]u8{
+    const pattern_1_class_map = [_]u8{
         4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
         4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 4, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 4, 4, 4, 4, 4, 4, 
         4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 
@@ -32,7 +46,7 @@ pub const patterns = struct {
         4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
         4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
     };
-    const device_id_transitions = [_]u16{
+    const pattern_1_transitions = [_]u16{
         1, 1, 1, 1, 65,
         2, 2, 2, 2, 65,
         3, 3, 3, 3, 65,
@@ -100,12 +114,12 @@ pub const patterns = struct {
         65, 65, 65, 65, 65,
         65, 65, 65, 65, 65,
     };
-    const device_id_accept = [_]bool{
+    const pattern_1_accept = [_]bool{
         false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false,
     };
-    pub const device_id = @import("meteorite.zig").DfaMatcher(.{ .class_map = &device_id_class_map, .transition_table = &device_id_transitions, .accept_table = &device_id_accept, .class_count = 5, .start_state = 0, .dead_state = 65, .max_input_bytes = 64 });
+    pub const pattern_1 = @import("meteorite.zig").DfaMatcher(.{ .class_map = &pattern_1_class_map, .transition_table = &pattern_1_transitions, .accept_table = &pattern_1_accept, .class_count = 5, .start_state = 0, .dead_state = 65, .max_input_bytes = 64 });
 
-    const file_name_class_map = [_]u8{
+    const pattern_2_class_map = [_]u8{
         5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 
         5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 3, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 5, 5, 5, 5, 5, 
         5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 2, 
@@ -115,7 +129,7 @@ pub const patterns = struct {
         5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 
         5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 
     };
-    const file_name_transitions = [_]u16{
+    const pattern_2_transitions = [_]u16{
         1, 1, 1, 1, 1, 81,
         2, 2, 2, 2, 2, 81,
         3, 3, 3, 3, 3, 81,
@@ -199,16 +213,20 @@ pub const patterns = struct {
         81, 81, 81, 81, 81, 81,
         81, 81, 81, 81, 81, 81,
     };
-    const file_name_accept = [_]bool{
+    const pattern_2_accept = [_]bool{
         false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false,
     };
-    pub const file_name = @import("meteorite.zig").DfaMatcher(.{ .class_map = &file_name_class_map, .transition_table = &file_name_transitions, .accept_table = &file_name_accept, .class_count = 6, .start_state = 0, .dead_state = 81, .max_input_bytes = 80 });
+    pub const pattern_2 = @import("meteorite.zig").DfaMatcher(.{ .class_map = &pattern_2_class_map, .transition_table = &pattern_2_transitions, .accept_table = &pattern_2_accept, .class_count = 6, .start_state = 0, .dead_state = 81, .max_input_bytes = 80 });
 };
 
 const route_1_segments = [_]Segment{
     .{ .literal = "health" },
 };
+const route_1_query = [_]ParamSpec{
+};
 const route_1_params = [_]ParamSpec{
+};
+const route_1_capabilities = [_]CapabilityRef{
 };
 pub const Route1Context = struct {
     pub const method = Method.GET;
@@ -219,8 +237,12 @@ const route_2_segments = [_]Segment{
     .{ .literal = "users" },
     .{ .param = "id" },
 };
+const route_2_query = [_]ParamSpec{
+};
 const route_2_params = [_]ParamSpec{
-    .{ .name = "id", .kind = .u64, .max_len = 0, .exact_len = 0, .pattern = null },
+    .{ .name = "id", .kind = .u64, .max_len = 0, .exact_len = 0, .optional = false, .pattern = null },
+};
+const route_2_capabilities = [_]CapabilityRef{
 };
 pub const Route2Context = struct {
     pub const method = Method.GET;
@@ -230,7 +252,11 @@ pub const Route2Context = struct {
 const route_3_segments = [_]Segment{
     .{ .literal = "echo" },
 };
+const route_3_query = [_]ParamSpec{
+};
 const route_3_params = [_]ParamSpec{
+};
+const route_3_capabilities = [_]CapabilityRef{
 };
 pub const Route3Context = struct {
     pub const method = Method.POST;
@@ -241,8 +267,12 @@ const route_4_segments = [_]Segment{
     .{ .literal = "devices" },
     .{ .param = "device_id" },
 };
+const route_4_query = [_]ParamSpec{
+};
 const route_4_params = [_]ParamSpec{
-    .{ .name = "device_id", .kind = .string, .max_len = 64, .exact_len = 0, .pattern = .device_id },
+    .{ .name = "device_id", .kind = .string, .max_len = 64, .exact_len = 0, .optional = false, .pattern = .pattern_1 },
+};
+const route_4_capabilities = [_]CapabilityRef{
 };
 pub const Route4Context = struct {
     pub const method = Method.GET;
@@ -253,8 +283,12 @@ const route_5_segments = [_]Segment{
     .{ .literal = "files" },
     .{ .param = "name" },
 };
+const route_5_query = [_]ParamSpec{
+};
 const route_5_params = [_]ParamSpec{
-    .{ .name = "name", .kind = .string, .max_len = 80, .exact_len = 0, .pattern = .file_name },
+    .{ .name = "name", .kind = .string, .max_len = 80, .exact_len = 0, .optional = false, .pattern = .pattern_2 },
+};
+const route_5_capabilities = [_]CapabilityRef{
 };
 pub const Route5Context = struct {
     pub const method = Method.GET;
@@ -265,8 +299,12 @@ const route_6_segments = [_]Segment{
     .{ .literal = "slugs" },
     .{ .param = "slug" },
 };
+const route_6_query = [_]ParamSpec{
+};
 const route_6_params = [_]ParamSpec{
-    .{ .name = "slug", .kind = .slug, .max_len = 64, .exact_len = 0, .pattern = null },
+    .{ .name = "slug", .kind = .slug, .max_len = 64, .exact_len = 0, .optional = false, .pattern = null },
+};
+const route_6_capabilities = [_]CapabilityRef{
 };
 pub const Route6Context = struct {
     pub const method = Method.GET;
@@ -277,8 +315,12 @@ const route_7_segments = [_]Segment{
     .{ .literal = "uuids" },
     .{ .param = "id" },
 };
+const route_7_query = [_]ParamSpec{
+};
 const route_7_params = [_]ParamSpec{
-    .{ .name = "id", .kind = .uuid, .max_len = 0, .exact_len = 0, .pattern = null },
+    .{ .name = "id", .kind = .uuid, .max_len = 0, .exact_len = 0, .optional = false, .pattern = null },
+};
+const route_7_capabilities = [_]CapabilityRef{
 };
 pub const Route7Context = struct {
     pub const method = Method.GET;
@@ -289,22 +331,44 @@ const route_8_segments = [_]Segment{
     .{ .literal = "hex" },
     .{ .param = "digest" },
 };
+const route_8_query = [_]ParamSpec{
+};
 const route_8_params = [_]ParamSpec{
-    .{ .name = "digest", .kind = .hex, .max_len = 0, .exact_len = 32, .pattern = null },
+    .{ .name = "digest", .kind = .hex, .max_len = 0, .exact_len = 32, .optional = false, .pattern = null },
+};
+const route_8_capabilities = [_]CapabilityRef{
 };
 pub const Route8Context = struct {
     pub const method = Method.GET;
     pub const path = "/hex/:digest";
     pub const params = route_8_params;
 };
+const route_9_segments = [_]Segment{
+    .{ .literal = "search" },
+};
+const route_9_query = [_]ParamSpec{
+    .{ .name = "exact", .kind = .bool, .max_len = 0, .exact_len = 0, .optional = true, .pattern = null },
+    .{ .name = "page", .kind = .u64, .max_len = 0, .exact_len = 0, .optional = true, .pattern = null },
+    .{ .name = "q", .kind = .string, .max_len = 80, .exact_len = 0, .optional = false, .pattern = null },
+};
+const route_9_params = [_]ParamSpec{
+};
+const route_9_capabilities = [_]CapabilityRef{
+};
+pub const Route9Context = struct {
+    pub const method = Method.GET;
+    pub const path = "/search";
+    pub const params = route_9_params;
+};
 
 pub const routes = [_]Route{
-    .{ .id = "health", .method = .GET, .raw_path = "/health", .path = &route_1_segments, .params = &route_1_params, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig = .health } },
-    .{ .id = "get_user", .method = .GET, .raw_path = "/users/:id", .path = &route_2_segments, .params = &route_2_params, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig = .get_user } },
-    .{ .id = "echo", .method = .POST, .raw_path = "/echo", .path = &route_3_segments, .params = &route_3_params, .max_body_bytes = 8192, .request_arena_bytes = 16384, .handler = .{ .zig = .echo } },
-    .{ .id = "get_device", .method = .GET, .raw_path = "/devices/:device_id", .path = &route_4_segments, .params = &route_4_params, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig = .get_device } },
-    .{ .id = "file", .method = .GET, .raw_path = "/files/:name", .path = &route_5_segments, .params = &route_5_params, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig = .file } },
-    .{ .id = "slug", .method = .GET, .raw_path = "/slugs/:slug", .path = &route_6_segments, .params = &route_6_params, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig = .slug } },
-    .{ .id = "uuid", .method = .GET, .raw_path = "/uuids/:id", .path = &route_7_segments, .params = &route_7_params, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig = .uuid } },
-    .{ .id = "hex", .method = .GET, .raw_path = "/hex/:digest", .path = &route_8_segments, .params = &route_8_params, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig = .hex } },
+    .{ .id = "health", .method = .GET, .raw_path = "/health", .path = &route_1_segments, .params = &route_1_params, .query = &route_1_query, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .health, .symbol = "handlers.health" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_1_capabilities },
+    .{ .id = "get_user", .method = .GET, .raw_path = "/users/:id", .path = &route_2_segments, .params = &route_2_params, .query = &route_2_query, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .get_user, .symbol = "handlers.get_user" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_2_capabilities },
+    .{ .id = "echo", .method = .POST, .raw_path = "/echo", .path = &route_3_segments, .params = &route_3_params, .query = &route_3_query, .max_body_bytes = 8192, .request_arena_bytes = 16384, .handler = .{ .zig_symbol = .{ .id = .echo, .symbol = "handlers.echo" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_3_capabilities },
+    .{ .id = "get_device", .method = .GET, .raw_path = "/devices/:device_id", .path = &route_4_segments, .params = &route_4_params, .query = &route_4_query, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .get_device, .symbol = "handlers.get_device" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_4_capabilities },
+    .{ .id = "file", .method = .GET, .raw_path = "/files/:name", .path = &route_5_segments, .params = &route_5_params, .query = &route_5_query, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .file, .symbol = "handlers.file" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_5_capabilities },
+    .{ .id = "slug", .method = .GET, .raw_path = "/slugs/:slug", .path = &route_6_segments, .params = &route_6_params, .query = &route_6_query, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .slug, .symbol = "handlers.slug" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_6_capabilities },
+    .{ .id = "uuid", .method = .GET, .raw_path = "/uuids/:id", .path = &route_7_segments, .params = &route_7_params, .query = &route_7_query, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .uuid, .symbol = "handlers.uuid" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_7_capabilities },
+    .{ .id = "hex", .method = .GET, .raw_path = "/hex/:digest", .path = &route_8_segments, .params = &route_8_params, .query = &route_8_query, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .hex, .symbol = "handlers.hex" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_8_capabilities },
+    .{ .id = "search", .method = .GET, .raw_path = "/search", .path = &route_9_segments, .params = &route_9_params, .query = &route_9_query, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .search, .symbol = "handlers.search" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_9_capabilities },
 };

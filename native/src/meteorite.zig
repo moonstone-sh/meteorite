@@ -40,6 +40,9 @@ pub fn compile(comptime spec: anytype) type {
     return struct {
         const graph = spec.graph;
         const backend = spec.backend;
+        const graph_requires_lua = graphRequiresLua();
+        const inline_lua_handlers = countHandlers(.inline_lua);
+        const zig_handlers = countZigHandlers();
 
         pub fn run(io: Io) !void {
             try serve(io, .{});
@@ -49,7 +52,15 @@ pub fn compile(comptime spec: anytype) type {
             var server = try backend.listen(.{ .host = config.host, .port = config.port, .io = io });
             defer server.deinit();
 
-            std.debug.print("Meteorite build: release-static\nLua runtime: removed\nBackend: std.http\nRoutes: {d}\nArtifact: dist/server\nListening: http://{s}:{d}\n", .{ graph.routes.len, config.host, config.port });
+            std.debug.print("Meteorite build\n  mode: {s}\n  backend: std.http\n  Lua runtime: {s}\n  Lua state: single_locked\n  workers: auto\n  inline Lua handlers: {d}\n  Zig handlers: {d}\n  routes: {d}\n  artifact: dist/server\nListening: http://{s}:{d}\n", .{
+                if (graph_requires_lua) "hybrid" else "static",
+                if (graph_requires_lua) "included" else "removed",
+                inline_lua_handlers,
+                zig_handlers,
+                graph.routes.len,
+                config.host,
+                config.port,
+            });
 
             while (true) {
                 var request = backend.accept(&server) catch |err| switch (err) {
@@ -79,16 +90,52 @@ pub fn compile(comptime spec: anytype) type {
                 if (matchPath(route.path, req_path, route.params, &captures)) {
                     path_matched = true;
                     if (route.method == req_method) {
+                        if (!matchQuery(route.query, request)) return backend.respondText(request, 404, "not found");
                         var ctx = Context{ .allocator = allocator, .request = request, .captures = captures, .route = route };
                         switch (route.handler) {
-                            .zig => |id| return graph.bindings.callHandler(id, &ctx),
-                            else => return ctx.text(501, "handler requires Lua runtime"),
+                            .zig_symbol => return graph.bindings.callRoute(route.id, &ctx),
+                            .zig_file => |handler| return ctx.text(501, handler.path),
+                            .inline_lua => |handler| return callLuaHandler(handler.id, &ctx),
+                            .lua_file => |handler| return callLuaHandler(handler.path, &ctx),
                         }
                     }
                 }
             }
             if (path_matched) return backend.respondText(request, 405, "method not allowed");
             return backend.respondText(request, 404, "not found");
+        }
+
+        fn callLuaHandler(comptime id: []const u8, ctx: anytype) !void {
+            if (@hasField(@TypeOf(spec), "lua_runtime")) {
+                return spec.lua_runtime.call(id, ctx);
+            }
+            return ctx.text(501, "handler requires Lua runtime");
+        }
+
+        fn graphRequiresLua() bool {
+            inline for (graph.routes) |route| {
+                if (route.runtime.requires_lua) return true;
+            }
+            return false;
+        }
+
+        fn countHandlers(comptime tag: std.meta.Tag(graph.Handler)) usize {
+            comptime var count: usize = 0;
+            inline for (graph.routes) |route| {
+                if (std.meta.activeTag(route.handler) == tag) count += 1;
+            }
+            return count;
+        }
+
+        fn countZigHandlers() usize {
+            comptime var count: usize = 0;
+            inline for (graph.routes) |route| {
+                switch (route.handler) {
+                    .zig_symbol, .zig_file => count += 1,
+                    else => {},
+                }
+            }
+            return count;
         }
 
         const Method = graph.Method;
@@ -159,6 +206,34 @@ pub fn compile(comptime spec: anytype) type {
             };
         }
 
+        fn matchQuery(comptime specs: []const graph.ParamSpec, request: *backend.Request) bool {
+            inline for (specs) |query_spec| {
+                if (queryValue(request, query_spec.name)) |value| {
+                    if (query_spec.pattern) |pattern| {
+                        if (!graph.patterns.match(pattern, value)) return false;
+                    }
+                    if (!validateParam(query_spec, value)) return false;
+                } else if (!query_spec.optional) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        fn queryValue(request: *backend.Request, name: []const u8) ?[]const u8 {
+            const raw_query = backend.query(request);
+            if (raw_query.len == 0) return null;
+            var parts = std.mem.splitScalar(u8, raw_query, '&');
+            while (parts.next()) |part| {
+                if (part.len == 0) continue;
+                const eq = std.mem.indexOfScalar(u8, part, '=') orelse part.len;
+                if (std.mem.eql(u8, part[0..eq], name)) {
+                    return if (eq < part.len) part[eq + 1 ..] else "";
+                }
+            }
+            return null;
+        }
+
         fn isUnsigned(value: []const u8) bool {
             if (value.len == 0) return false;
             for (value) |c| if (c < '0' or c > '9') return false;
@@ -220,6 +295,10 @@ pub fn compile(comptime spec: anytype) type {
 
             pub fn param(self: *Context, name: []const u8) ?[]const u8 {
                 return self.captures.get(name);
+            }
+
+            pub fn query(self: *Context, name: []const u8) ?[]const u8 {
+                return queryValue(self.request, name);
             }
 
             pub fn header(self: *Context, name: []const u8) ?[]const u8 {

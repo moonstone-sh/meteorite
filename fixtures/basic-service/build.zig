@@ -12,6 +12,12 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const ctx_module = b.createModule(.{
+        .root_source_file = b.path(".meteorite/graph/current/ctx.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    graph_module.addImport("meteorite_ctx", ctx_module);
     const handlers_module = b.createModule(.{
         .root_source_file = b.path("native/src/handlers.zig"),
         .target = target,
@@ -22,6 +28,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    handlers_module.addImport("meteorite_graph", ctx_module);
     graph_module.addImport("meteorite_handlers", handlers_module);
     graph_module.addImport("meteorite_validators", validators_module);
 

@@ -36,3 +36,8 @@ pub fn hex(ctx: anytype) !void {
     const value = ctx.param("digest") orelse "missing";
     try ctx.text(200, value);
 }
+
+pub fn search(ctx: anytype) !void {
+    const q = ctx.query.q;
+    try ctx.text(200, q);
+}

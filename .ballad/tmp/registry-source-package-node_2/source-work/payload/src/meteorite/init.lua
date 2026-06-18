@@ -39,6 +39,13 @@ function App:use(plugin_or_middleware, options)
   return self
 end
 
+function App:capability(kind, spec)
+  assert(type(kind) == "string" and kind ~= "", "capability kind must be a non-empty string")
+  assert(type(spec) == "table", "capability spec must be a table")
+  self.capabilities[kind] = spec
+  return self
+end
+
 function App:_add_middleware(middleware)
   self.middleware[#self.middleware + 1] = middleware
   return middleware
@@ -54,6 +61,8 @@ function M.app(opts)
     name = opts.name or "meteorite-app",
     routes = {},
     middleware = {},
+    capabilities = {},
+    cache = {},
     options = opts,
     __meteorite_app = true,
   }, App)
@@ -67,14 +76,33 @@ function M.uuid(opts) return schema.scalar("uuid", opts) end
 function M.hex(opts) return schema.scalar("hex", opts) end
 function M.bool(opts) return schema.scalar("bool", opts) end
 
-function M.pattern(name, source, opts)
-  return patterns.define(name, source, opts)
+function M.handler(kind, ref, opts)
+  opts = opts or {}
+  if kind == "zig" then return { kind = "zig", symbol = ref } end
+  if kind == "zig_file" then return { kind = "zig_file", path = ref, decl = opts.decl or "handle" } end
+  if kind == "lua" then return { kind = "lua", module = ref, path = opts.path or ref } end
+  error("unsupported handler kind: " .. tostring(kind))
+end
+
+function M.zig(path_or_symbol, opts)
+  opts = opts or {}
+  if tostring(path_or_symbol):match("%.zig$") or tostring(path_or_symbol):find("/") then
+    return { kind = "zig_file", path = path_or_symbol, decl = opts.decl or "handle" }
+  end
+  return { kind = "zig", symbol = path_or_symbol }
+end
+
+function M.pattern(name_or_source, source_or_opts, opts)
+  if type(source_or_opts) == "table" or source_or_opts == nil then
+    return patterns.define(nil, name_or_source, source_or_opts)
+  end
+  return patterns.define(name_or_source, source_or_opts, opts)
 end
 
 M.patterns = patterns
 
 function M.lua(module_ref)
-  return { kind = "lua", module = module_ref }
+  return { kind = "lua", module = module_ref, path = module_ref }
 end
 
 function M.validation_error(message)

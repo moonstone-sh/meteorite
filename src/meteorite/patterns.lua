@@ -1,4 +1,5 @@
 local patterns = {}
+local next_auto_id = 1
 
 local function parse_size(value, default)
   if value == nil then return default end
@@ -39,8 +40,19 @@ local function class_count_for(parsed)
   return count
 end
 
+local function auto_id()
+  local id = "pattern_" .. tostring(next_auto_id)
+  next_auto_id = next_auto_id + 1
+  return id
+end
+
 function patterns.define(name, source, opts)
+  if source == nil then
+    source = name
+    name = nil
+  end
   opts = opts or {}
+  name = name or auto_id()
   local parsed = parse_simple_bounded(source)
   if not parsed then
     error("unsupported pattern syntax for " .. tostring(name) .. ": " .. tostring(source) .. "\nMeteorite Patterns v0.1 supports bounded ASCII classes like ^[a-z0-9_-]{1,64}$")

@@ -1,0 +1,9 @@
+.{
+    .mode = .dev,
+    .backend = .std_http,
+    .lua_runtime = true,
+    .workers = .{
+        .lua_state = .single_locked,
+        .strategy = .auto,
+    },
+}

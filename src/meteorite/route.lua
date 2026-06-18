@@ -31,17 +31,24 @@ local function handler_shape(handler)
   if kind == "string" then return { kind = "zig", symbol = handler } end
   if kind == "function" then return { kind = "inline_lua", value = handler } end
   if kind == "table" and handler.kind == "lua" then return { kind = "lua", module = handler.module } end
+  if kind == "table" and handler.kind == "zig" then return { kind = "zig", symbol = handler.symbol } end
+  if kind == "table" and handler.kind == "zig_file" then return { kind = "zig_file", path = handler.path, decl = handler.decl or "handle" } end
   error("unsupported handler shape: " .. kind)
 end
 
 function route.declare(method, path, options, handler)
+  local memory = options.memory or {}
+  if options.body and options.body.max ~= nil and memory.max_body == nil then
+    memory.max_body = options.body.max
+  end
   return {
     method = method,
     raw_path = path,
     path = { segments = parse_path(path) },
     params = options.params or {},
     query = options.query or {},
-    memory = options.memory or {},
+    memory = memory,
+    capabilities = options.capabilities or {},
     handler = handler_shape(handler),
     source = source_info(4),
   }
@@ -102,8 +109,28 @@ end
 
 local function normalize_handler(handler)
   if handler.kind == "zig" then return { kind = "zig", symbol = symbol_id(handler.symbol), import = handler.symbol } end
+  if handler.kind == "zig_file" then return { kind = "zig_file", symbol = symbol_id(handler.path), path = handler.path, decl = handler.decl or "handle" } end
   if handler.kind == "lua" then return { kind = "lua", module = handler.module } end
-  return { kind = "inline_lua" }
+  return { kind = "inline_lua", value = handler.value }
+end
+
+local function static_lua_error(key, declaration)
+  error(table.concat({
+    "static build cannot include inline Lua handler",
+    "",
+    "route:",
+    "  " .. key,
+    "",
+    "declared at:",
+    "  " .. tostring(declaration.source.file) .. ":" .. tostring(declaration.source.line or 0) .. ":" .. tostring(declaration.source.column or 1),
+    "",
+    "hint:",
+    "  build hybrid:",
+    "    moon build --mode hybrid",
+    "",
+    "  or move this route to a Zig handler:",
+    "    app:get(\"/\", \"handlers.index\")",
+  }, "\n"))
 end
 
 function route.normalize_app(app, opts)
@@ -127,18 +154,32 @@ function route.normalize_app(app, opts)
     end
 
     local handler = normalize_handler(declaration.handler)
-    if mode == "release-static" and handler.kind ~= "zig" then
-      error("release-static rejects non-Zig handler at " .. key)
+    if mode == "release-static" and handler.kind ~= "zig" and handler.kind ~= "zig_file" then
+      static_lua_error(key, declaration)
     end
 
     local normalized = {
-      id = handler.kind == "zig" and handler.symbol or ("route_" .. tostring(index)),
+      id = (handler.kind == "zig" or handler.kind == "zig_file") and handler.symbol or ("route_" .. tostring(index)),
       method = declaration.method,
       raw_path = declaration.raw_path,
       path = declaration.path,
       params = normalize_schema_map(declaration.params),
       query = normalize_schema_map(declaration.query),
       handler = handler,
+      runtime = {
+        requires_lua = handler.kind == "inline_lua" or handler.kind == "lua",
+        requires_http = false,
+        requires_auth = false,
+        requires_zig_capability = false,
+        execution_class = (handler.kind == "inline_lua" or handler.kind == "lua") and "lua" or "default",
+      },
+      execution = {
+        class = (handler.kind == "inline_lua" or handler.kind == "lua") and "lua" or "default",
+        may_block = false,
+        requires_lua = handler.kind == "inline_lua" or handler.kind == "lua",
+        requires_worker_pool = false,
+      },
+      capabilities = declaration.capabilities,
       memory = {
         max_body_bytes = parse_size(declaration.memory.max_body, declaration.method == "POST" and 1024 * 1024 or 0),
         request_arena_bytes = parse_size(declaration.memory.request_arena, 256 * 1024),
@@ -163,6 +204,7 @@ function route.normalize_app(app, opts)
     mode = mode,
     routes = routes,
     patterns = patterns,
+    capabilities = app.capabilities or {},
     middleware = app.middleware,
   }
 end

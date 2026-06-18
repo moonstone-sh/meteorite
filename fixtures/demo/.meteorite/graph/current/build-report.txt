@@ -1,0 +1,13 @@
+Meteorite build
+  mode: hybrid
+  backend: std.http
+  Lua runtime: included
+  Lua state: single_locked
+  workers: auto
+  inline Lua handlers: 5
+  Zig handlers: 0
+  HTTP capabilities: db
+  Auth capabilities: db
+  Zig capabilities: data_cruncher
+  patterns: 1
+  artifact: dist/server

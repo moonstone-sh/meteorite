@@ -5,6 +5,7 @@
 ./native/src/backends/std_http.zig
 ./native/src/bridge.zig
 ./native/src/handlers.zig
+./native/src/helpers/data_cruncher.zig
 ./native/src/main.zig
 ./native/src/meteorite.zig
 ./native/src/validators.zig
@@ -13,7 +14,10 @@
 ./src/meteorite/ballad.lua
 ./src/meteorite/cli.lua
 ./src/meteorite/emitter.lua
+./src/meteorite/hybrid.lua
 ./src/meteorite/init.lua
+./src/meteorite/json.lua
+./src/meteorite/lifter.lua
 ./src/meteorite/patterns.lua
 ./src/meteorite/route.lua
 ./src/meteorite/schema.lua
