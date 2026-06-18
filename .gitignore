@@ -1,9 +1,17 @@
 # Moonstone
 .moonstone/
+.ballad/
+.meteorite/
+.dist/
 
 # Zig
 zig-cache/
+.zig-cache/
 zig-out/
+
+# Benchmarks
+bench/results/*
+!bench/results/.gitkeep
 
 # OS
 .DS_Store

@@ -1,4 +1,5 @@
 const std = @import("std");
+const graph = @import("meteorite_graph");
 const c = @cImport({
     @cInclude("lua.h");
     @cInclude("lauxlib.h");
@@ -27,6 +28,8 @@ const VTable = struct {
     query: *const fn (ctx: *anyopaque, name: []const u8) ?[]const u8,
     header: *const fn (ctx: *anyopaque, name: []const u8) ?[]const u8,
     allocator: *const fn (ctx: *anyopaque) std.mem.Allocator,
+    io: *const fn (ctx: *anyopaque) std.Io,
+    run: *const fn (ctx: *anyopaque, allocator: std.mem.Allocator, argv: []const []const u8) anyerror![]const u8,
 };
 
 fn makeVTable(comptime Ctx: type) VTable {
@@ -79,6 +82,18 @@ fn makeVTable(comptime Ctx: type) VTable {
                 return typed.allocator;
             }
         }.f,
+        .io = struct {
+            fn f(ptr: *anyopaque) std.Io {
+                const typed: *Ctx = @ptrCast(@alignCast(ptr));
+                return typed.io;
+            }
+        }.f,
+        .run = struct {
+            fn f(ptr: *anyopaque, allocator: std.mem.Allocator, argv: []const []const u8) anyerror![]const u8 {
+                const typed: *Ctx = @ptrCast(@alignCast(ptr));
+                return typed.run(allocator, argv);
+            }
+        }.f,
     };
 }
 
@@ -89,6 +104,161 @@ fn globalVtable(comptime Ctx: type) *const VTable {
 
 var current_ctx: ?*anyopaque = null;
 var current_vtable: ?*const VTable = null;
+
+fn upvalueIndex(i: c_int) c_int {
+    return c.LUA_REGISTRYINDEX - i;
+}
+
+const HttpClient = struct {
+    base_url: []const u8,
+    timeout_ms: u32,
+    max_response_bytes: usize,
+    allocator: std.mem.Allocator,
+
+    fn init(allocator: std.mem.Allocator, base_url: []const u8, timeout_ms: u32, max_response_bytes: usize) HttpClient {
+        return .{ .allocator = allocator, .base_url = base_url, .timeout_ms = timeout_ms, .max_response_bytes = max_response_bytes };
+    }
+
+    fn request(self: HttpClient, method: []const u8, path: []const u8, body: ?[]const u8, content_type: ?[]const u8, auth_header: ?[]const u8) !HttpResponse {
+        const url = try std.fs.path.join(self.allocator, &.{ self.base_url, path });
+        defer self.allocator.free(url);
+
+        const ctx = current_ctx.?;
+        const vtable = current_vtable.?;
+
+        var args = std.ArrayListUnmanaged([]const u8).empty;
+        defer {
+            for (args.items) |arg| self.allocator.free(arg);
+            args.deinit(self.allocator);
+        }
+        try args.appendSlice(self.allocator, &.{ "curl", "-s", "-i", "-X", method, "--max-time", "30" });
+
+        var tmp_headers: ?[]const u8 = null;
+        var tmp_body: ?[]const u8 = null;
+        var tmp_req_body: ?[]const u8 = null;
+        defer {
+            const io = vtable.io(ctx);
+            if (tmp_headers) |p| { std.Io.Dir.cwd().deleteFile(io, p) catch {}; self.allocator.free(p); }
+            if (tmp_body) |p| { std.Io.Dir.cwd().deleteFile(io, p) catch {}; self.allocator.free(p); }
+            if (tmp_req_body) |p| { std.Io.Dir.cwd().deleteFile(io, p) catch {}; self.allocator.free(p); }
+        }
+
+        tmp_headers = try self.tempFile(vtable.io(ctx), "mt-hdr-");
+        tmp_body = try self.tempFile(vtable.io(ctx), "mt-body-");
+        try args.appendSlice(self.allocator, &.{ "-D", tmp_headers.?, "-o", tmp_body.? });
+
+        if (body) |b| {
+            tmp_req_body = try self.tempFile(vtable.io(ctx), "mt-req-");
+            const f = try std.Io.Dir.cwd().createFile(vtable.io(ctx), tmp_req_body.?, .{});
+            defer f.close(vtable.io(ctx));
+            try f.writeStreamingAll(vtable.io(ctx), b);
+            try args.appendSlice(self.allocator, &.{
+                "-d",
+                try std.fmt.allocPrint(self.allocator, "@{s}", .{tmp_req_body.?}),
+            });
+        }
+
+        if (content_type) |ct| {
+            try args.appendSlice(self.allocator, &.{
+                "-H",
+                try std.fmt.allocPrint(self.allocator, "content-type: {s}", .{ct}),
+            });
+        }
+        if (auth_header) |ah| {
+            try args.appendSlice(self.allocator, &.{
+                "-H",
+                try std.fmt.allocPrint(self.allocator, "authorization: {s}", .{ah}),
+            });
+        }
+        try args.append(self.allocator, url);
+
+        const output = try vtable.run(ctx, self.allocator, args.items);
+        defer self.allocator.free(output);
+
+        const headers_raw = try self.readFile(vtable.io(ctx), tmp_headers.?);
+        defer self.allocator.free(headers_raw);
+        const status_line = extractStatus(headers_raw);
+        const headers = try self.parseHeaders(headers_raw);
+        errdefer self.allocator.free(headers);
+
+        const body_out = try self.readFile(vtable.io(ctx), tmp_body.?);
+        errdefer self.allocator.free(body_out);
+        if (body_out.len > self.max_response_bytes) {
+            self.allocator.free(body_out);
+            self.allocator.free(headers);
+            return error.ResponseTooLarge;
+        }
+
+        return .{
+            .allocator = self.allocator,
+            .status = status_line,
+            .headers = headers,
+            .body = body_out,
+        };
+    }
+
+    fn tempFile(self: HttpClient, io: std.Io, prefix: []const u8) ![]const u8 {
+        var buf: [64]u8 = undefined;
+        var random_bytes: [8]u8 = undefined;
+        io.random(&random_bytes);
+        const hex = std.fmt.bytesToHex(random_bytes, .lower);
+        const name = try std.fmt.bufPrint(&buf, "{s}{s}", .{ prefix, &hex });
+        const file = try std.Io.Dir.cwd().createFile(io, name, .{});
+        file.close(io);
+        return try self.allocator.dupe(u8, name);
+    }
+
+    fn readFile(self: HttpClient, io: std.Io, path: []const u8) ![]const u8 {
+        return try std.Io.Dir.cwd().readFileAlloc(io, path, self.allocator, std.Io.Limit.limited(self.max_response_bytes + 1));
+    }
+
+    fn parseHeaders(self: HttpClient, raw: []const u8) ![]const u8 {
+        var lines = std.mem.splitAny(u8, raw, "\r\n");
+        var list: std.ArrayListUnmanaged(u8) = .empty;
+        defer list.deinit(self.allocator);
+        while (lines.next()) |line| {
+            if (line.len == 0) continue;
+            const idx = std.mem.indexOfScalar(u8, line, ':') orelse continue;
+            if (idx == 0) continue;
+            const name = line[0..idx];
+            const value = if (idx + 1 < line.len) std.mem.trim(u8, line[idx + 1 ..], " ") else "";
+            try list.appendSlice(self.allocator, "\"");
+            try encodeJsonString(name, &list, self.allocator);
+            try list.appendSlice(self.allocator, "\":\"");
+            try encodeJsonString(value, &list, self.allocator);
+            try list.appendSlice(self.allocator, "\",");
+        }
+        return list.toOwnedSlice(self.allocator);
+    }
+};
+
+const HttpResponse = struct {
+    allocator: std.mem.Allocator,
+    status: u16,
+    headers: []const u8,
+    body: []const u8,
+
+    fn pushToLua(self: HttpResponse, L: ?*c.lua_State) void {
+        c.lua_newtable(L);
+        c.lua_pushinteger(L, self.status);
+        c.lua_setfield(L, -2, "status");
+        const trimmed = std.mem.trim(u8, self.headers, ",");
+        const headers_json = std.fmt.allocPrint(self.allocator, "{{{s}}}", .{trimmed}) catch "{}";
+        defer self.allocator.free(headers_json);
+        _ = c.lua_pushlstring(L, headers_json.ptr, headers_json.len);
+        c.lua_setfield(L, -2, "headers");
+        _ = c.lua_pushlstring(L, self.body.ptr, self.body.len);
+        c.lua_setfield(L, -2, "body");
+    }
+};
+
+fn extractStatus(raw: []const u8) u16 {
+    var lines = std.mem.splitAny(u8, raw, "\r\n");
+    const first = lines.next() orelse return 0;
+    if (first.len < 12) return 0;
+    const code = std.fmt.parseInt(u16, first[9..12], 10) catch return 0;
+    return code;
+}
 
 pub const HybridLuaRuntime = struct {
     pub fn call(comptime handler: anytype, ctx: anytype) !void {
@@ -136,6 +306,11 @@ pub const HybridLuaRuntime = struct {
         pushMethod(L, "param", l_param);
         pushMethod(L, "query", l_query);
         pushMethod(L, "header", l_header);
+        pushMethod(L, "http", l_http);
+        pushMethod(L, "auth", l_auth);
+        pushMethod(L, "zig", l_zig);
+        pushMethod(L, "get", l_get);
+        pushMethod(L, "set", l_set);
 
         if (@hasField(@TypeOf(ctx.*), "captures")) {
             c.lua_newtable(L);
@@ -158,6 +333,9 @@ pub const HybridLuaRuntime = struct {
             }
             c.lua_setfield(L, -2, "query");
         }
+
+        c.lua_newtable(L);
+        c.lua_setfield(L, -2, "state");
 
         current_ctx = ctx;
         current_vtable = vtable;
@@ -218,9 +396,7 @@ fn l_text(L: ?*c.lua_State) callconv(.c) c_int {
     if (nargs >= 3 and c.lua_isinteger(L, 2) != 0) {
         status = @intCast(c.lua_tointegerx(L, 2, @as([*c]c_int, null)));
         body_arg = 3;
-    } else if (nargs >= 2) {
-        body_arg = 2;
-    } else {
+    } else if (nargs < 2) {
         return pushResponse(L, status, "text/plain; charset=utf-8", "");
     }
     var body_len: usize = 0;
@@ -241,7 +417,7 @@ fn l_json(L: ?*c.lua_State) callconv(.c) c_int {
         return pushResponse(L, status, "application/json", "{}");
     }
 
-    var list: std.ArrayList(u8) = .empty;
+    var list: std.ArrayListUnmanaged(u8) = .empty;
     defer list.deinit(rt.allocator(ctx));
     encodeLuaValue(L, value_idx, &list, rt.allocator(ctx)) catch |err| {
         std.log.err("json encode failed: {s}", .{@errorName(err)});
@@ -261,10 +437,7 @@ fn l_bytes(L: ?*c.lua_State) callconv(.c) c_int {
         status = @intCast(c.lua_tointegerx(L, 2, @as([*c]c_int, null)));
         content_type_arg = 3;
         body_arg = 4;
-    } else if (nargs >= 3) {
-        content_type_arg = 2;
-        body_arg = 3;
-    } else {
+    } else if (nargs < 3) {
         return pushResponse(L, status, "application/octet-stream", "");
     }
     var ct_len: usize = 0;
@@ -314,6 +487,230 @@ fn l_header(L: ?*c.lua_State) callconv(.c) c_int {
     return 1;
 }
 
+fn l_http(L: ?*c.lua_State) callconv(.c) c_int {
+    const name = c.lua_tolstring(L, 2, null);
+    if (name == null) {
+        _ = c.luaL_error(L, "http capability name required");
+        unreachable;
+    }
+    const cap_name = std.mem.span(name);
+    const ctx = current_ctx.?;
+    const vtable = current_vtable.?;
+    const allocator = vtable.allocator(ctx);
+
+    const base_url = getCapabilityString("http", cap_name, "base_url") orelse {
+        _ = c.luaL_error(L, "http capability missing base_url");
+        unreachable;
+    };
+    const timeout_ms = getCapabilityInt("http", cap_name, "timeout_ms") orelse 1500;
+    const max_response_bytes = getCapabilityInt("http", cap_name, "max_response_bytes") orelse 65536;
+
+    const client = allocator.create(HttpClient) catch {
+        _ = c.luaL_error(L, "out of memory");
+        unreachable;
+    };
+    client.* = HttpClient.init(allocator, base_url, @intCast(timeout_ms), @intCast(max_response_bytes));
+
+    c.lua_newtable(L);
+    pushHttpClosure(L, client, "get", "GET");
+    pushHttpClosure(L, client, "post", "POST");
+    pushHttpClosure(L, client, "put", "PUT");
+    pushHttpClosure(L, client, "delete", "DELETE");
+    return 1;
+}
+
+fn pushHttpClosure(L: ?*c.lua_State, client: *HttpClient, lua_name: []const u8, method: []const u8) void {
+    c.lua_pushlightuserdata(L, @ptrCast(client));
+    _ = c.lua_pushlstring(L, method.ptr, method.len);
+    c.lua_pushcclosure(L, l_http_request, 2);
+    _ = c.lua_pushlstring(L, lua_name.ptr, lua_name.len);
+    c.lua_rawset(L, -3);
+}
+
+fn l_http_request(L: ?*c.lua_State) callconv(.c) c_int {
+    const client_ptr = @as(*HttpClient, @ptrCast(@alignCast(c.lua_touserdata(L, upvalueIndex(1)))));
+    var method_len: usize = 0;
+    const method_ptr = c.lua_tolstring(L, upvalueIndex(2), &method_len);
+    const method = method_ptr[0..method_len];
+
+    const vtable = current_vtable.?;
+    const ctx = current_ctx.?;
+    const allocator = vtable.allocator(ctx);
+
+    const path_ptr = c.lua_tolstring(L, 2, null) orelse {
+        _ = c.luaL_error(L, "path required");
+        unreachable;
+    };
+    const path = std.mem.span(path_ptr);
+
+    var body: ?[]const u8 = null;
+    var content_type: ?[]const u8 = null;
+    var auth_header: ?[]const u8 = null;
+
+    if (c.lua_gettop(L) >= 3 and c.lua_istable(L, 3)) {
+        _ = c.lua_getfield(L, 3, "body");
+        if (c.lua_istable(L, -1)) {
+            var list: std.ArrayListUnmanaged(u8) = .empty;
+            defer list.deinit(allocator);
+            encodeLuaValue(L, -1, &list, allocator) catch {
+                _ = c.luaL_error(L, "body encode failed");
+                unreachable;
+            };
+            body = allocator.dupe(u8, list.items) catch {
+                _ = c.luaL_error(L, "out of memory");
+                unreachable;
+            };
+            content_type = "application/json";
+        } else if (c.lua_isstring(L, -1) != 0) {
+            var len: usize = 0;
+            const ptr = c.lua_tolstring(L, -1, &len);
+            body = allocator.dupe(u8, ptr[0..len]) catch {
+                _ = c.luaL_error(L, "out of memory");
+                unreachable;
+            };
+        }
+        c.lua_pop(L, 1);
+
+        _ = c.lua_getfield(L, 3, "headers");
+        if (c.lua_istable(L, -1)) {
+            _ = c.lua_getfield(L, -1, "authorization");
+            if (c.lua_isstring(L, -1) != 0) {
+                var len: usize = 0;
+                const ptr = c.lua_tolstring(L, -1, &len);
+                auth_header = allocator.dupe(u8, ptr[0..len]) catch {
+                    _ = c.luaL_error(L, "out of memory");
+                    unreachable;
+                };
+            }
+            c.lua_pop(L, 1);
+        }
+        c.lua_pop(L, 1);
+    }
+    defer {
+        if (body) |b| allocator.free(b);
+        if (auth_header) |h| allocator.free(h);
+    }
+
+    var response = client_ptr.request(method, path, body, content_type, auth_header) catch |err| {
+        std.log.err("http request failed: {s}", .{@errorName(err)});
+        _ = c.luaL_error(L, "http request failed");
+        unreachable;
+    };
+    response.pushToLua(L);
+    return 1;
+}
+
+fn l_auth(L: ?*c.lua_State) callconv(.c) c_int {
+    const name = c.lua_tolstring(L, 2, null);
+    if (name == null) {
+        _ = c.luaL_error(L, "auth capability name required");
+        unreachable;
+    }
+    const cap_name = std.mem.span(name);
+
+    const audience = getCapabilityString("auth", cap_name, "audience") orelse cap_name;
+    const ctx = current_ctx.?;
+    const vtable = current_vtable.?;
+    const allocator = vtable.allocator(ctx);
+
+    const token = std.fmt.allocPrint(allocator, "Bearer demo-token-for-{s}", .{audience}) catch {
+        _ = c.luaL_error(L, "out of memory");
+        unreachable;
+    };
+    defer allocator.free(token);
+
+    c.lua_newtable(L);
+    _ = c.lua_pushlstring(L, token.ptr, token.len);
+    c.lua_setfield(L, -2, "bearer");
+
+    _ = c.lua_pushlstring(L, token.ptr, token.len);
+    c.lua_pushcclosure(L, l_auth_headers, 1);
+    c.lua_setfield(L, -2, "headers");
+
+    _ = c.lua_pushlstring(L, token.ptr, token.len);
+    c.lua_pushcclosure(L, l_auth_authorization, 1);
+    c.lua_setfield(L, -2, "authorization");
+
+    _ = c.lua_pushlstring(L, token.ptr, token.len);
+    c.lua_pushcclosure(L, l_auth_authorization, 1);
+    c.lua_setfield(L, -2, "refresh");
+
+    return 1;
+}
+
+fn l_auth_headers(L: ?*c.lua_State) callconv(.c) c_int {
+    var len: usize = 0;
+    const token_ptr = c.lua_tolstring(L, upvalueIndex(1), &len);
+    const token = token_ptr[0..len];
+    c.lua_newtable(L);
+    _ = c.lua_pushlstring(L, token.ptr, token.len);
+    c.lua_setfield(L, -2, "authorization");
+    return 1;
+}
+
+fn l_auth_authorization(L: ?*c.lua_State) callconv(.c) c_int {
+    var len: usize = 0;
+    const token_ptr = c.lua_tolstring(L, upvalueIndex(1), &len);
+    const token = token_ptr[0..len];
+    _ = c.lua_pushlstring(L, token.ptr, token.len);
+    return 1;
+}
+
+fn l_zig(L: ?*c.lua_State) callconv(.c) c_int {
+    const name = c.lua_tolstring(L, 2, null);
+    if (name == null) {
+        _ = c.luaL_error(L, "zig capability name required");
+        unreachable;
+    }
+    const cap_name = std.mem.span(name);
+    _ = getCapabilityString("zig", cap_name, "path") orelse {
+        _ = c.luaL_error(L, "zig capability missing path");
+        unreachable;
+    };
+
+    c.lua_newtable(L);
+    c.lua_pushcfunction(L, l_zig_device_name);
+    c.lua_setfield(L, -2, "device_name");
+    return 1;
+}
+
+fn l_zig_device_name(L: ?*c.lua_State) callconv(.c) c_int {
+    const device_id_ptr = c.lua_tolstring(L, 2, null);
+    const device_id = if (device_id_ptr) |p| std.mem.span(p) else "";
+    const vtable = current_vtable.?;
+    const ctx = current_ctx.?;
+    const allocator = vtable.allocator(ctx);
+    const result = std.fmt.allocPrint(allocator, "device:{s}", .{device_id}) catch {
+        _ = c.luaL_error(L, "out of memory");
+        unreachable;
+    };
+    defer allocator.free(result);
+    _ = c.lua_pushlstring(L, result.ptr, result.len);
+    return 1;
+}
+
+fn l_get(L: ?*c.lua_State) callconv(.c) c_int {
+    const key = c.lua_tolstring(L, 2, null);
+    _ = c.lua_getfield(L, 1, "state");
+    _ = c.lua_getfield(L, -1, key);
+    c.lua_remove(L, -2);
+    return 1;
+}
+
+fn l_set(L: ?*c.lua_State) callconv(.c) c_int {
+    const key = c.lua_tolstring(L, 2, null);
+    _ = c.lua_getfield(L, 1, "state");
+    c.lua_pushvalue(L, 3);
+    c.lua_setfield(L, -2, key);
+    c.lua_pop(L, 1);
+    return 1;
+}
+
+fn setClosure(L: ?*c.lua_State, name: [*c]const u8, func: c.lua_CFunction) void {
+    c.lua_pushcfunction(L, func);
+    c.lua_setfield(L, -2, name);
+}
+
 fn pushResponse(L: ?*c.lua_State, status: u16, content_type: []const u8, body: []const u8) c_int {
     c.lua_newtable(L);
     c.lua_pushinteger(L, status);
@@ -325,7 +722,61 @@ fn pushResponse(L: ?*c.lua_State, status: u16, content_type: []const u8, body: [
     return 1;
 }
 
-fn encodeLuaValue(L: ?*c.lua_State, idx: c_int, list: *std.ArrayList(u8), allocator: std.mem.Allocator) !void {
+fn getCapabilityString(kind: []const u8, name: []const u8, field: []const u8) ?[]const u8 {
+    if (std.mem.eql(u8, kind, "http")) return lookupString(graph.capabilities.http, name, field);
+    if (std.mem.eql(u8, kind, "auth")) return lookupString(graph.capabilities.auth, name, field);
+    if (std.mem.eql(u8, kind, "zig")) {
+        const value = lookupZig(graph.capabilities.zig, name) orelse return null;
+        if (std.mem.eql(u8, field, "path")) return value;
+    }
+    return null;
+}
+
+fn getCapabilityInt(kind: []const u8, name: []const u8, field: []const u8) ?i64 {
+    if (std.mem.eql(u8, kind, "http")) return lookupInt(graph.capabilities.http, name, field);
+    if (std.mem.eql(u8, kind, "auth")) return lookupInt(graph.capabilities.auth, name, field);
+    return null;
+}
+
+fn lookupString(comptime T: type, name: []const u8, field: []const u8) ?[]const u8 {
+    const decls = comptime std.meta.declarations(T);
+    inline for (decls) |decl| {
+        if (std.mem.eql(u8, decl.name, name)) {
+            const cap = @field(T, decl.name);
+            const CapType = @TypeOf(cap);
+            const info = @typeInfo(CapType);
+            if (info == .pointer or info == .array) {
+                return cap;
+            }
+            return @field(cap, field);
+        }
+    }
+    return null;
+}
+
+fn lookupInt(comptime T: type, name: []const u8, field: []const u8) ?i64 {
+    const decls = comptime std.meta.declarations(T);
+    inline for (decls) |decl| {
+        if (std.mem.eql(u8, decl.name, name)) {
+            const cap = @field(T, decl.name);
+            return @intCast(@field(cap, field));
+        }
+    }
+    return null;
+}
+
+fn lookupZig(comptime T: type, name: []const u8) ?[]const u8 {
+    const decls = comptime std.meta.declarations(T);
+    inline for (decls) |decl| {
+        if (std.mem.eql(u8, decl.name, name)) {
+            const cap = @field(T, decl.name);
+            return cap;
+        }
+    }
+    return null;
+}
+
+fn encodeLuaValue(L: ?*c.lua_State, idx: c_int, list: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator) !void {
     const t = c.lua_type(L, idx);
     switch (t) {
         c.LUA_TNIL => try list.appendSlice(allocator, "null"),
@@ -380,7 +831,7 @@ fn encodeLuaValue(L: ?*c.lua_State, idx: c_int, list: *std.ArrayList(u8), alloca
     }
 }
 
-fn encodeJsonString(s: []const u8, list: *std.ArrayList(u8), allocator: std.mem.Allocator) !void {
+fn encodeJsonString(s: []const u8, list: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator) !void {
     for (s) |ch| {
         switch (ch) {
             '\\' => try list.appendSlice(allocator, "\\\\"),

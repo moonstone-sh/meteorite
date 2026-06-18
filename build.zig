@@ -42,6 +42,7 @@ pub fn build(b: *std.Build) void {
     bridge_module.addLibraryPath(b.path(".moonstone/env/libexec/lua/files/lib"));
     bridge_module.linkSystemLibrary("lua", .{});
     bridge_module.linkSystemLibrary("m", .{});
+    bridge_module.addImport("meteorite_graph", graph_module);
 
     handlers_module.addImport("meteorite_graph", ctx_module);
     graph_module.addImport("meteorite_handlers", handlers_module);

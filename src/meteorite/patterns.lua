@@ -15,7 +15,7 @@ local next_auto_id = 1
 local function parse_size(value, default)
   if value == nil then return default end
   if type(value) == "number" then return value end
-  local n, unit = tostring(value):match("^(%%d+)%%s*([kKmMgG]?[bB]?)$")
+  local n, unit = tostring(value):match("^(%d+)%s*([kKmMgG]?[bB]?)$")
   assert(n, "invalid memory size: " .. tostring(value))
   n = tonumber(n)
   unit = unit:lower()
@@ -26,7 +26,7 @@ local function parse_size(value, default)
 end
 
 local function parse_simple_bounded(pattern)
-  local class, min, max = pattern:match("^%^%%[([^%%]]+)%%]%%{(%d+),(%d+)%%}%%$$")
+  local class, min, max = pattern:match("^%^%[([^%]]+)%]%{(%d+),(%d+)%}%$$")
   if not class then return nil end
   local ranges = {}
   local i = 1
@@ -104,7 +104,7 @@ function patterns.define(name, source, opts)
     max = parsed.max,
     report = {
       pattern = source,
-      strategy = "bounded_dfa",
+      strategy = "class_dfa",
       input_bound = parsed.max,
       alphabet_classes = class_count,
       nfa_states = parsed.max + 1,

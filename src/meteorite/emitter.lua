@@ -58,6 +58,7 @@ end
 local function project_root_from_output(output)
   local marker = output:find("%.meteorite/", 1)
   if marker then
+    if marker <= 2 then return "." end
     local root = output:sub(1, marker - 2)
     return root ~= "" and root or "."
   end
@@ -146,12 +147,60 @@ local function capability_names(capabilities, kind)
   return out
 end
 
+local function format_bytes(bytes)
+  bytes = tonumber(bytes or 0) or 0
+  if bytes >= 1024 * 1024 and bytes % (1024 * 1024) == 0 then return tostring(bytes / (1024 * 1024)) .. "mb" end
+  if bytes >= 1024 and bytes % 1024 == 0 then return tostring(bytes / 1024) .. "kb" end
+  return tostring(bytes) .. "b"
+end
+
+local function memory_report(graph, routes_text)
+  local peak_route = nil
+  local peak_bytes = 0
+  local max_uri_bytes, max_path_bytes, max_query_bytes = 0, 0, 0
+  local max_query_pairs, max_path_segments = 0, 0
+  for _, route in ipairs(graph.routes or {}) do
+    local memory = route.memory or {}
+    if (memory.estimated_peak_bytes or 0) > peak_bytes then
+      peak_route = route
+      peak_bytes = memory.estimated_peak_bytes or 0
+    end
+    if (memory.max_uri_bytes or 0) > max_uri_bytes then max_uri_bytes = memory.max_uri_bytes or 0 end
+    if (memory.max_path_bytes or 0) > max_path_bytes then max_path_bytes = memory.max_path_bytes or 0 end
+    if (memory.max_query_bytes or 0) > max_query_bytes then max_query_bytes = memory.max_query_bytes or 0 end
+    if (memory.max_query_pairs or 0) > max_query_pairs then max_query_pairs = memory.max_query_pairs or 0 end
+    if (memory.max_path_segments or 0) > max_path_segments then max_path_segments = memory.max_path_segments or 0 end
+  end
+  local dfa_bytes = 0
+  local dfa_states = 0
+  for _, pattern in ipairs(graph.patterns or {}) do
+    local report = pattern.report or {}
+    dfa_bytes = dfa_bytes + (report.estimated_bytes or 0)
+    dfa_states = dfa_states + (report.dfa_states or 0)
+  end
+  local profile = graph.profile or {}
+  return {
+    profile = profile.name or ((peak_route and peak_route.memory and peak_route.memory.profile_name) or "default"),
+    peak_route = peak_route and (peak_route.method .. " " .. peak_route.raw_path) or "none",
+    estimated_peak_bytes = peak_bytes,
+    max_uri_bytes = max_uri_bytes,
+    max_path_bytes = max_path_bytes,
+    max_query_bytes = max_query_bytes,
+    max_query_pairs = max_query_pairs,
+    max_path_segments = max_path_segments,
+    dfa_bytes = dfa_bytes,
+    dfa_states = dfa_states,
+    graph_bytes = #(routes_text or ""),
+  }
+end
+
 local function emit_build_report(graph, output, mode)
   local inline, zig = 0, 0
   for _, route in ipairs(graph.routes) do
     if route.handler.kind == "inline_lua" then inline = inline + 1 end
     if route.handler.kind == "zig" or route.handler.kind == "zig_file" then zig = zig + 1 end
   end
+  local memory = graph.memory_report or memory_report(graph)
   local lines = {
     "Meteorite build",
     "  mode: " .. (mode == "release-static" and "static" or "hybrid"),
@@ -165,6 +214,13 @@ local function emit_build_report(graph, output, mode)
     "  Auth capabilities: " .. (#capability_names(graph.capabilities, "auth") > 0 and table.concat(capability_names(graph.capabilities, "auth"), ", ") or "none"),
     "  Zig capabilities: " .. (#capability_names(graph.capabilities, "zig") > 0 and table.concat(capability_names(graph.capabilities, "zig"), ", ") or "none"),
     "  patterns: " .. tostring(#graph.patterns),
+    "  memory profile: " .. tostring(memory.profile),
+    "  peak route memory: " .. format_bytes(memory.estimated_peak_bytes) .. " (" .. tostring(memory.peak_route) .. ")",
+    "  max URI: " .. format_bytes(memory.max_uri_bytes),
+    "  max path: " .. format_bytes(memory.max_path_bytes),
+    "  max query: " .. format_bytes(memory.max_query_bytes) .. " / " .. tostring(memory.max_query_pairs) .. " pairs",
+    "  DFA tables: " .. format_bytes(memory.dfa_bytes) .. " / " .. tostring(memory.dfa_states) .. " states",
+    "  graph data: ~" .. format_bytes(memory.graph_bytes),
     "  artifact: dist/server",
     "",
   }
@@ -178,6 +234,67 @@ local function emit_luals_aids(graph, output)
     "---@meta",
     "",
     "---@diagnostic disable: missing-return, lowercase-global",
+    "",
+    "---@class MeteoriteAppOptions",
+    "---@field name? string",
+    "---@field profile? string|table",
+    "",
+    "---@class MeteoriteRouteOptions",
+    "---@field params? table<string, MeteoriteSchemaValue>",
+    "---@field query? table<string, MeteoriteSchemaValue>",
+    "---@field body? {max?: number|string, [string]: any}",
+    "---@field memory? {max_body?: number|string, request_arena?: number|string}",
+    "---@field capabilities? table<string, any>",
+    "",
+    "---@alias MeteoriteHandler string|fun(c: MeteoriteContext): any|{kind: string, module?: string, path?: string, symbol?: string, decl?: string}",
+    "",
+    "---@class MeteoriteSchemaValue",
+    "---@field type string",
+    "---@field optional? boolean",
+    "---@field max_len? integer",
+    "---@field exact_len? integer",
+    "---@field pattern? MeteoritePattern",
+    "",
+    "---@class MeteoritePattern : MeteoriteSchemaValue",
+    "---@field id string",
+    "---@field kind \"pattern\"",
+    "---@field pattern_id string",
+    "",
+    "---@class MeteoriteApp",
+    "---@field name string",
+    "---@field routes table",
+    "---@field middleware table",
+    "---@field capabilities table<string, any>",
+    "---@field cache table",
+    "---@field get fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table",
+    "---@field get fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table",
+    "---@field post fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table",
+    "---@field post fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table",
+    "---@field put fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table",
+    "---@field put fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table",
+    "---@field patch fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table",
+    "---@field patch fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table",
+    "---@field delete fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table",
+    "---@field delete fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table",
+    "---@field use fun(self: MeteoriteApp, plugin_or_middleware: table|function, options?: table): MeteoriteApp",
+    "---@field capability fun(self: MeteoriteApp, kind: string, spec: table): MeteoriteApp",
+    "",
+    "---@class MeteoriteModule",
+    "---@field profiles table",
+    "---@field app fun(opts?: MeteoriteAppOptions): MeteoriteApp",
+    "---@field profile fun(name_or_table?: string|table, opts?: table): table",
+    "---@field string fun(opts?: {max?: integer, max_len?: integer, optional?: boolean, decode?: boolean, validate?: string|function|table, pattern?: MeteoritePattern}): MeteoriteSchemaValue",
+    "---@field slug fun(opts?: {max?: integer, max_len?: integer, optional?: boolean, decode?: boolean}): MeteoriteSchemaValue",
+    "---@field u64 fun(opts?: {max?: integer, max_len?: integer, optional?: boolean, decode?: boolean}): MeteoriteSchemaValue",
+    "---@field i32 fun(opts?: {max?: integer, max_len?: integer, optional?: boolean, decode?: boolean}): MeteoriteSchemaValue",
+    "---@field uuid fun(opts?: {optional?: boolean, decode?: boolean}): MeteoriteSchemaValue",
+    "---@field hex fun(opts?: {len?: integer, optional?: boolean, decode?: boolean}): MeteoriteSchemaValue",
+    "---@field bool fun(opts?: {optional?: boolean, decode?: boolean}): MeteoriteSchemaValue",
+    "---@field pattern fun(name_or_source: string, source_or_opts?: string|table, opts?: table): MeteoritePattern",
+    "---@field zig fun(path_or_symbol: string, opts?: {decl?: string}): table",
+    "---@field lua fun(module_ref: string): table",
+    "---@type MeteoriteModule",
+    "local meteorite = {}",
     "",
     "---@class MeteoriteContext",
     "---@field params table",
@@ -218,6 +335,7 @@ local function emit_luals_aids(graph, output)
     "---@field get fun(self: MeteoriteHttpClient, path: string, opts?: table): table",
     "---@field post fun(self: MeteoriteHttpClient, path: string, opts?: table): table",
     "---@field put fun(self: MeteoriteHttpClient, path: string, opts?: table): table",
+    "---@field patch fun(self: MeteoriteHttpClient, path: string, opts?: table): table",
     "---@field delete fun(self: MeteoriteHttpClient, path: string, opts?: table): table",
     "local HttpClient = {}",
     "",
@@ -257,7 +375,7 @@ local function emit_luals_aids(graph, output)
       lines[#lines + 1] = ""
     end
   end
-  lines[#lines + 1] = "return Context"
+  lines[#lines + 1] = "return meteorite"
   write_file(aid_dir .. "/meteorite.meta.lua", table.concat(lines, "\n") .. "\n")
 
   local route_lines = {
@@ -627,7 +745,28 @@ end
 local function sync_luarc(output)
   local root = project_root_from_output(output)
   local target = path_join(root, ".luarc.json")
-  if file_exists(target) then return end
+  if file_exists(target) then
+    local content = read_file(target) or ""
+    local changed = false
+    if not content:find('"%.meteorite/aids/lua"', 1, true) and not content:find('".meteorite/aids/lua"', 1, true) then
+      local replaced
+      replaced = content:gsub('("library"%s*:%s*%[)', '%1\n      ".meteorite/aids/lua",', 1)
+      if replaced ~= content then
+        content = replaced
+        changed = true
+      end
+    end
+    if not content:find('"%.moonstone/env/share/lua"', 1, true) and not content:find('".moonstone/env/share/lua"', 1, true) then
+      local replaced
+      replaced = content:gsub('("library"%s*:%s*%[)', '%1\n      ".moonstone/env/share/lua",', 1)
+      if replaced ~= content then
+        content = replaced
+        changed = true
+      end
+    end
+    if changed then write_file(target, content) end
+    return
+  end
   write_file(target, table.concat({
     "{",
     "  \"workspace\": {",
@@ -798,7 +937,7 @@ local function emit_bindings(graph, output)
 end
 
 local function pattern_class_map(pattern)
-  local parsed = pattern.parsed
+  local parsed = pattern.parsed or pattern
   local map = {}
   local other = #parsed.ranges
   for i = 0, 255 do map[i + 1] = other end
@@ -823,8 +962,9 @@ local function emit_pattern_tables(graph, lines)
   lines[#lines + 1] = "    }"
   for _, pattern in ipairs(graph.patterns) do
     local class_map, class_count = pattern_class_map(pattern)
-    local max = pattern.parsed.max
-    local min = pattern.parsed.min
+    local parsed = pattern.parsed or pattern
+    local max = parsed.max
+    local min = parsed.min
     local dead = max + 1
     local state_count = max + 2
     lines[#lines + 1] = ""
@@ -858,15 +998,109 @@ local function emit_pattern_tables(graph, lines)
   lines[#lines + 1] = ""
 end
 
+
+local function is_array_table(value)
+  if type(value) ~= "table" then return false end
+  local keys = {}
+  for k, _ in pairs(value) do keys[#keys + 1] = k end
+  table.sort(keys, function(a, b)
+    if type(a) == "number" and type(b) == "number" then return a < b end
+    return tostring(a) < tostring(b)
+  end)
+  for i, k in ipairs(keys) do
+    if k ~= i then return false end
+  end
+  return #keys > 0
+end
+
+
+local function is_array_table(value)
+  if type(value) ~= "table" then return false end
+  local keys = {}
+  for k, _ in pairs(value) do keys[#keys + 1] = k end
+  table.sort(keys, function(a, b)
+    if type(a) == "number" and type(b) == "number" then return a < b end
+    return tostring(a) < tostring(b)
+  end)
+  for i, k in ipairs(keys) do
+    if k ~= i then return false end
+  end
+  return #keys > 0
+end
+
+local function capability_value_to_zig(value, indent)
+  indent = indent or ""
+  local t = type(value)
+  if t == "string" then return zig_string(value) end
+  if t == "number" then
+    if value == math.floor(value) then
+      return string.format("%d", value)
+    end
+    return string.format("%g", value)
+  end
+  if t == "boolean" then return value and "true" or "false" end
+  if t ~= "table" then return "null" end
+  if is_array_table(value) then
+    local items = {}
+    for _, v in ipairs(value) do
+      items[#items + 1] = capability_value_to_zig(v, indent .. "    ")
+    end
+    return ".{ " .. table.concat(items, ", ") .. " }"
+  end
+  local keys = {}
+  for k, _ in pairs(value) do keys[#keys + 1] = k end
+  table.sort(keys, function(a, b)
+    if type(a) == type(b) then return a < b end
+    return tostring(a) < tostring(b)
+  end)
+  local fields = {}
+  for _, k in ipairs(keys) do
+    fields[#fields + 1] = "." .. zig_ident(k) .. " = " .. capability_value_to_zig(value[k], indent .. "    ")
+  end
+  return ".{" .. "\n" .. indent .. "    " .. table.concat(fields, "," .. "\n" .. indent .. "    ") .. "\n" .. indent .. "}"
+end
+
+local function emit_capabilities(graph, lines)
+  lines[#lines + 1] = "pub const capabilities = struct {"
+  local kinds = { "http", "auth", "zig" }
+  for _, kind in ipairs(kinds) do
+    lines[#lines + 1] = "    pub const " .. zig_ident(kind) .. " = struct {"
+    local configs = (graph.capabilities or {})[kind] or {}
+    local names = {}
+    for name, _ in pairs(configs) do names[#names + 1] = name end
+    table.sort(names)
+    for _, name in ipairs(names) do
+      lines[#lines + 1] = "        pub const " .. zig_ident(name) .. " = " .. capability_value_to_zig(configs[name], "        ") .. ";"
+    end
+    lines[#lines + 1] = "    };"
+  end
+  lines[#lines + 1] = "};"
+  lines[#lines + 1] = ""
+end
+
 local function emit_graph_zig(graph, output)
   local max_arena = 0
-  for _, route in ipairs(graph.routes) do if route.memory.request_arena_bytes > max_arena then max_arena = route.memory.request_arena_bytes end end
+  local max_uri, max_path, max_query, max_query_pairs, max_path_segments = 0, 0, 0, 0, 0
+  for _, route in ipairs(graph.routes) do
+    local memory = route.memory
+    if memory.request_arena_bytes > max_arena then max_arena = memory.request_arena_bytes end
+    if memory.max_uri_bytes > max_uri then max_uri = memory.max_uri_bytes end
+    if memory.max_path_bytes > max_path then max_path = memory.max_path_bytes end
+    if memory.max_query_bytes > max_query then max_query = memory.max_query_bytes end
+    if memory.max_query_pairs > max_query_pairs then max_query_pairs = memory.max_query_pairs end
+    if memory.max_path_segments > max_path_segments then max_path_segments = memory.max_path_segments end
+  end
   local lines = {
     "pub const bindings = @import(\"graph_bindings.zig\");",
     "pub const ctx = @import(\"meteorite_ctx\").ctx;",
     "",
     "pub const max_request_arena_bytes = " .. tostring(max_arena) .. ";",
-    "pub const Method = enum { GET, POST, OTHER };",
+    "pub const max_uri_bytes = " .. tostring(max_uri) .. ";",
+    "pub const max_path_bytes = " .. tostring(max_path) .. ";",
+    "pub const max_query_bytes = " .. tostring(max_query) .. ";",
+    "pub const max_query_pairs = " .. tostring(max_query_pairs) .. ";",
+    "pub const max_path_segments = " .. tostring(max_path_segments) .. ";",
+    "pub const Method = enum { GET, POST, PUT, PATCH, DELETE, OTHER };",
     "pub const Segment = union(enum) { literal: []const u8, param: []const u8 };",
     "pub const ZigSymbolHandler = struct { id: bindings.HandlerId, symbol: []const u8 };",
     "pub const ZigFileHandler = struct { id: []const u8, path: []const u8, decl: []const u8 = \"handle\" };",
@@ -882,12 +1116,16 @@ local function emit_graph_zig(graph, output)
     "pub const ThreadCount = union(enum) { auto, fixed: u16 };",
     "pub const RuntimeWorkers = struct { strategy: WorkerStrategy = .auto, io_threads: ThreadCount = .auto, worker_threads: ThreadCount = .auto, lua_state: LuaStateStrategy = .single_locked };",
     "pub const runtime_workers = RuntimeWorkers{};",
+    "pub const RouteMemory = struct { profile_name: []const u8, request_arena_bytes: usize, max_body_bytes: usize, max_uri_bytes: usize, max_path_bytes: usize, max_query_bytes: usize, max_query_pairs: usize, max_path_segments: usize, max_response_bytes: usize, max_capability_response_bytes: usize, lua_heap_bytes: usize, estimated_peak_bytes: usize };",
     "pub const ParamKind = enum { string, slug, u64, i32, uuid, hex, bool, pattern };",
     "pub const ParamSpec = struct { name: []const u8, kind: ParamKind = .string, max_len: usize = 0, exact_len: usize = 0, optional: bool = false, pattern: ?PatternId = null };",
-    "pub const Route = struct { id: []const u8, method: Method, raw_path: []const u8, path: []const Segment, params: []const ParamSpec, query: []const ParamSpec, max_body_bytes: usize, request_arena_bytes: usize, handler: Handler, runtime: RouteRuntime = .{}, execution: RouteExecution = .{}, capabilities: []const CapabilityRef = &.{} };",
+    "pub const Route = struct { id: []const u8, method: Method, raw_path: []const u8, path: []const Segment, params: []const ParamSpec, query: []const ParamSpec, memory: RouteMemory, max_body_bytes: usize, request_arena_bytes: usize, handler: Handler, runtime: RouteRuntime = .{}, execution: RouteExecution = .{}, capabilities: []const CapabilityRef = &.{} };",
     "",
   }
   emit_pattern_tables(graph, lines)
+
+    emit_capabilities(graph, lines)
+
   for i, route in ipairs(graph.routes) do
     lines[#lines + 1] = "const route_" .. i .. "_segments = [_]Segment{"
     for _, segment in ipairs(route.path.segments) do
@@ -941,7 +1179,8 @@ local function emit_graph_zig(graph, output)
     if route.handler.kind == "lua" then handler = ".{ .lua_file = .{ .id = " .. zig_string(route.id) .. ", .path = " .. zig_string(route.handler.path or route.handler.module) .. " } }" end
     local runtime = ".{ .requires_lua = " .. tostring(route.runtime.requires_lua) .. ", .requires_http = " .. tostring(route.runtime.requires_http) .. ", .requires_auth = " .. tostring(route.runtime.requires_auth) .. ", .requires_zig_capability = " .. tostring(route.runtime.requires_zig_capability) .. ", .execution_class = ." .. route.runtime.execution_class .. " }"
     local execution = ".{ .class = ." .. route.execution.class .. ", .may_block = " .. tostring(route.execution.may_block) .. ", .requires_lua = " .. tostring(route.execution.requires_lua) .. ", .requires_worker_pool = " .. tostring(route.execution.requires_worker_pool) .. " }"
-    lines[#lines + 1] = "    .{ .id = " .. zig_string(route.id) .. ", .method = ." .. route.method .. ", .raw_path = " .. zig_string(route.raw_path) .. ", .path = &route_" .. i .. "_segments, .params = &route_" .. i .. "_params, .query = &route_" .. i .. "_query, .max_body_bytes = " .. route.memory.max_body_bytes .. ", .request_arena_bytes = " .. route.memory.request_arena_bytes .. ", .handler = " .. handler .. ", .runtime = " .. runtime .. ", .execution = " .. execution .. ", .capabilities = &route_" .. i .. "_capabilities },"
+    local memory = ".{ .profile_name = " .. zig_string(route.memory.profile_name) .. ", .request_arena_bytes = " .. route.memory.request_arena_bytes .. ", .max_body_bytes = " .. route.memory.max_body_bytes .. ", .max_uri_bytes = " .. route.memory.max_uri_bytes .. ", .max_path_bytes = " .. route.memory.max_path_bytes .. ", .max_query_bytes = " .. route.memory.max_query_bytes .. ", .max_query_pairs = " .. route.memory.max_query_pairs .. ", .max_path_segments = " .. route.memory.max_path_segments .. ", .max_response_bytes = " .. route.memory.max_response_bytes .. ", .max_capability_response_bytes = " .. route.memory.max_capability_response_bytes .. ", .lua_heap_bytes = " .. route.memory.lua_heap_bytes .. ", .estimated_peak_bytes = " .. route.memory.estimated_peak_bytes .. " }"
+    lines[#lines + 1] = "    .{ .id = " .. zig_string(route.id) .. ", .method = ." .. route.method .. ", .raw_path = " .. zig_string(route.raw_path) .. ", .path = &route_" .. i .. "_segments, .params = &route_" .. i .. "_params, .query = &route_" .. i .. "_query, .memory = " .. memory .. ", .max_body_bytes = " .. route.memory.max_body_bytes .. ", .request_arena_bytes = " .. route.memory.request_arena_bytes .. ", .handler = " .. handler .. ", .runtime = " .. runtime .. ", .execution = " .. execution .. ", .capabilities = &route_" .. i .. "_capabilities },"
   end
   lines[#lines + 1] = "};"
   lines[#lines + 1] = ""
@@ -985,11 +1224,12 @@ function emitter.emit(app, opts)
   local routes_zon = {}
   for _, route in ipairs(graph.routes) do routes_zon[#routes_zon + 1] = route_to_zon(route) end
   local routes_text = zon.encode(routes_zon)
+  graph.memory_report = memory_report(graph, routes_text)
   local graph_hash = hash_text(routes_text)
   write_file(output .. "/routes.zon", routes_text)
   write_file(output .. "/manifest.zon", zon.encode({ format = "meteorite.graph.v0", meteorite_version = "0.1.0", graph_hash = graph_hash, mode = mode_enum(mode) }))
-  write_file(output .. "/runtime.zon", zon.encode({ mode = mode_enum(mode), lua_runtime = mode ~= "release-static", backend = { __meteorite_enum = true, value = "std_http" }, workers = { strategy = { __meteorite_enum = true, value = "auto" }, lua_state = { __meteorite_enum = true, value = "single_locked" } } }))
-  write_file(output .. "/capabilities.zon", zon.encode({ backend = "std.http", methods = { "GET", "POST" }, declared = graph.capabilities or {} }))
+  write_file(output .. "/runtime.zon", zon.encode({ mode = mode_enum(mode), lua_runtime = mode ~= "release-static", backend = { __meteorite_enum = true, value = "std_http" }, workers = { strategy = { __meteorite_enum = true, value = "auto" }, lua_state = { __meteorite_enum = true, value = "single_locked" } }, memory = graph.memory_report }))
+  write_file(output .. "/capabilities.zon", zon.encode({ backend = "std.http", methods = { "GET", "POST", "PUT", "PATCH", "DELETE" }, declared = graph.capabilities or {} }))
   write_file(output .. "/graph_hash.txt", graph_hash .. "\n")
   emit_patterns_report(graph, output)
   emit_build_report(graph, output, mode)

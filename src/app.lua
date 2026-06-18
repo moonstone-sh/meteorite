@@ -19,6 +19,18 @@ app:get("/users/:id", {
   params = { id = m.u64() },
 }, "handlers.get_user")
 
+app:put("/users/:id", {
+  params = { id = m.u64() },
+}, "handlers.put_user")
+
+app:patch("/users/:id", {
+  params = { id = m.u64() },
+}, "handlers.patch_user")
+
+app:delete("/users/:id", {
+  params = { id = m.u64() },
+}, "handlers.delete_user")
+
 app:post("/echo", {
   body = {
     max = "8kb",

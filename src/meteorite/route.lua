@@ -1,3 +1,5 @@
+local profiles = require("meteorite.profile")
+
 local route = {}
 
 local function source_info(level)
@@ -52,19 +54,6 @@ function route.declare(method, path, options, handler)
     handler = handler_shape(handler),
     source = source_info(4),
   }
-end
-
-local function parse_size(value, default)
-  if value == nil then return default end
-  if type(value) == "number" then return value end
-  local n, unit = tostring(value):match("^(%d+)%s*([kKmMgG]?[bB]?)$")
-  assert(n, "invalid memory size: " .. tostring(value))
-  n = tonumber(n)
-  unit = unit:lower()
-  if unit == "kb" or unit == "k" then return n * 1024 end
-  if unit == "mb" or unit == "m" then return n * 1024 * 1024 end
-  if unit == "gb" or unit == "g" then return n * 1024 * 1024 * 1024 end
-  return n
 end
 
 local function segment_params(segments)
@@ -133,9 +122,61 @@ local function static_lua_error(key, declaration)
   }, "\n"))
 end
 
+local function validate_pattern_budget(patterns_list, memory)
+  if #patterns_list > memory.max_patterns then
+    error("pattern count exceeded profile budget: " .. tostring(#patterns_list) .. " > " .. tostring(memory.max_patterns))
+  end
+  local total_dfa_bytes = 0
+  for _, pattern in ipairs(patterns_list) do
+    local report = pattern.report or {}
+    local dfa_states = report.dfa_states or 0
+    local estimated_bytes = report.estimated_bytes or 0
+    if dfa_states > memory.max_dfa_states_per_pattern then
+      error(table.concat({
+        "pattern exceeded DFA state budget",
+        "",
+        "pattern: " .. tostring(pattern.id or pattern.pattern_id or "<anonymous>"),
+        "max_dfa_states: " .. tostring(memory.max_dfa_states_per_pattern),
+        "generated_states: " .. tostring(dfa_states),
+        "",
+        "hint:",
+        "  increase profile.static.max_dfa_states_per_pattern",
+        "  simplify alternation",
+      }, "\n"))
+    end
+    if estimated_bytes > memory.max_dfa_bytes_per_pattern then
+      error(table.concat({
+        "pattern exceeded DFA byte budget",
+        "",
+        "pattern: " .. tostring(pattern.id or pattern.pattern_id or "<anonymous>"),
+        "max_dfa_bytes: " .. tostring(memory.max_dfa_bytes_per_pattern),
+        "estimated_size: " .. tostring(estimated_bytes),
+        "",
+        "hint:",
+        "  increase profile.static.max_dfa_bytes_per_pattern",
+        "  simplify alternation",
+      }, "\n"))
+    end
+    total_dfa_bytes = total_dfa_bytes + estimated_bytes
+  end
+  if total_dfa_bytes > memory.max_dfa_bytes_total then
+    error(table.concat({
+      "pattern exceeded total DFA byte budget",
+      "",
+      "max_dfa_bytes_total: " .. tostring(memory.max_dfa_bytes_total),
+      "estimated_size: " .. tostring(total_dfa_bytes),
+      "",
+      "hint:",
+      "  increase profile.static.max_dfa_bytes_total",
+      "  remove unused patterns",
+    }, "\n"))
+  end
+end
+
 function route.normalize_app(app, opts)
   opts = opts or {}
   local mode = opts.mode or "dev"
+  local resolved_profile = profiles.resolve(app.profile or (app.options and app.options.profile))
   local routes = {}
   local patterns = {}
   local pattern_seen = {}
@@ -158,6 +199,7 @@ function route.normalize_app(app, opts)
       static_lua_error(key, declaration)
     end
 
+    local memory = profiles.route_memory(resolved_profile, declaration.method, declaration.memory)
     local normalized = {
       id = (handler.kind == "zig" or handler.kind == "zig_file") and handler.symbol or ("route_" .. tostring(index)),
       method = declaration.method,
@@ -180,10 +222,7 @@ function route.normalize_app(app, opts)
         requires_worker_pool = false,
       },
       capabilities = declaration.capabilities,
-      memory = {
-        max_body_bytes = parse_size(declaration.memory.max_body, declaration.method == "POST" and 1024 * 1024 or 0),
-        request_arena_bytes = parse_size(declaration.memory.request_arena, 256 * 1024),
-      },
+      memory = memory,
       source = declaration.source,
     }
     for _, param in ipairs(normalized.params) do
@@ -197,10 +236,13 @@ function route.normalize_app(app, opts)
     end
     routes[#routes + 1] = normalized
   end
+  local budget_memory = profiles.route_memory(resolved_profile, "GET", {})
+  validate_pattern_budget(patterns, budget_memory)
   return {
     format = "meteorite.graph.v0",
     meteorite_version = "0.1.0",
     app = { name = app.name },
+    profile = resolved_profile,
     mode = mode,
     routes = routes,
     patterns = patterns,

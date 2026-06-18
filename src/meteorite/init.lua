@@ -1,9 +1,11 @@
 local route = require("meteorite.route")
 local schema = require("meteorite.schema")
 local patterns = require("meteorite.patterns")
+local profile_mod = require("meteorite.profile")
 
 ---@class MeteoriteAppOptions
 ---@field name? string
+---@field profile? string|table
 
 ---@class MeteoriteRouteOptions
 ---@field params? table<string, MeteoriteSchemaValue>
@@ -14,6 +16,7 @@ local patterns = require("meteorite.patterns")
 
 ---@alias MeteoriteHandler string|fun(c: MeteoriteContext): any|{kind: "lua", module: string, path?: string}|{kind: "zig", symbol: string}|{kind: "zig_file", path: string, decl?: string}
 
+---@type MeteoriteModule
 local M = {}
 
 local App = {}
@@ -41,6 +44,21 @@ end
 ---@field capabilities table<string, any>
 ---@field cache table
 ---@field options table
+---@field profile string|table|nil
+---@field get fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table
+---@field get fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table
+---@field post fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table
+---@field post fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table
+---@field put fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table
+---@field put fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table
+---@field patch fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table
+---@field patch fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table
+---@field delete fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table
+---@field delete fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table
+---@field use fun(self: MeteoriteApp, plugin_or_middleware: table|function, options?: table): MeteoriteApp
+---@field capability fun(self: MeteoriteApp, kind: string, spec: table): MeteoriteApp
+---@field normalize fun(self: MeteoriteApp, opts?: {mode?: string}): table
+---@field __meteorite_app true
 local AppDoc = {}
 
 ---@param path string
@@ -57,6 +75,30 @@ end
 ---@return table
 function App:post(path, options, handler)
   return add_route(self, "POST", path, options, handler)
+end
+
+---@param path string
+---@param options? MeteoriteRouteOptions
+---@param handler MeteoriteHandler
+---@return table
+function App:put(path, options, handler)
+  return add_route(self, "PUT", path, options, handler)
+end
+
+---@param path string
+---@param options? MeteoriteRouteOptions
+---@param handler MeteoriteHandler
+---@return table
+function App:patch(path, options, handler)
+  return add_route(self, "PATCH", path, options, handler)
+end
+
+---@param path string
+---@param options? MeteoriteRouteOptions
+---@param handler MeteoriteHandler
+---@return table
+function App:delete(path, options, handler)
+  return add_route(self, "DELETE", path, options, handler)
 end
 
 ---@param plugin_or_middleware table|function
@@ -96,6 +138,19 @@ end
 
 ---@class MeteoriteModule
 ---@field patterns table
+---@field profiles table
+---@field app fun(opts?: MeteoriteAppOptions): MeteoriteApp
+---@field profile fun(name_or_table?: string|table, opts?: table): table
+---@field string fun(opts?: {max?: integer, max_len?: integer, optional?: boolean, decode?: boolean, validate?: string|function|table, pattern?: MeteoritePattern}): MeteoriteSchemaValue
+---@field slug fun(opts?: {max?: integer, max_len?: integer, optional?: boolean, decode?: boolean}): MeteoriteSchemaValue
+---@field u64 fun(opts?: {max?: integer, max_len?: integer, optional?: boolean, decode?: boolean}): MeteoriteSchemaValue
+---@field i32 fun(opts?: {max?: integer, max_len?: integer, optional?: boolean, decode?: boolean}): MeteoriteSchemaValue
+---@field uuid fun(opts?: {optional?: boolean, decode?: boolean}): MeteoriteSchemaValue
+---@field hex fun(opts?: {len?: integer, optional?: boolean, decode?: boolean}): MeteoriteSchemaValue
+---@field bool fun(opts?: {optional?: boolean, decode?: boolean}): MeteoriteSchemaValue
+---@field pattern fun(name_or_source: string, source_or_opts?: string|table, opts?: table): MeteoritePattern
+---@field zig fun(path_or_symbol: string, opts?: {decl?: string}): table
+---@field lua fun(module_ref: string): table
 local MDoc = {}
 
 ---@param opts? MeteoriteAppOptions
@@ -106,11 +161,12 @@ function M.app(opts)
     name = opts.name or "meteorite-app",
     routes = {},
     middleware = {},
-    capabilities = {},
-    cache = {},
-    options = opts,
-    __meteorite_app = true,
-  }, App)
+      capabilities = {},
+      cache = {},
+      options = opts,
+      profile = opts.profile,
+      __meteorite_app = true,
+    }, App)
 end
 
 ---@class MeteoritePatternDef
@@ -209,6 +265,14 @@ function M.handler(kind, ref, opts)
 end
 
 M.patterns = patterns
+M.profiles = profile_mod.profiles
+
+---@param name_or_table? string|table
+---@param opts? table
+---@return table
+function M.profile(name_or_table, opts)
+  return profile_mod.define(name_or_table, opts)
+end
 
 ---@param message string
 ---@return {kind: "validation_error", message: string}
