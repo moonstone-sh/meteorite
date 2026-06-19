@@ -27,7 +27,7 @@ if command == "graph" then
   print("Meteorite graph")
   print("  graph: " .. result.graph_hash)
   print("  mode: " .. mode)
-  print("  backend: std.http")
+  print("  backend: fast_http")
   print("  routes: " .. tostring(#result.graph.routes))
   if result.graph.memory_report then
     local memory = result.graph.memory_report

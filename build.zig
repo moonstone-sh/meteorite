@@ -4,7 +4,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const mode = b.option([]const u8, "mode", "Meteorite build mode") orelse "release-static";
     const hybrid_profile = b.option([]const u8, "hybrid-profile", "Hybrid profile") orelse "default";
-    const backend = b.option([]const u8, "backend", "HTTP backend: std_http or fast_http") orelse "std_http";
+    const backend = b.option([]const u8, "backend", "HTTP backend: fast_http or std_http") orelse "fast_http";
     const fast_http_strategy = b.option([]const u8, "fast-http-strategy", "fast_http strategy: threaded_probe or pool") orelse "threaded_probe";
     const fast_http_workers = b.option(u16, "fast-http-workers", "fast_http pool worker count; 0 means CPU count") orelse 0;
     const fast_http_queue = b.option(u16, "fast-http-queue", "fast_http pool queue limit") orelse 1024;
@@ -105,6 +105,12 @@ pub fn build(b: *std.Build) void {
     handlers_module.addImport("meteorite_graph", ctx_module);
     bridge_module.addImport("meteorite_graph", graph_module);
 
+    const listen_config_module = b.createModule(.{
+        .root_source_file = b.path(".meteorite/graph/current/listen_config.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const exe = b.addExecutable(.{
         .name = "server",
         .root_module = b.createModule(.{
@@ -117,6 +123,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "bridge.zig", .module = bridge_module },
                 .{ .name = "build_options", .module = build_info_module },
                 .{ .name = "meteorite_pattern", .module = pattern_module },
+                .{ .name = "listen_config", .module = listen_config_module },
             },
         }),
     });

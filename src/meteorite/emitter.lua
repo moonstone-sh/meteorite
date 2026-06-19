@@ -204,7 +204,7 @@ local function emit_build_report(graph, output, mode)
   local lines = {
     "Meteorite build",
     "  mode: " .. (mode == "release-static" and "static" or "hybrid"),
-    "  backend: std.http",
+    "  backend: fast_http",
     "  Lua runtime: " .. (mode == "release-static" and "removed" or "included"),
     "  Lua state: single_locked",
     "  workers: auto",
@@ -1223,8 +1223,8 @@ function emitter.emit(app, opts)
   local graph_hash = hash_text(routes_text)
   write_file(output .. "/routes.zon", routes_text)
   write_file(output .. "/manifest.zon", zon.encode({ format = "meteorite.graph.v0", meteorite_version = "0.1.0", graph_hash = graph_hash, mode = mode_enum(mode) }))
-  write_file(output .. "/runtime.zon", zon.encode({ mode = mode_enum(mode), lua_runtime = mode ~= "release-static", backend = { __meteorite_enum = true, value = "std_http" }, workers = { strategy = { __meteorite_enum = true, value = "auto" }, lua_state = { __meteorite_enum = true, value = "single_locked" } }, memory = graph.memory_report }))
-  write_file(output .. "/capabilities.zon", zon.encode({ backend = "std.http", methods = { "GET", "POST", "PUT", "PATCH", "DELETE" }, declared = graph.capabilities or {} }))
+  write_file(output .. "/runtime.zon", zon.encode({ mode = mode_enum(mode), lua_runtime = mode ~= "release-static", backend = { __meteorite_enum = true, value = "fast_http" }, workers = { strategy = { __meteorite_enum = true, value = "auto" }, lua_state = { __meteorite_enum = true, value = "single_locked" } }, memory = graph.memory_report }))
+  write_file(output .. "/capabilities.zon", zon.encode({ backend = "fast_http", methods = { "GET", "POST", "PUT", "PATCH", "DELETE" }, declared = graph.capabilities or {} }))
   write_file(output .. "/listen.zon", zon.encode(graph.listen or { host = "127.0.0.1", port = 8080 }))
     write_file(output .. "/listen_config.zig", "pub const listen_zon = @embedFile(\"listen.zon\");\n")
   write_file(output .. "/graph_hash.txt", graph_hash .. "\n")
