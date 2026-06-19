@@ -37,6 +37,186 @@ fn parseBool(value: []const u8) ?bool {
 }
 
 pub const ctx = struct {
+    pub const Params_plain = struct {
+        };
+
+    pub const Query_plain = struct {
+        };
+
+    pub const plain = struct {
+        pub const method_name = "GET";
+        pub const route_path = "/__bench/plain";
+        params: Params_plain,
+        query: Query_plain,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!plain {
+            return .{ .params = .{
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: plain) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: plain) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: plain, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: plain, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: plain, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: plain) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: plain, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: plain, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: plain, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
+    pub const Params_plain_static = struct {
+        };
+
+    pub const Query_plain_static = struct {
+        };
+
+    pub const plain_static = struct {
+        pub const method_name = "GET";
+        pub const route_path = "/__bench/plain-static";
+        params: Params_plain_static,
+        query: Query_plain_static,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!plain_static {
+            return .{ .params = .{
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: plain_static) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: plain_static) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: plain_static, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: plain_static, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: plain_static, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: plain_static) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: plain_static, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: plain_static, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: plain_static, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
+    pub const Params_hybrid_zig = struct {
+        };
+
+    pub const Query_hybrid_zig = struct {
+        };
+
+    pub const hybrid_zig = struct {
+        pub const method_name = "GET";
+        pub const route_path = "/__bench/hybrid-zig";
+        params: Params_hybrid_zig,
+        query: Query_hybrid_zig,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!hybrid_zig {
+            return .{ .params = .{
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: hybrid_zig) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: hybrid_zig) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: hybrid_zig, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: hybrid_zig, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: hybrid_zig, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: hybrid_zig) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: hybrid_zig, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: hybrid_zig, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: hybrid_zig, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
+    pub const Params_bench_meta = struct {
+        };
+
+    pub const Query_bench_meta = struct {
+        };
+
+    pub const bench_meta = struct {
+        pub const method_name = "GET";
+        pub const route_path = "/__bench/meta";
+        params: Params_bench_meta,
+        query: Query_bench_meta,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!bench_meta {
+            return .{ .params = .{
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: bench_meta) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: bench_meta) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: bench_meta, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: bench_meta, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: bench_meta, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: bench_meta) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: bench_meta, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: bench_meta, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: bench_meta, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
+    pub const Params_bench_raw = struct {
+        };
+
+    pub const Query_bench_raw = struct {
+        };
+
+    pub const bench_raw = struct {
+        pub const method_name = "GET";
+        pub const route_path = "/__bench/raw";
+        params: Params_bench_raw,
+        query: Query_bench_raw,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!bench_raw {
+            return .{ .params = .{
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: bench_raw) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: bench_raw) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: bench_raw, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: bench_raw, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: bench_raw, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: bench_raw) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: bench_raw, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: bench_raw, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: bench_raw, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
+    pub const Params_bench_counters = struct {
+        };
+
+    pub const Query_bench_counters = struct {
+        };
+
+    pub const bench_counters = struct {
+        pub const method_name = "GET";
+        pub const route_path = "/__bench/counters";
+        params: Params_bench_counters,
+        query: Query_bench_counters,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!bench_counters {
+            return .{ .params = .{
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: bench_counters) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: bench_counters) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: bench_counters, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: bench_counters, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: bench_counters, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: bench_counters) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: bench_counters, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: bench_counters, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: bench_counters, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
     pub const Params_health = struct {
         };
 
@@ -98,6 +278,102 @@ pub const ctx = struct {
         pub fn text(self: get_user, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
         pub fn bytes(self: get_user, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
         pub fn json(self: get_user, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
+    pub const Params_put_user = struct {
+            id: u64,
+        };
+
+    pub const Query_put_user = struct {
+        };
+
+    pub const put_user = struct {
+        pub const method_name = "PUT";
+        pub const route_path = "/users/:id";
+        params: Params_put_user,
+        query: Query_put_user,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!put_user {
+            return .{ .params = .{
+                .id = try std.fmt.parseInt(u64, raw.param("id") orelse return error.MissingParam, 10)
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: put_user) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: put_user) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: put_user, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: put_user, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: put_user, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: put_user) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: put_user, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: put_user, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: put_user, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
+    pub const Params_patch_user = struct {
+            id: u64,
+        };
+
+    pub const Query_patch_user = struct {
+        };
+
+    pub const patch_user = struct {
+        pub const method_name = "PATCH";
+        pub const route_path = "/users/:id";
+        params: Params_patch_user,
+        query: Query_patch_user,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!patch_user {
+            return .{ .params = .{
+                .id = try std.fmt.parseInt(u64, raw.param("id") orelse return error.MissingParam, 10)
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: patch_user) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: patch_user) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: patch_user, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: patch_user, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: patch_user, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: patch_user) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: patch_user, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: patch_user, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: patch_user, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
+    pub const Params_delete_user = struct {
+            id: u64,
+        };
+
+    pub const Query_delete_user = struct {
+        };
+
+    pub const delete_user = struct {
+        pub const method_name = "DELETE";
+        pub const route_path = "/users/:id";
+        params: Params_delete_user,
+        query: Query_delete_user,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!delete_user {
+            return .{ .params = .{
+                .id = try std.fmt.parseInt(u64, raw.param("id") orelse return error.MissingParam, 10)
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: delete_user) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: delete_user) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: delete_user, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: delete_user, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: delete_user, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: delete_user) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: delete_user, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: delete_user, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: delete_user, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
     };
     pub const Params_echo = struct {
         };
@@ -324,5 +600,337 @@ pub const ctx = struct {
         pub fn text(self: search, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
         pub fn bytes(self: search, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
         pub fn json(self: search, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
+    pub const Params_hybrid_inline = struct {
+        };
+
+    pub const Query_hybrid_inline = struct {
+        };
+
+    pub const hybrid_inline = struct {
+        pub const method_name = "GET";
+        pub const route_path = "/hybrid-inline";
+        params: Params_hybrid_inline,
+        query: Query_hybrid_inline,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!hybrid_inline {
+            return .{ .params = .{
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: hybrid_inline) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: hybrid_inline) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: hybrid_inline, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: hybrid_inline, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: hybrid_inline, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: hybrid_inline) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: hybrid_inline, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: hybrid_inline, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: hybrid_inline, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
+    pub const Params_bench_hybrid_inline = struct {
+        };
+
+    pub const Query_bench_hybrid_inline = struct {
+        };
+
+    pub const bench_hybrid_inline = struct {
+        pub const method_name = "GET";
+        pub const route_path = "/__bench/hybrid-inline";
+        params: Params_bench_hybrid_inline,
+        query: Query_bench_hybrid_inline,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!bench_hybrid_inline {
+            return .{ .params = .{
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: bench_hybrid_inline) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: bench_hybrid_inline) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: bench_hybrid_inline, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: bench_hybrid_inline, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: bench_hybrid_inline, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: bench_hybrid_inline) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: bench_hybrid_inline, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: bench_hybrid_inline, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: bench_hybrid_inline, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
+    pub const Params_bench_hybrid_inline_text_literal = struct {
+        };
+
+    pub const Query_bench_hybrid_inline_text_literal = struct {
+        };
+
+    pub const bench_hybrid_inline_text_literal = struct {
+        pub const method_name = "GET";
+        pub const route_path = "/__bench/hybrid-inline-text-literal";
+        params: Params_bench_hybrid_inline_text_literal,
+        query: Query_bench_hybrid_inline_text_literal,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!bench_hybrid_inline_text_literal {
+            return .{ .params = .{
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: bench_hybrid_inline_text_literal) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: bench_hybrid_inline_text_literal) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: bench_hybrid_inline_text_literal, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: bench_hybrid_inline_text_literal, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: bench_hybrid_inline_text_literal, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: bench_hybrid_inline_text_literal) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: bench_hybrid_inline_text_literal, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: bench_hybrid_inline_text_literal, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: bench_hybrid_inline_text_literal, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
+    pub const Params_hybrid_inline_params = struct {
+            id: u64,
+        };
+
+    pub const Query_hybrid_inline_params = struct {
+        };
+
+    pub const hybrid_inline_params = struct {
+        pub const method_name = "GET";
+        pub const route_path = "/__bench/hybrid-inline-params/:id";
+        params: Params_hybrid_inline_params,
+        query: Query_hybrid_inline_params,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!hybrid_inline_params {
+            return .{ .params = .{
+                .id = try std.fmt.parseInt(u64, raw.param("id") orelse return error.MissingParam, 10)
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: hybrid_inline_params) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: hybrid_inline_params) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: hybrid_inline_params, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: hybrid_inline_params, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: hybrid_inline_params, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: hybrid_inline_params) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: hybrid_inline_params, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: hybrid_inline_params, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: hybrid_inline_params, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
+    pub const Params_hybrid_inline_echo = struct {
+        };
+
+    pub const Query_hybrid_inline_echo = struct {
+        };
+
+    pub const hybrid_inline_echo = struct {
+        pub const method_name = "POST";
+        pub const route_path = "/__bench/hybrid-inline-echo";
+        params: Params_hybrid_inline_echo,
+        query: Query_hybrid_inline_echo,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!hybrid_inline_echo {
+            return .{ .params = .{
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: hybrid_inline_echo) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: hybrid_inline_echo) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: hybrid_inline_echo, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: hybrid_inline_echo, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: hybrid_inline_echo, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: hybrid_inline_echo) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: hybrid_inline_echo, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: hybrid_inline_echo, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: hybrid_inline_echo, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
+    pub const Params_bench_unavailable_state = struct {
+        };
+
+    pub const Query_bench_unavailable_state = struct {
+        };
+
+    pub const bench_unavailable_state = struct {
+        pub const method_name = "GET";
+        pub const route_path = "/__bench/lua-debug-state";
+        params: Params_bench_unavailable_state,
+        query: Query_bench_unavailable_state,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!bench_unavailable_state {
+            return .{ .params = .{
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: bench_unavailable_state) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: bench_unavailable_state) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: bench_unavailable_state, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: bench_unavailable_state, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: bench_unavailable_state, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: bench_unavailable_state) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: bench_unavailable_state, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: bench_unavailable_state, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: bench_unavailable_state, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
+    pub const Params_bench_unavailable_global = struct {
+        };
+
+    pub const Query_bench_unavailable_global = struct {
+        };
+
+    pub const bench_unavailable_global = struct {
+        pub const method_name = "GET";
+        pub const route_path = "/__bench/lua-global-counter";
+        params: Params_bench_unavailable_global,
+        query: Query_bench_unavailable_global,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!bench_unavailable_global {
+            return .{ .params = .{
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: bench_unavailable_global) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: bench_unavailable_global) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: bench_unavailable_global, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: bench_unavailable_global, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: bench_unavailable_global, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: bench_unavailable_global) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: bench_unavailable_global, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: bench_unavailable_global, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: bench_unavailable_global, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
+    pub const Params_bench_unavailable_leak = struct {
+        };
+
+    pub const Query_bench_unavailable_leak = struct {
+        };
+
+    pub const bench_unavailable_leak = struct {
+        pub const method_name = "GET";
+        pub const route_path = "/__bench/lua-state-leak";
+        params: Params_bench_unavailable_leak,
+        query: Query_bench_unavailable_leak,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!bench_unavailable_leak {
+            return .{ .params = .{
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: bench_unavailable_leak) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: bench_unavailable_leak) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: bench_unavailable_leak, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: bench_unavailable_leak, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: bench_unavailable_leak, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: bench_unavailable_leak) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: bench_unavailable_leak, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: bench_unavailable_leak, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: bench_unavailable_leak, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
+    pub const Params_bench_unavailable_shared = struct {
+        };
+
+    pub const Query_bench_unavailable_shared = struct {
+        };
+
+    pub const bench_unavailable_shared = struct {
+        pub const method_name = "GET";
+        pub const route_path = "/__bench/lua-shared-store";
+        params: Params_bench_unavailable_shared,
+        query: Query_bench_unavailable_shared,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!bench_unavailable_shared {
+            return .{ .params = .{
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: bench_unavailable_shared) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: bench_unavailable_shared) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: bench_unavailable_shared, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: bench_unavailable_shared, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: bench_unavailable_shared, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: bench_unavailable_shared) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: bench_unavailable_shared, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: bench_unavailable_shared, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: bench_unavailable_shared, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
+    pub const Params_bench_unavailable_worker = struct {
+        };
+
+    pub const Query_bench_unavailable_worker = struct {
+        };
+
+    pub const bench_unavailable_worker = struct {
+        pub const method_name = "GET";
+        pub const route_path = "/__bench/lua-worker-store";
+        params: Params_bench_unavailable_worker,
+        query: Query_bench_unavailable_worker,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!bench_unavailable_worker {
+            return .{ .params = .{
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: bench_unavailable_worker) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: bench_unavailable_worker) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: bench_unavailable_worker, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: bench_unavailable_worker, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: bench_unavailable_worker, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: bench_unavailable_worker) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: bench_unavailable_worker, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: bench_unavailable_worker, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: bench_unavailable_worker, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
+    pub const Params_bench_unavailable_require = struct {
+        };
+
+    pub const Query_bench_unavailable_require = struct {
+        };
+
+    pub const bench_unavailable_require = struct {
+        pub const method_name = "GET";
+        pub const route_path = "/__bench/lua-require-cache";
+        params: Params_bench_unavailable_require,
+        query: Query_bench_unavailable_require,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!bench_unavailable_require {
+            return .{ .params = .{
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: bench_unavailable_require) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: bench_unavailable_require) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: bench_unavailable_require, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: bench_unavailable_require, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: bench_unavailable_require, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: bench_unavailable_require) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: bench_unavailable_require, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: bench_unavailable_require, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: bench_unavailable_require, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
     };
 };

@@ -518,10 +518,16 @@ def main():
         ("Meteorite mode", build_info.get("meteorite_mode", bench.get("mode", "n/a"))),
         ("Hybrid profile", hybrid_profile),
         ("Lua state strategy", build_info.get("lua_state_strategy", "n/a")),
+        ("Lua handler refs", build_info.get("lua_handler_ref_strategy", "n/a")),
+        ("Capability store", build_info.get("capability_store_strategy", "n/a")),
+        ("Require cache", build_info.get("require_cache_strategy", "n/a")),
         ("Zig optimize", build_info.get("zig_optimize", "n/a")),
         ("Target arch", build_info.get("target", "n/a")),
         ("Backend", build_info.get("backend", bench.get("backend", "n/a"))),
         ("Connection strategy", build_info.get("connection_strategy", bench.get("fast_http_strategy", "n/a"))),
+        ("Backend strategy", build_info.get("backend_strategy", build_info.get("connection_strategy", "n/a"))),
+        ("Worker strategy", build_info.get("worker_strategy", "n/a")),
+        ("Worker count", build_info.get("worker_count", "n/a")),
         ("Bounded backend", "yes" if build_info.get("bounded") else "no"),
         ("fast_http workers", build_info.get("fast_http_workers", bench.get("fast_http_workers", "n/a"))),
         ("fast_http queue", build_info.get("fast_http_queue", bench.get("fast_http_queue", "n/a"))),
@@ -547,7 +553,7 @@ def main():
         print()
         print("| Counter | Value |")
         print("|---|---:|")
-        for key in ["connection_strategy", "bounded", "active_connections", "total_connections", "accepted_connections", "threads_spawned", "requests_served", "requests_per_connection", "keepalive_reuse_count", "connection_close_count", "bytes_read", "bytes_written", "connection_errors", "max_active_connections", "queue_depth", "max_queue_depth", "dropped_connections"]:
+        for key in ["connection_strategy", "bounded", "active_connections", "total_connections", "accepted_connections", "threads_spawned", "requests_served", "requests_per_connection", "keepalive_reuse_count", "connection_close_count", "bytes_read", "bytes_written", "connection_errors", "max_active_connections", "queue_depth", "max_queue_depth", "dropped_connections", "lua_states_created", "lua_handler_refs_loaded", "lua_handler_calls", "lua_errors", "lua_state_reuse_hits", "lua_state_reuse_misses", "per_thread_state_count"]:
             print(table_row([key, fmt(counters.get(key), 0)]))
 
     print()

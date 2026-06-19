@@ -39,6 +39,34 @@ pub fn hybrid_inline_echo(ctx: anytype) !void {
     try ctx.text(200, value);
 }
 
+pub fn hybrid_debug_unavailable(ctx: anytype) !void {
+    try ctx.text(501, "hybrid debug route requires Lua runtime");
+}
+
+pub fn bench_unavailable_state(ctx: anytype) !void {
+    try ctx.text(501, "hybrid debug route requires Lua runtime");
+}
+
+pub fn bench_unavailable_global(ctx: anytype) !void {
+    try ctx.text(501, "hybrid debug route requires Lua runtime");
+}
+
+pub fn bench_unavailable_leak(ctx: anytype) !void {
+    try ctx.text(501, "hybrid debug route requires Lua runtime");
+}
+
+pub fn bench_unavailable_shared(ctx: anytype) !void {
+    try ctx.text(501, "hybrid debug route requires Lua runtime");
+}
+
+pub fn bench_unavailable_worker(ctx: anytype) !void {
+    try ctx.text(501, "hybrid debug route requires Lua runtime");
+}
+
+pub fn bench_unavailable_require(ctx: anytype) !void {
+    try ctx.text(501, "hybrid debug route requires Lua runtime");
+}
+
 pub fn bench_meta(ctx: anytype) !void {
     _ = build_info;
     try ctx.bytes(200, "application/json", "{}");

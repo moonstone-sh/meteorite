@@ -12,6 +12,8 @@ FAST_HTTP_QUEUE="1024"
 HYBRID_PROFILE="default"
 DURATION="30s"
 CONCURRENCY="1,8,32,128,256,512"
+STRICT_P99_BASELINE_MS="${STRICT_P99_BASELINE_MS:-}"
+STRICT_P99_FACTOR="${STRICT_P99_FACTOR:-2.0}"
 HOST="127.0.0.1"
 PORT="8080"
 BIN="dist/server"
@@ -46,6 +48,10 @@ Options:
   --qps VAL               target QPS for fixed-rate run (default: 2000)
   --strict-bench          fail on Debug build or keepalive mismatch
   --strict-bench-fail-dirty  also fail if git working directory is dirty
+
+Environment gates:
+  STRICT_P99_BASELINE_MS  optional focused-baseline p99 threshold source, in ms
+  STRICT_P99_FACTOR       max p99 factor over baseline (default: 2.0)
   -h, --help              show this help
 USAGE
 }
@@ -408,9 +414,9 @@ run_strict_checks() {
     fi
   fi
   if [[ "$TARGET" == meteorite && "$BACKEND" == fast_http && "$FAST_HTTP_STRATEGY" == pool ]]; then
-    python3 - "$OUT/memory.csv" "$FAST_HTTP_WORKERS" "$OUT/backend-counters.json" <<'PY' || strict_fail "fast_http pool failed bounded-runtime checks"
+    python3 - "$OUT/memory.csv" "$FAST_HTTP_WORKERS" "$OUT/backend-counters.json" "$CONCURRENCY" "$MODE" "$STRICT_P99_BASELINE_MS" "$STRICT_P99_FACTOR" "$OUT" <<'PY' || strict_fail "fast_http pool failed bounded-runtime checks"
 import csv, json, sys
-mem_path, workers_arg, counters_path = sys.argv[1:4]
+mem_path, workers_arg, counters_path, concurrency_arg, mode, p99_baseline_arg, p99_factor_arg, out_dir = sys.argv[1:9]
 rows=[]
 try:
     with open(mem_path, newline='') as f:
@@ -431,17 +437,67 @@ except Exception:
     pass
 workers=int(workers_arg or '0')
 threads_spawned=int(counters.get('threads_spawned') or 0)
+lua_states=int(counters.get('lua_states_created') or 0)
+lua_errors=int(counters.get('lua_errors') or 0)
+dropped=int(counters.get('dropped_connections') or 0)
 if workers > 0 and threads_spawned > workers:
     raise SystemExit(f'threads_spawned {threads_spawned} > configured workers {workers}')
 if workers == 0 and threads_spawned > 128:
     raise SystemExit(f'threads_spawned {threads_spawned} exceeds default worker sanity cap')
 if workers > 0 and threads and max(threads) > workers + 12:
     raise SystemExit(f'max observed threads {max(threads)} exceeds workers + overhead')
+if lua_errors > 0:
+    raise SystemExit(f'lua_errors {lua_errors} > 0')
+if lua_states > 0:
+    bound = threads_spawned if threads_spawned > 0 else (workers if workers > 0 else 128)
+    if lua_states > bound:
+        raise SystemExit(f'lua_states_created {lua_states} > worker/thread bound {bound}')
+concurrency_values=[]
+for part in concurrency_arg.split(','):
+    try:
+        concurrency_values.append(int(part))
+    except Exception:
+        pass
+if 256 in concurrency_values and dropped > 0:
+    raise SystemExit(f'dropped_connections {dropped} during normal c256 run')
 if rss and len(rss) > 3:
     first=rss[0]
     last=rss[-1]
     if first > 0 and last > max(first * 2.0, first + 51200):
         raise SystemExit(f'RSS grew from {first} KiB to {last} KiB')
+if p99_baseline_arg:
+    import glob, os
+    try:
+        baseline=float(p99_baseline_arg)
+        factor=float(p99_factor_arg or '2.0')
+    except Exception as exc:
+        raise SystemExit(f'invalid p99 gate env: {exc}')
+    candidates=glob.glob(os.path.join(out_dir, 'hybrid-inline-bench-oha-c256.json'))
+    if mode == 'release-hybrid' and candidates:
+        data=json.load(open(candidates[0]))
+        def find_p99(obj):
+            if isinstance(obj, dict):
+                for key in ('p99','P99'):
+                    if key in obj:
+                        return obj[key]
+                for key in ('latencyPercentiles','latency_percentiles','percentiles'):
+                    value=obj.get(key)
+                    if isinstance(value, dict):
+                        for pkey in ('p99','P99','99','99.0'):
+                            if pkey in value:
+                                return value[pkey]
+                for value in obj.values():
+                    got=find_p99(value)
+                    if got is not None:
+                        return got
+            return None
+        p99=find_p99(data)
+        if p99 is not None:
+            p99=float(p99)
+            if p99 < 10:
+                p99 *= 1000.0
+            if p99 > baseline * factor:
+                raise SystemExit(f'hybrid-inline c256 p99 {p99:.3f} ms > baseline {baseline:.3f} ms * {factor:.2f}')
 PY
   fi
 }

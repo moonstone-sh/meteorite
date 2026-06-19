@@ -97,6 +97,32 @@ if is_hybrid then
     body = { max = "8kb" },
     memory = { request_arena = "16kb" },
   }, function(ctx) return ctx:body() end)
+  app:get("/__bench/lua-debug-state", function(ctx)
+    local d = ctx:debug()
+    return tostring(d.lua_state_id)
+  end)
+  app:get("/__bench/lua-global-counter", function(ctx)
+    _G.__meteorite_global_counter = (_G.__meteorite_global_counter or 0) + 1
+    local d = ctx:debug()
+    return tostring(d.lua_state_id) .. ":" .. tostring(_G.__meteorite_global_counter)
+  end)
+  app:get("/__bench/lua-state-leak", function(ctx)
+    local before = ctx:get("leak")
+    ctx:set("leak", "set")
+    return before == nil and "clean" or "leaked"
+  end)
+  app:get("/__bench/lua-shared-store", function(ctx)
+    return tostring(ctx:shared_counter())
+  end)
+  app:get("/__bench/lua-worker-store", function(ctx)
+    local d = ctx:debug()
+    return tostring(d.lua_state_id) .. ":" .. tostring(ctx:worker_counter())
+  end)
+  app:get("/__bench/lua-require-cache", function(ctx)
+    local probe = require("bench_lua_probe")
+    local d = ctx:debug()
+    return tostring(d.lua_state_id) .. ":" .. probe.hit()
+  end)
 else
   app:get("/hybrid-inline", "handlers.hybrid_inline")
   app:get("/__bench/hybrid-inline", "handlers.bench_hybrid_inline")
@@ -108,6 +134,12 @@ else
     body = { max = "8kb" },
     memory = { request_arena = "16kb" },
   }, "handlers.hybrid_inline_echo")
+  app:get("/__bench/lua-debug-state", "handlers.bench_unavailable_state")
+  app:get("/__bench/lua-global-counter", "handlers.bench_unavailable_global")
+  app:get("/__bench/lua-state-leak", "handlers.bench_unavailable_leak")
+  app:get("/__bench/lua-shared-store", "handlers.bench_unavailable_shared")
+  app:get("/__bench/lua-worker-store", "handlers.bench_unavailable_worker")
+  app:get("/__bench/lua-require-cache", "handlers.bench_unavailable_require")
 end
 
 return app

@@ -7,11 +7,63 @@ const c = @cImport({
 });
 
 pub const LuaRuntimeUnavailable = struct {
+    pub const lua_state_strategy = "none";
+    pub const lua_handler_ref_strategy = "none";
+    pub const capability_store_strategy = "none";
+    pub const require_cache_strategy = "none";
+
+    pub const Stats = LuaStats;
+
+    pub fn snapshotStats() Stats {
+        return .{};
+    }
+
     pub fn call(comptime handler: anytype, ctx: anytype) !void {
         _ = handler;
         try ctx.text(501, "handler requires Lua runtime");
     }
 };
+
+pub const LuaStats = struct {
+    lua_states_created: u64 = 0,
+    lua_handler_refs_loaded: u64 = 0,
+    lua_handler_calls: u64 = 0,
+    lua_errors: u64 = 0,
+    lua_state_reuse_hits: u64 = 0,
+    lua_state_reuse_misses: u64 = 0,
+    per_thread_state_count: u64 = 0,
+};
+
+const AtomicCounter = std.atomic.Value(u64);
+const LuaAtomicStats = struct {
+    lua_states_created: AtomicCounter = AtomicCounter.init(0),
+    lua_handler_refs_loaded: AtomicCounter = AtomicCounter.init(0),
+    lua_handler_calls: AtomicCounter = AtomicCounter.init(0),
+    lua_errors: AtomicCounter = AtomicCounter.init(0),
+    lua_state_reuse_hits: AtomicCounter = AtomicCounter.init(0),
+    lua_state_reuse_misses: AtomicCounter = AtomicCounter.init(0),
+};
+
+var lua_stats = LuaAtomicStats{};
+var debug_shared_counter = AtomicCounter.init(0);
+threadlocal var debug_worker_counter: u64 = 0;
+
+fn incLua(counter: *AtomicCounter) void {
+    _ = counter.fetchAdd(1, .monotonic);
+}
+
+fn snapshotLuaStats() LuaStats {
+    const states = lua_stats.lua_states_created.load(.monotonic);
+    return .{
+        .lua_states_created = states,
+        .lua_handler_refs_loaded = lua_stats.lua_handler_refs_loaded.load(.monotonic),
+        .lua_handler_calls = lua_stats.lua_handler_calls.load(.monotonic),
+        .lua_errors = lua_stats.lua_errors.load(.monotonic),
+        .lua_state_reuse_hits = lua_stats.lua_state_reuse_hits.load(.monotonic),
+        .lua_state_reuse_misses = lua_stats.lua_state_reuse_misses.load(.monotonic),
+        .per_thread_state_count = states,
+    };
+}
 
 pub const HybridContract = struct {
     pub const RequestLocalState = struct {
@@ -261,39 +313,57 @@ fn extractStatus(raw: []const u8) u16 {
 }
 
 pub const HybridLuaRuntime = struct {
+    pub const lua_state_strategy = "per_request_state";
+    pub const lua_handler_ref_strategy = "load_per_request";
+    pub const capability_store_strategy = "process_shared_native_debug_store";
+    pub const require_cache_strategy = "per_request_lua_package_loaded";
+
+    pub fn snapshotStats() LuaStats {
+        return snapshotLuaStats();
+    }
+
     pub fn call(comptime handler: anytype, ctx: anytype) !void {
+        incLua(&lua_stats.lua_handler_calls);
+        incLua(&lua_stats.lua_state_reuse_misses);
         const vtable = globalVtable(@TypeOf(ctx.*));
         const L = c.luaL_newstate() orelse {
             std.log.err("failed to create Lua state", .{});
+            incLua(&lua_stats.lua_errors);
             return error.LuaOutOfMemory;
         };
+        incLua(&lua_stats.lua_states_created);
         defer c.lua_close(L);
         c.luaL_openlibs(L);
 
-        const setup = "package.path = '.moonstone/env/share/lua/5.4/?.lua;.moonstone/env/share/lua/5.4/?/init.lua;' .. package.path";
+        const setup = "package.path = 'src/?.lua;src/?/init.lua;.moonstone/env/share/lua/5.4/?.lua;.moonstone/env/share/lua/5.4/?/init.lua;' .. package.path";
         if (c.luaL_loadstring(L, setup.ptr) != c.LUA_OK) {
             const err = c.lua_tolstring(L, -1, null);
             std.log.err("lua setup load failed: {s}", .{err});
+            incLua(&lua_stats.lua_errors);
             return error.LuaLoadFailed;
         }
         if (c.lua_pcallk(L, 0, 0, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
             const err = c.lua_tolstring(L, -1, null);
             std.log.err("lua setup failed: {s}", .{err});
+            incLua(&lua_stats.lua_errors);
             return error.LuaRuntimeError;
         }
 
         if (c.luaL_loadfilex(L, @ptrCast(handler.path.ptr), @as([*c]const u8, null)) != c.LUA_OK) {
             const err = c.lua_tolstring(L, -1, null);
             std.log.err("load handler {s}: {s}", .{ handler.path, err });
+            incLua(&lua_stats.lua_errors);
             return error.LuaLoadFailed;
         }
         if (c.lua_pcallk(L, 0, 1, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
             const err = c.lua_tolstring(L, -1, null);
             std.log.err("init handler {s}: {s}", .{ handler.path, err });
+            incLua(&lua_stats.lua_errors);
             return error.LuaRuntimeError;
         }
         if (!c.lua_isfunction(L, -1)) {
             std.log.err("handler {s} did not return a function", .{handler.path});
+            incLua(&lua_stats.lua_errors);
             return error.LuaHandlerInvalid;
         }
 
@@ -310,6 +380,9 @@ pub const HybridLuaRuntime = struct {
         pushMethod(L, "zig", l_zig);
         pushMethod(L, "get", l_get);
         pushMethod(L, "set", l_set);
+        pushMethod(L, "debug", l_debug);
+        pushMethod(L, "shared_counter", l_shared_counter);
+        pushMethod(L, "worker_counter", l_worker_counter);
 
         if (@hasField(@TypeOf(ctx.*), "captures")) {
             c.lua_newtable(L);
@@ -346,6 +419,7 @@ pub const HybridLuaRuntime = struct {
         if (c.lua_pcallk(L, 1, 1, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
             const err = c.lua_tolstring(L, -1, null);
             std.log.err("handler {s}: {s}", .{ handler.path, err });
+            incLua(&lua_stats.lua_errors);
             return error.LuaRuntimeError;
         }
 
@@ -705,6 +779,30 @@ fn l_set(L: ?*c.lua_State) callconv(.c) c_int {
     return 1;
 }
 
+fn l_debug(L: ?*c.lua_State) callconv(.c) c_int {
+    const state_int: usize = @intFromPtr(L.?);
+    var buf: [32]u8 = undefined;
+    const state_text = std.fmt.bufPrint(&buf, "{x}", .{state_int}) catch "unknown";
+    c.lua_newtable(L);
+    _ = c.lua_pushlstring(L, state_text.ptr, state_text.len);
+    c.lua_setfield(L, -2, "lua_state_id");
+    c.lua_pushinteger(L, @intCast(debug_worker_counter));
+    c.lua_setfield(L, -2, "worker_counter");
+    return 1;
+}
+
+fn l_shared_counter(L: ?*c.lua_State) callconv(.c) c_int {
+    const value = debug_shared_counter.fetchAdd(1, .monotonic) + 1;
+    c.lua_pushinteger(L, @intCast(value));
+    return 1;
+}
+
+fn l_worker_counter(L: ?*c.lua_State) callconv(.c) c_int {
+    debug_worker_counter += 1;
+    c.lua_pushinteger(L, @intCast(debug_worker_counter));
+    return 1;
+}
+
 fn setClosure(L: ?*c.lua_State, name: [*c]const u8, func: c.lua_CFunction) void {
     c.lua_pushcfunction(L, func);
     c.lua_setfield(L, -2, name);
@@ -880,25 +978,42 @@ fn routeIndexCached(comptime route_id: []const u8) usize {
 }
 
 pub const CachedHybridRuntime = struct {
+    pub const lua_state_strategy = "per_thread_cached_refs";
+    pub const lua_handler_ref_strategy = "per_thread_registry_refs";
+    pub const capability_store_strategy = "process_shared_native_debug_store";
+    pub const require_cache_strategy = "per_thread_package_loaded";
+
+    pub fn snapshotStats() LuaStats {
+        return snapshotLuaStats();
+    }
+
     threadlocal var L: ?*c.lua_State = null;
     threadlocal var refs: [inlineLuaRouteCount()]c_int = undefined;
     threadlocal var initialized: bool = false;
 
     fn init() !void {
-        if (initialized) return;
+        if (initialized) {
+            incLua(&lua_stats.lua_state_reuse_hits);
+            return;
+        }
+        incLua(&lua_stats.lua_state_reuse_misses);
         L = c.luaL_newstate() orelse {
             std.log.err("failed to create cached Lua state", .{});
+            incLua(&lua_stats.lua_errors);
             return error.LuaOutOfMemory;
         };
+        incLua(&lua_stats.lua_states_created);
         c.luaL_openlibs(L.?);
 
-        const setup = "package.path = '.moonstone/env/share/lua/5.4/?.lua;.moonstone/env/share/lua/5.4/?/init.lua;' .. package.path";
+        const setup = "package.path = 'src/?.lua;src/?/init.lua;.moonstone/env/share/lua/5.4/?.lua;.moonstone/env/share/lua/5.4/?/init.lua;' .. package.path";
         if (c.luaL_loadstring(L.?, setup.ptr) != c.LUA_OK) {
             std.log.err("cached lua setup load failed: {s}", .{c.lua_tolstring(L.?, -1, null)});
+            incLua(&lua_stats.lua_errors);
             return error.LuaLoadFailed;
         }
         if (c.lua_pcallk(L.?, 0, 0, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
             std.log.err("cached lua setup failed: {s}", .{c.lua_tolstring(L.?, -1, null)});
+            incLua(&lua_stats.lua_errors);
             return error.LuaRuntimeError;
         }
 
@@ -908,17 +1023,21 @@ pub const CachedHybridRuntime = struct {
                 const handler = route.handler.inline_lua;
                 if (c.luaL_loadfilex(L.?, @ptrCast(handler.chunk_path.ptr), @as([*c]const u8, null)) != c.LUA_OK) {
                     std.log.err("cached load handler {s}: {s}", .{ handler.chunk_path, c.lua_tolstring(L.?, -1, null) });
+                    incLua(&lua_stats.lua_errors);
                     return error.LuaLoadFailed;
                 }
                 if (c.lua_pcallk(L.?, 0, 1, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
                     std.log.err("cached init handler {s}: {s}", .{ handler.chunk_path, c.lua_tolstring(L.?, -1, null) });
+                    incLua(&lua_stats.lua_errors);
                     return error.LuaRuntimeError;
                 }
                 if (!c.lua_isfunction(L.?, -1)) {
                     std.log.err("cached handler {s} did not return a function", .{handler.chunk_path});
+                    incLua(&lua_stats.lua_errors);
                     return error.LuaHandlerInvalid;
                 }
                 refs[idx] = c.luaL_ref(L.?, c.LUA_REGISTRYINDEX);
+                incLua(&lua_stats.lua_handler_refs_loaded);
                 idx += 1;
             }
         }
@@ -926,6 +1045,7 @@ pub const CachedHybridRuntime = struct {
     }
 
     pub fn call(comptime handler: anytype, ctx: anytype) !void {
+        incLua(&lua_stats.lua_handler_calls);
         const vtable = globalVtable(@TypeOf(ctx.*));
         try init();
         const L2 = L.?;
@@ -946,6 +1066,9 @@ pub const CachedHybridRuntime = struct {
         pushMethod(L2, "zig", l_zig);
         pushMethod(L2, "get", l_get);
         pushMethod(L2, "set", l_set);
+        pushMethod(L2, "debug", l_debug);
+        pushMethod(L2, "shared_counter", l_shared_counter);
+        pushMethod(L2, "worker_counter", l_worker_counter);
 
         if (@hasField(@TypeOf(ctx.*), "captures")) {
             c.lua_newtable(L2);
@@ -982,6 +1105,7 @@ pub const CachedHybridRuntime = struct {
         if (c.lua_pcallk(L2, 1, 1, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
             const err = c.lua_tolstring(L2, -1, null);
             std.log.err("cached handler {s}: {s}", .{ handler.id, err });
+            incLua(&lua_stats.lua_errors);
             return error.LuaRuntimeError;
         }
 
