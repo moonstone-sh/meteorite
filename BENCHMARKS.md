@@ -1,14 +1,130 @@
 # Meteorite Benchmark Results
 
-> **macOS aarch64, ReleaseFast**  
-> Latest comparison: [`bench/results/latest-comparison.md`](bench/results/latest-comparison.md)  
+> **macOS aarch64, ReleaseFast**
+> Latest comparison: [`bench/results/latest-comparison.md`](bench/results/latest-comparison.md)
 > Raw artifacts:
 > - Meteorite release-static: [`bench/results/latest-meteorite-release-static/`](bench/results/latest-meteorite-release-static/)
 > - Meteorite release-hybrid optimized: [`bench/results/latest-meteorite-release-hybrid/`](bench/results/latest-meteorite-release-hybrid/)
 > - Hono Bun: [`bench/results/latest-hono-bun/`](bench/results/latest-hono-bun/)
 
-These benchmarks measure local framework/runtime overhead on a single machine using `oha` and `wrk`. They are **not** claims of real-world internet throughput.
+These benchmarks measure local framework/runtime overhead on one machine. They are **not** claims of real-world internet throughput.
 
+## Optimized Hybrid Stability Run
+
+These results come from the per-thread cached Lua state validation sprint. The run used the `fast_http_pool` backend with the optimized hybrid profile and per-thread Lua states.
+
+Environment:
+
+```text
+Commit: 1201f23
+OS: macOS arm64
+Zig: 0.16.0
+Load generator: oha 1.14.0
+Backend: fast_http_pool
+Meteorite mode: release-hybrid
+Hybrid profile: optimized
+Lua state strategy: per_thread_cached_refs
+```
+
+### Correctness smoke
+
+The optimized hybrid runtime passed the Lua correctness smoke test.
+
+```text
+lua_states_created = 2
+threads_spawned = 2
+lua_errors = 0
+```
+
+Validated behavior:
+
+```text
+- Lua state reuse works.
+- Worker-local counters remain monotonic per Lua state.
+- require() cache persists per Lua state.
+- shared native store increments globally.
+- request-local state does not leak between requests.
+```
+
+### 60s normal hybrid ladder
+
+| Target | Peak route | Peak req/s | p50 | p95 | p99 |
+|---|---|---:|---:|---:|---:|
+| Meteorite release-static | `plain-static` | 198,443 | 0.050 ms | 0.095 ms | 0.117 ms |
+| Meteorite release-hybrid | `hybrid-zig` | 189,087 | 0.053 ms | 0.096 ms | 0.121 ms |
+| Meteorite release-hybrid | `hybrid-inline` | 184,355 | 0.054 ms | 0.101 ms | 0.126 ms |
+| Hono Bun | inline equivalent | 160,205 | 0.759 ms | 1.023 ms | 1.588 ms |
+| Hono Bun | echo equivalent | 124,765 | 0.983 ms | 1.278 ms | 2.010 ms |
+
+Latency values are from the same `oha` run that produced the peak req/s for each row.
+
+Key observations:
+
+```text
+- Optimized hybrid inline Lua routes were within roughly 93–98% of the release-static baseline on the tested routes.
+- Hono Bun trailed the Meteorite optimized hybrid run on the measured body, param, and echo workloads by roughly 13–30% in req/s and showed 10–15× higher p99 tail latency at the concurrency where its peak throughput occurred.
+- No queue drops were observed.
+- No Lua errors were observed.
+- RSS remained stable, around 29 MB idle to 31 MB max.
+```
+
+### 120s high-concurrency pressure run
+
+The high-concurrency run used concurrency levels 512 and 1024.
+
+```text
+lua_states_created = 11
+lua_errors = 0
+dropped_connections = 0
+max_queue_depth = 1,013
+```
+
+The queue drained cleanly and the worker pool did not show unbounded thread growth.
+
+| Route | Concurrency | Req/s | p99 |
+|---|---|---:|---:|
+| `plain-static` | 1024 | 214,095 | ~0.122 ms |
+| `hybrid-zig` | 1024 | 205,963 | ~0.121 ms |
+| `raw-native` | 1024 | 203,732 | ~0.127 ms |
+| `hybrid-inline` | 512 | 182,616 | ~0.124 ms |
+| `hybrid-inline` | 1024 | 180,201 | ~0.131 ms |
+| `hybrid-inline-params` | 1024 | 183,796 | ~0.123 ms |
+
+p99 latency stayed around 0.12–0.15 ms in the pressure run.
+
+### Interpretation
+
+The previous optimized hybrid bottleneck was the single Lua lock. Replacing the single locked cached Lua state with per-thread cached Lua states and handler references removed that bottleneck.
+
+The benchmark ladder now shows:
+
+```text
+- Static native routes remain near the fast_http_pool backend ceiling.
+- Hybrid Zig routes remain close to release-static routes.
+- Inline Lua routes are close to the native baseline for trivial, param, and echo workloads.
+- Request-local state isolation, per-state require caching, and shared native store behavior are validated.
+```
+
+The remaining caveat is high max-latency outliers where max latency exceeds 10× p99. On local macOS loopback this is likely scheduler noise, but the report keeps the warning visible and does not use max latency as the main performance claim.
+
+### Current claim
+
+In these local benchmark scenarios, Meteorite's optimized hybrid Lua mode with `fast_http_pool` and per-thread Lua states matched the native baseline closely and exceeded the same-machine Hono Bun baseline on the tested inline, param, and echo routes.
+
+The claim is limited to:
+
+```text
+- this machine
+- this benchmark harness
+- local loopback
+- ReleaseFast builds
+- fast_http_pool backend
+- tested route shapes
+```
+
+## Historical results
+
+> Results below this heading are from earlier 15-second runs and are kept for reference only. They do not reflect the current optimized hybrid profile or the `fast_http_pool` backend.
 ## What was measured
 
 | Run | Target | Mode / Runtime | Duration | Concurrency |
