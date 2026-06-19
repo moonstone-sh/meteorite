@@ -102,8 +102,8 @@ fn globalVtable(comptime Ctx: type) *const VTable {
     return &static;
 }
 
-var current_ctx: ?*anyopaque = null;
-var current_vtable: ?*const VTable = null;
+threadlocal var current_ctx: ?*anyopaque = null;
+threadlocal var current_vtable: ?*const VTable = null;
 
 fn upvalueIndex(i: c_int) c_int {
     return c.LUA_REGISTRYINDEX - i;
@@ -263,7 +263,6 @@ fn extractStatus(raw: []const u8) u16 {
 pub const HybridLuaRuntime = struct {
     pub fn call(comptime handler: anytype, ctx: anytype) !void {
         const vtable = globalVtable(@TypeOf(ctx.*));
-
         const L = c.luaL_newstate() orelse {
             std.log.err("failed to create Lua state", .{});
             return error.LuaOutOfMemory;
@@ -382,12 +381,12 @@ pub const HybridLuaRuntime = struct {
             c.lua_pop(L, 1);
         }
     }
-
-    fn pushMethod(L: ?*c.lua_State, name: [*c]const u8, func: c.lua_CFunction) void {
-        c.lua_pushcfunction(L, func);
-        c.lua_setfield(L, -2, name);
-    }
 };
+
+pub fn pushMethod(L: ?*c.lua_State, name: [*c]const u8, func: c.lua_CFunction) void {
+    c.lua_pushcfunction(L, func);
+    c.lua_setfield(L, -2, name);
+}
 
 fn l_text(L: ?*c.lua_State) callconv(.c) c_int {
     const nargs = c.lua_gettop(L);
@@ -722,7 +721,7 @@ fn pushResponse(L: ?*c.lua_State, status: u16, content_type: []const u8, body: [
     return 1;
 }
 
-fn getCapabilityString(kind: []const u8, name: []const u8, field: []const u8) ?[]const u8 {
+fn getCapabilityString(kind: []const u8, name: []const u8, comptime field: []const u8) ?[]const u8 {
     if (std.mem.eql(u8, kind, "http")) return lookupString(graph.capabilities.http, name, field);
     if (std.mem.eql(u8, kind, "auth")) return lookupString(graph.capabilities.auth, name, field);
     if (std.mem.eql(u8, kind, "zig")) {
@@ -732,13 +731,13 @@ fn getCapabilityString(kind: []const u8, name: []const u8, field: []const u8) ?[
     return null;
 }
 
-fn getCapabilityInt(kind: []const u8, name: []const u8, field: []const u8) ?i64 {
+fn getCapabilityInt(kind: []const u8, name: []const u8, comptime field: []const u8) ?i64 {
     if (std.mem.eql(u8, kind, "http")) return lookupInt(graph.capabilities.http, name, field);
     if (std.mem.eql(u8, kind, "auth")) return lookupInt(graph.capabilities.auth, name, field);
     return null;
 }
 
-fn lookupString(comptime T: type, name: []const u8, field: []const u8) ?[]const u8 {
+fn lookupString(comptime T: type, name: []const u8, comptime field: []const u8) ?[]const u8 {
     const decls = comptime std.meta.declarations(T);
     inline for (decls) |decl| {
         if (std.mem.eql(u8, decl.name, name)) {
@@ -748,18 +747,25 @@ fn lookupString(comptime T: type, name: []const u8, field: []const u8) ?[]const 
             if (info == .pointer or info == .array) {
                 return cap;
             }
-            return @field(cap, field);
+            if (@hasField(CapType, field)) {
+                return @field(cap, field);
+            }
+            return null;
         }
     }
     return null;
 }
 
-fn lookupInt(comptime T: type, name: []const u8, field: []const u8) ?i64 {
+fn lookupInt(comptime T: type, name: []const u8, comptime field: []const u8) ?i64 {
     const decls = comptime std.meta.declarations(T);
     inline for (decls) |decl| {
         if (std.mem.eql(u8, decl.name, name)) {
             const cap = @field(T, decl.name);
-            return @intCast(@field(cap, field));
+            const CapType = @TypeOf(cap);
+            if (@hasField(CapType, field)) {
+                return @intCast(@field(cap, field));
+            }
+            return null;
         }
     }
     return null;
@@ -845,3 +851,170 @@ fn encodeJsonString(s: []const u8, list: *std.ArrayListUnmanaged(u8), allocator:
         }
     }
 }
+
+
+// ============================================================
+// CachedHybridRuntime: single Lua state, preloaded inline handlers.
+// ============================================================
+const graph_cached = @import("meteorite_graph");
+
+fn inlineLuaRouteCount() usize {
+    comptime var count: usize = 0;
+    inline for (graph_cached.routes) |route| {
+        if (route.handler == .inline_lua) count += 1;
+    }
+    return count;
+}
+
+fn routeIndexCached(comptime route_id: []const u8) usize {
+    comptime var count: usize = 0;
+    inline for (graph_cached.routes) |route| {
+        if (route.handler == .inline_lua) {
+            if (std.mem.eql(u8, route.id, route_id)) {
+                return count;
+            }
+            count += 1;
+        }
+    }
+    @compileError("unknown inline Lua route: " ++ route_id);
+}
+
+pub const CachedHybridRuntime = struct {
+    threadlocal var L: ?*c.lua_State = null;
+    threadlocal var refs: [inlineLuaRouteCount()]c_int = undefined;
+    threadlocal var initialized: bool = false;
+
+    fn init() !void {
+        if (initialized) return;
+        L = c.luaL_newstate() orelse {
+            std.log.err("failed to create cached Lua state", .{});
+            return error.LuaOutOfMemory;
+        };
+        c.luaL_openlibs(L.?);
+
+        const setup = "package.path = '.moonstone/env/share/lua/5.4/?.lua;.moonstone/env/share/lua/5.4/?/init.lua;' .. package.path";
+        if (c.luaL_loadstring(L.?, setup.ptr) != c.LUA_OK) {
+            std.log.err("cached lua setup load failed: {s}", .{c.lua_tolstring(L.?, -1, null)});
+            return error.LuaLoadFailed;
+        }
+        if (c.lua_pcallk(L.?, 0, 0, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
+            std.log.err("cached lua setup failed: {s}", .{c.lua_tolstring(L.?, -1, null)});
+            return error.LuaRuntimeError;
+        }
+
+        comptime var idx: usize = 0;
+        inline for (graph_cached.routes) |route| {
+            if (route.handler == .inline_lua) {
+                const handler = route.handler.inline_lua;
+                if (c.luaL_loadfilex(L.?, @ptrCast(handler.chunk_path.ptr), @as([*c]const u8, null)) != c.LUA_OK) {
+                    std.log.err("cached load handler {s}: {s}", .{ handler.chunk_path, c.lua_tolstring(L.?, -1, null) });
+                    return error.LuaLoadFailed;
+                }
+                if (c.lua_pcallk(L.?, 0, 1, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
+                    std.log.err("cached init handler {s}: {s}", .{ handler.chunk_path, c.lua_tolstring(L.?, -1, null) });
+                    return error.LuaRuntimeError;
+                }
+                if (!c.lua_isfunction(L.?, -1)) {
+                    std.log.err("cached handler {s} did not return a function", .{handler.chunk_path});
+                    return error.LuaHandlerInvalid;
+                }
+                refs[idx] = c.luaL_ref(L.?, c.LUA_REGISTRYINDEX);
+                idx += 1;
+            }
+        }
+        initialized = true;
+    }
+
+    pub fn call(comptime handler: anytype, ctx: anytype) !void {
+        const vtable = globalVtable(@TypeOf(ctx.*));
+        try init();
+        const L2 = L.?;
+
+        const idx = comptime routeIndexCached(handler.id);
+        _ = c.lua_rawgeti(L2, c.LUA_REGISTRYINDEX, refs[idx]);
+
+        c.lua_newtable(L2);
+        pushMethod(L2, "text", l_text);
+        pushMethod(L2, "json", l_json);
+        pushMethod(L2, "bytes", l_bytes);
+        pushMethod(L2, "body", l_body);
+        pushMethod(L2, "param", l_param);
+        pushMethod(L2, "query", l_query);
+        pushMethod(L2, "header", l_header);
+        pushMethod(L2, "http", l_http);
+        pushMethod(L2, "auth", l_auth);
+        pushMethod(L2, "zig", l_zig);
+        pushMethod(L2, "get", l_get);
+        pushMethod(L2, "set", l_set);
+
+        if (@hasField(@TypeOf(ctx.*), "captures")) {
+            c.lua_newtable(L2);
+            const captures = ctx.captures;
+            for (captures.items[0..captures.len]) |item| {
+                _ = c.lua_pushlstring(L2, @ptrCast(item.value.ptr), item.value.len);
+                c.lua_setfield(L2, -2, @ptrCast(item.name.ptr));
+            }
+            c.lua_setfield(L2, -2, "params");
+        }
+
+        if (@hasField(@TypeOf(ctx.*), "route") and @hasField(@TypeOf(ctx.route), "query")) {
+            c.lua_newtable(L2);
+            const query_specs = ctx.route.query;
+            for (query_specs) |spec| {
+                if (vtable.query(ctx, spec.name)) |value| {
+                    _ = c.lua_pushlstring(L2, @ptrCast(value.ptr), value.len);
+                    c.lua_setfield(L2, -2, @ptrCast(spec.name.ptr));
+                }
+            }
+            c.lua_setfield(L2, -2, "query");
+        }
+
+        c.lua_newtable(L2);
+        c.lua_setfield(L2, -2, "state");
+
+        current_ctx = ctx;
+        current_vtable = vtable;
+        defer {
+            current_ctx = null;
+            current_vtable = null;
+        }
+
+        if (c.lua_pcallk(L2, 1, 1, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
+            const err = c.lua_tolstring(L2, -1, null);
+            std.log.err("cached handler {s}: {s}", .{ handler.id, err });
+            return error.LuaRuntimeError;
+        }
+
+        if (c.lua_istable(L2, -1)) {
+            _ = c.lua_getfield(L2, -1, "status");
+            const status: u16 = if (c.lua_isinteger(L2, -1) != 0) @intCast(c.lua_tointegerx(L2, -1, @as([*c]c_int, null))) else 200;
+            c.lua_pop(L2, 1);
+
+            _ = c.lua_getfield(L2, -1, "content_type");
+            var content_type_len: usize = 0;
+            const content_type_ptr = c.lua_tolstring(L2, -1, &content_type_len);
+            const is_json = content_type_ptr != null and std.mem.eql(u8, content_type_ptr[0..content_type_len], "application/json");
+            c.lua_pop(L2, 1);
+
+            _ = c.lua_getfield(L2, -1, "body");
+            var body_len: usize = 0;
+            const body_ptr = c.lua_tolstring(L2, -1, &body_len);
+            const body = body_ptr[0..body_len];
+
+            if (is_json) {
+                try current_vtable.?.json(current_ctx.?, status, body);
+            } else {
+                try current_vtable.?.text(current_ctx.?, status, body);
+            }
+            c.lua_pop(L2, 2);
+        } else if (c.lua_isstring(L2, -1) != 0) {
+            var len: usize = 0;
+            const ptr = c.lua_tolstring(L2, -1, &len);
+            try current_vtable.?.text(current_ctx.?, 200, ptr[0..len]);
+            c.lua_pop(L2, 1);
+        } else {
+            try current_vtable.?.text(current_ctx.?, 204, "");
+            c.lua_pop(L2, 1);
+        }
+    }
+};

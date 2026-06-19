@@ -22,6 +22,19 @@ grep -q 'data_cruncher = "native/src/helpers/data_cruncher.zig"' fixtures/basic-
 grep -q '"strategy": "class_dfa"' fixtures/basic-service/.meteorite/graph/current/patterns.graph.json
 grep -q '"alphabet_classes": 5' fixtures/basic-service/.meteorite/graph/current/patterns.graph.json
 grep -q '"backtracking": false' fixtures/basic-service/.meteorite/graph/current/patterns.graph.json
+grep -q 'PUT' fixtures/basic-service/.meteorite/graph/current/capabilities.zon
+grep -q 'PATCH' fixtures/basic-service/.meteorite/graph/current/capabilities.zon
+grep -q 'DELETE' fixtures/basic-service/.meteorite/graph/current/capabilities.zon
+grep -q 'field put fun(self: MeteoriteApp' fixtures/basic-service/.meteorite/aids/lua/meteorite.meta.lua
+grep -q 'field patch fun(self: MeteoriteApp' fixtures/basic-service/.meteorite/aids/lua/meteorite.meta.lua
+grep -q 'field delete fun(self: MeteoriteApp' fixtures/basic-service/.meteorite/aids/lua/meteorite.meta.lua
+grep -q 'memory profile: default' fixtures/basic-service/.meteorite/graph/current/build-report.txt
+grep -q 'peak route memory:' fixtures/basic-service/.meteorite/graph/current/build-report.txt
+grep -q 'max URI: 8kb' fixtures/basic-service/.meteorite/graph/current/build-report.txt
+grep -q 'DFA tables:' fixtures/basic-service/.meteorite/graph/current/build-report.txt
+grep -q 'max_uri_bytes = 8192' fixtures/basic-service/.meteorite/graph/current/graph.zig
+grep -q 'RouteMemory' fixtures/basic-service/.meteorite/graph/current/graph.zig
+grep -q 'memory = .{' fixtures/basic-service/.meteorite/graph/current/runtime.zon
 
 fixtures/basic-service/dist/server >/tmp/meteorite-basic-service.log 2>&1 &
 server_pid=$!
@@ -53,6 +66,9 @@ expect_status() {
 
 expect_body ok http://127.0.0.1:8080/health
 expect_body 123 http://127.0.0.1:8080/users/123
+[[ "$(curl -sS -X PUT --data 'replace user' http://127.0.0.1:8080/users/123)" == "123" ]]
+[[ "$(curl -sS -X PATCH --data 'patch user' http://127.0.0.1:8080/users/123)" == "123" ]]
+[[ "$(curl -sS -X DELETE http://127.0.0.1:8080/users/123)" == "123" ]]
 expect_body router_01 http://127.0.0.1:8080/devices/router_01
 expect_body report-01.txt http://127.0.0.1:8080/files/report-01.txt
 expect_body release_64 http://127.0.0.1:8080/slugs/release_64
@@ -62,6 +78,7 @@ expect_body lua 'http://127.0.0.1:8080/search?q=lua&page=2&exact=true'
 [[ "$(curl -sS -X POST --data 'hello body' http://127.0.0.1:8080/echo)" == "hello body" ]]
 expect_status 404 http://127.0.0.1:8080/missing
 expect_status 405 -X POST http://127.0.0.1:8080/health
+expect_status 405 -X PUT http://127.0.0.1:8080/health
 expect_status 404 http://127.0.0.1:8080/users/not-a-number
 expect_status 404 http://127.0.0.1:8080/devices/INVALID
 expect_status 404 http://127.0.0.1:8080/files/../../secret
@@ -70,10 +87,16 @@ expect_status 404 http://127.0.0.1:8080/uuids/not-a-uuid
 expect_status 404 http://127.0.0.1:8080/hex/abc
 expect_status 404 http://127.0.0.1:8080/search
 expect_status 404 'http://127.0.0.1:8080/search?q=lua&page=abc'
+too_many_pairs="$(python3 - <<'PY'
+print('&'.join('q%d=x' % i for i in range(70)), end='')
+PY
+)"
+expect_status 414 "http://127.0.0.1:8080/health?${too_many_pairs}"
 python3 - <<'PY' >/tmp/meteorite-big-body.txt
 print('x' * 9000, end='')
 PY
 expect_status 413 -X POST --data-binary @/tmp/meteorite-big-body.txt http://127.0.0.1:8080/echo
+expect_status 413 -X DELETE --data 'unexpected' http://127.0.0.1:8080/users/123
 
 tmp_missing="$(mktemp -d /tmp/meteorite-missing-handler.XXXXXX)"
 cp -R fixtures/basic-service/. "$tmp_missing/"
@@ -111,6 +134,36 @@ PY
 grep -q 'pattern exceeded DFA budget' /tmp/meteorite-budget.log
 grep -q 'generated_states' /tmp/meteorite-budget.log
 grep -q 'estimated_size' /tmp/meteorite-budget.log
+
+tmp_profile="$(mktemp -d /tmp/meteorite-profile.XXXXXX)"
+mkdir -p "$tmp_profile/src"
+cat > "$tmp_profile/src/main.lua" <<'LUA'
+local m = require("meteorite")
+local app = m.app({
+  name = "profile-demo",
+  profile = m.profile({
+    name = "tiny",
+    request = {
+      max_uri_bytes = "512b",
+      max_path_bytes = "256b",
+      max_query_bytes = "128b",
+      max_query_pairs = 4,
+      max_response_bytes = "4kb",
+      request_arena = "16kb",
+    },
+    static = {
+      max_dfa_bytes_total = "8kb",
+      max_graph_bytes = "32kb",
+    },
+  }),
+})
+app:get("/health", "handlers.health")
+return app
+LUA
+luajit src/meteorite/cli.lua graph "$tmp_profile/src/main.lua" "$tmp_profile/.meteorite/graph/current" release-static >/tmp/meteorite-profile.log
+grep -q 'memory profile: tiny' /tmp/meteorite-profile.log
+grep -q 'uri limit: 512 bytes' /tmp/meteorite-profile.log
+grep -q 'max URI: 512b' "$tmp_profile/.meteorite/graph/current/build-report.txt"
 
 demo_root="fixtures/demo"
 luajit src/meteorite/cli.lua graph "$demo_root/src/main.lua" "$demo_root/.meteorite/graph/current" dev >/tmp/meteorite-demo-graph.log
@@ -202,6 +255,28 @@ pub fn get_user(c: mt.ctx.get_user) !void {
     const id: u64 = c.params.id;
     _ = id;
     try c.bytes(200, "application/json", c.param("id") orelse "missing");
+}
+
+pub fn put_user(c: mt.ctx.put_user) !void {
+    const id: u64 = c.params.id;
+    const body = try c.body();
+    _ = body;
+    try c.text(200, c.param("id") orelse "missing");
+    _ = id;
+}
+
+pub fn patch_user(c: mt.ctx.patch_user) !void {
+    const id: u64 = c.params.id;
+    const body = try c.body();
+    _ = body;
+    try c.text(200, c.param("id") orelse "missing");
+    _ = id;
+}
+
+pub fn delete_user(c: mt.ctx.delete_user) !void {
+    const id: u64 = c.params.id;
+    _ = id;
+    try c.text(200, c.param("id") orelse "missing");
 }
 
 pub fn echo(c: mt.ctx.echo) !void {

@@ -14,6 +14,14 @@ app:capability("zig", {
   data_cruncher = "native/src/helpers/data_cruncher.zig",
 })
 
+-- Benchmark routes (always static Zig handlers)
+app:get("/__bench/plain", "handlers.plain")
+app:get("/__bench/plain-static", "handlers.plain_static")
+app:get("/__bench/hybrid-zig", "handlers.hybrid_zig")
+app:get("/__bench/meta", "handlers.bench_meta")
+app:get("/__bench/raw", "handlers.bench_raw")
+app:get("/__bench/counters", "handlers.bench_counters")
+
 app:get("/health", "handlers.health")
 app:get("/users/:id", {
   params = { id = m.u64() },
@@ -74,5 +82,32 @@ app:get("/search", {
     exact = m.bool({ optional = true }),
   },
 }, "handlers.search")
+
+-- Hybrid-inline benchmark route: inline Lua in hybrid mode, Zig in static mode.
+local mode = _G.METEORITE_BUILD_MODE or "release-static"
+local is_hybrid = mode == "release-hybrid" or mode == "hybrid" or mode == "hybrid_dev"
+if is_hybrid then
+  app:get("/hybrid-inline", function(ctx) return "ok" end)
+  app:get("/__bench/hybrid-inline", function(ctx) return "ok" end)
+  app:get("/__bench/hybrid-inline-text-literal", function(ctx) return ctx:text("ok") end)
+  app:get("/__bench/hybrid-inline-params/:id", {
+    params = { id = m.u64() },
+  }, function(ctx) return tostring(ctx.params.id) end)
+  app:post("/__bench/hybrid-inline-echo", {
+    body = { max = "8kb" },
+    memory = { request_arena = "16kb" },
+  }, function(ctx) return ctx:body() end)
+else
+  app:get("/hybrid-inline", "handlers.hybrid_inline")
+  app:get("/__bench/hybrid-inline", "handlers.bench_hybrid_inline")
+  app:get("/__bench/hybrid-inline-text-literal", "handlers.bench_hybrid_inline_text_literal")
+  app:get("/__bench/hybrid-inline-params/:id", {
+    params = { id = m.u64() },
+  }, "handlers.hybrid_inline_params")
+  app:post("/__bench/hybrid-inline-echo", {
+    body = { max = "8kb" },
+    memory = { request_arena = "16kb" },
+  }, "handlers.hybrid_inline_echo")
+end
 
 return app

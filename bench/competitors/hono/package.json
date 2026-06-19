@@ -1,0 +1,14 @@
+{
+  "name": "meteorite-bench-hono",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bun": "bun run server.ts",
+    "node": "node --enable-source-maps server-node.mjs"
+  },
+  "dependencies": {
+    "hono": "latest",
+    "@hono/node-server": "latest"
+  },
+  "devDependencies": {}
+}

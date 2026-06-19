@@ -26,6 +26,8 @@ PY
       threads="$(awk '/Threads:/ {print $2}' "/proc/$PID/status" 2>/dev/null || echo "n/a")"
     fi
   elif [[ "$OS" == "Darwin" ]]; then
+    # Darwin ps supports different field sets. Try to get threads, but do not
+    # fall back to a bogus zero if unavailable.
     if out="$(ps -o rss=,vsz=,nlwp= -p "$PID" 2>/dev/null)"; then
       read -r rss vsz threads <<< "$out"
     elif out="$(ps -o rss=,vsz= -p "$PID" 2>/dev/null)"; then

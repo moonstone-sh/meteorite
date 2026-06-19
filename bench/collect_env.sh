@@ -28,7 +28,10 @@ json_tool() {
   local tool="$1"
   shift
   if command -v "$tool" >/dev/null 2>&1; then
-    json_run_stderr "$tool" "$@"
+    local output
+    output="$("$tool" "$@" 2>&1 || true)"
+    output="${output%%$'\n'*}"
+    json_value "$output"
   else
     printf '""'
   fi

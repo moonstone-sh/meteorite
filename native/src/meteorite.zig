@@ -4,6 +4,7 @@ const process = std.process;
 
 pub const backends = struct {
     pub const std_http = @import("backends/std_http.zig");
+    pub const fast_http = @import("backends/fast_http.zig");
 };
 
 pub const ListenConfig = struct {
@@ -15,35 +16,20 @@ pub const BackendContract = struct {
     pub const Method = enum { GET, POST, PUT, PATCH, DELETE, OTHER };
 };
 
-pub fn DfaMatcher(comptime spec: anytype) type {
-    return struct {
-        pub fn match(input: []const u8) bool {
-            if (@hasField(@TypeOf(spec), "max_input_bytes") and input.len > spec.max_input_bytes) return false;
-            var state: u16 = spec.start_state;
-            for (input) |byte| {
-                const class = spec.class_map[byte];
-                const idx: usize = @as(usize, state) * spec.class_count + class;
-                state = spec.transition_table[idx];
-                if (state == spec.dead_state) return false;
-            }
-            return spec.accept_table[state];
-        }
-    };
-}
+pub const meteorite_pattern_module = @import("meteorite_pattern");
+pub const DfaMatcher = meteorite_pattern_module.DfaMatcher;
+pub const patterns = meteorite_pattern_module.patterns;
 
-pub const patterns = struct {
-    pub fn Dfa(comptime spec: anytype) type {
-        return DfaMatcher(spec);
-    }
-};
 
 pub fn compile(comptime spec: anytype) type {
     return struct {
+        const Self = @This();
         const graph = spec.graph;
         const backend = spec.backend;
         const graph_requires_lua = graphRequiresLua();
         const inline_lua_handlers = countHandlers(.inline_lua);
         const zig_handlers = countZigHandlers();
+        const hybrid_profile = if (@hasField(@TypeOf(spec), "hybrid_profile")) spec.hybrid_profile else "default";
 
         pub fn run(io: Io) !void {
             try serve(io, .{});
@@ -53,8 +39,9 @@ pub fn compile(comptime spec: anytype) type {
             var server = try backend.listen(.{ .host = config.host, .port = config.port, .io = io });
             defer server.deinit();
 
-            std.debug.print("Meteorite build\n  mode: {s}\n  backend: std.http\n  Lua runtime: {s}\n  Lua state: single_locked\n  workers: auto\n  inline Lua handlers: {d}\n  Zig handlers: {d}\n  routes: {d}\n  artifact: dist/server\nListening: http://{s}:{d}\n", .{
+            std.debug.print("Meteorite build\n  mode: {s}\n  backend: {s}\n  Lua runtime: {s}\n  Lua state: single_locked\n  workers: auto\n  inline Lua handlers: {d}\n  Zig handlers: {d}\n  routes: {d}\n  artifact: dist/server\nListening: http://{s}:{d}\n", .{
                 if (graph_requires_lua) "hybrid" else "static",
+                backend.name,
                 if (graph_requires_lua) "included" else "removed",
                 inline_lua_handlers,
                 zig_handlers,
@@ -65,26 +52,156 @@ pub fn compile(comptime spec: anytype) type {
 
             while (true) {
                 var request: backend.Request = undefined;
-                backend.accept(&server, &request) catch |err| switch (err) {
-                    error.HttpConnectionClosing => continue,
-                    else => {
-                        std.debug.print("accept failed: {s}\n", .{@errorName(err)});
-                        continue;
-                    },
+                backend.accept(&server, &request) catch |err| {
+                    std.debug.print("accept failed: {s}\n", .{@errorName(err)});
+                    continue;
                 };
-                defer request.close(io);
+                if (comptime backend.pooled_connections) {
+                    try Pool.start(io);
+                    if (!Pool.enqueue(io, request)) {
+                        backend.droppedConnection();
+                        request.close(io);
+                    }
+                    continue;
+                }
+                if (comptime backend.threaded_connections) {
+                    const boxed_request = try std.heap.smp_allocator.create(backend.Request);
+                    boxed_request.* = request;
+                    backend.rebind(boxed_request, io);
+                    const thread = std.Thread.spawn(.{}, connectionThread, .{ io, boxed_request }) catch |err| {
+                        std.debug.print("thread spawn failed: {s}\n", .{@errorName(err)});
+                        boxed_request.close(io);
+                        std.heap.smp_allocator.destroy(boxed_request);
+                        continue;
+                    };
+                    backend.threadSpawned();
+                    thread.detach();
+                    continue;
+                }
+                try serveConnection(io, &request);
+            }
+        }
+
+        fn connectionThread(io: Io, request: *backend.Request) void {
+            serveConnection(io, request) catch |err| {
+                std.debug.print("connection failed: {s}\n", .{@errorName(err)});
+                backend.connectionError();
+                request.close(io);
+            };
+            std.heap.smp_allocator.destroy(request);
+        }
+
+        const Pool = struct {
+            const queue_limit = backend.queue_limit;
+            var mutex: Io.Mutex = .init;
+            var available: Io.Condition = .init;
+            var queue: [queue_limit]backend.Request = undefined;
+            var head: usize = 0;
+            var tail: usize = 0;
+            var depth: usize = 0;
+            var started = std.atomic.Value(bool).init(false);
+
+            fn workerCount() usize {
+                if (backend.configured_workers > 0) return @intCast(backend.configured_workers);
+                return std.Thread.getCpuCount() catch 1;
+            }
+
+            fn start(io: Io) !void {
+                if (comptime !backend.pooled_connections) return;
+                if (started.swap(true, .acquire)) return;
+                const count = workerCount();
+                var i: usize = 0;
+                while (i < count) : (i += 1) {
+                    const thread = try std.Thread.spawn(.{}, poolWorker, .{io});
+                    backend.threadSpawned();
+                    thread.detach();
+                }
+            }
+
+            fn enqueue(io: Io, request: backend.Request) bool {
+                if (queue_limit == 0) return false;
+                mutex.lockUncancelable(io);
+                defer mutex.unlock(io);
+                if (depth == queue_limit) return false;
+                queue[tail] = request;
+                tail = (tail + 1) % queue_limit;
+                depth += 1;
+                backend.setQueueDepth(@intCast(depth));
+                available.signal(io);
+                return true;
+            }
+
+            fn dequeue(io: Io) backend.Request {
+                mutex.lockUncancelable(io);
+                defer mutex.unlock(io);
+                while (depth == 0) available.waitUncancelable(io, &mutex);
+                const request = queue[head];
+                head = (head + 1) % queue_limit;
+                depth -= 1;
+                backend.setQueueDepth(@intCast(depth));
+                return request;
+            }
+
+            fn poolWorker(io: Io) void {
+                while (true) {
+                    var request = dequeue(io);
+                    backend.rebind(&request, io);
+                    serveConnection(io, &request) catch |err| {
+                        std.debug.print("pooled connection failed: {s}\n", .{@errorName(err)});
+                        backend.connectionError();
+                        request.close(io);
+                    };
+                }
+            }
+        };
+
+        fn serveConnection(io: Io, request: *backend.Request) !void {
+            backend.connectionStarted();
+            defer backend.connectionEnded();
+            while (true) {
+                backend.receiveHead(request) catch |err| {
+                    if (err != error.HttpConnectionClosing and err != error.ReadFailed and err != error.EndOfStream) {
+                        std.debug.print("receive head failed: {s}\n", .{@errorName(err)});
+                    }
+                    break;
+                };
                 var arena_buffer: [graph.max_request_arena_bytes]u8 = undefined;
                 var arena_state = std.heap.FixedBufferAllocator.init(&arena_buffer);
                 const arena = arena_state.allocator();
-                serveRequest(arena, io, &request) catch |err| {
-                    std.debug.print("request failed for {s}: {s}\n", .{ backend.path(&request), @errorName(err) });
+                request.body_cache = null;
+                request.close_after_response = true;
+                serveRequest(arena, io, request) catch |err| {
+                    std.debug.print("request failed for {s}: {s}\n", .{ backend.path(request), @errorName(err) });
+                    request.close_after_response = true;
                 };
+                if (request.close_after_response) break;
             }
+            request.close(io);
+        }
+
+        pub fn countersJson(allocator: std.mem.Allocator) ![]const u8 {
+            const c = backend.snapshotCounters();
+            return std.fmt.allocPrint(allocator, "{{\"backend\":\"{s}\",\"connection_strategy\":\"{s}\",\"bounded\":{},\"active_connections\":{d},\"total_connections\":{d},\"accepted_connections\":{d},\"threads_spawned\":{d},\"requests_served\":{d},\"requests_per_connection\":{d},\"keepalive_reuse_count\":{d},\"connection_close_count\":{d},\"bytes_read\":{d},\"bytes_written\":{d},\"connection_errors\":{d},\"max_active_connections\":{d},\"queue_depth\":{d},\"max_queue_depth\":{d},\"dropped_connections\":{d}}}", .{ backend.name, backend.connection_strategy, backend.bounded, c.active_connections, c.total_connections, c.accepted_connections, c.threads_spawned, c.requests_served, c.requests_per_connection, c.keepalive_reuse_count, c.connection_close_count, c.bytes_read, c.bytes_written, c.connection_errors, c.max_active_connections, c.queue_depth, c.max_queue_depth, c.dropped_connections });
+        }
+
+        pub fn metaJson(allocator: std.mem.Allocator) ![]const u8 {
+            const build_info = @import("build_options");
+            const c = backend.snapshotCounters();
+            return std.fmt.allocPrint(allocator, "{{\"meteorite_mode\":\"{s}\",\"zig_optimize\":\"{s}\",\"target\":\"{s}\",\"backend\":\"{s}\",\"connection_strategy\":\"{s}\",\"bounded\":{},\"fast_http_workers\":{d},\"fast_http_queue\":{d},\"lua_runtime\":{},\"hybrid_profile\":\"{s}\",\"lua_state_strategy\":\"{s}\",\"active_connections\":{d},\"total_connections\":{d},\"accepted_connections\":{d},\"threads_spawned\":{d},\"requests_served\":{d},\"requests_per_connection\":{d},\"bytes_read\":{d},\"bytes_written\":{d},\"connection_errors\":{d},\"max_active_connections\":{d},\"queue_depth\":{d},\"max_queue_depth\":{d},\"dropped_connections\":{d}}}", .{ build_info.meteorite_mode, build_info.zig_optimize, build_info.target, backend.name, backend.connection_strategy, backend.bounded, build_info.fast_http_workers, build_info.fast_http_queue, build_info.lua_runtime, build_info.hybrid_profile, build_info.lua_state_strategy, c.active_connections, c.total_connections, c.accepted_connections, c.threads_spawned, c.requests_served, c.requests_per_connection, c.bytes_read, c.bytes_written, c.connection_errors, c.max_active_connections, c.queue_depth, c.max_queue_depth, c.dropped_connections });
         }
 
         fn serveRequest(allocator: std.mem.Allocator, io: Io, request: *backend.Request) !void {
             const req_method = backendMethod(backend.method(request));
             const req_path = backend.path(request);
+            if (req_method == .GET and std.mem.eql(u8, req_path, "/__bench/raw")) return backend.respondRawOk(request);
+            if (req_method == .GET and std.mem.eql(u8, req_path, "/__bench/meta")) {
+                const json = try metaJson(allocator);
+                return backend.respondBytes(request, 200, "application/json", json);
+            }
+            if (req_method == .GET and std.mem.eql(u8, req_path, "/__bench/counters")) {
+                const json = try countersJson(allocator);
+                return backend.respondBytes(request, 200, "application/json", json);
+            }
             if (!try enforceGlobalTargetLimits(request, req_path)) return;
             var path_matched = false;
 
@@ -421,6 +538,7 @@ pub fn compile(comptime spec: anytype) type {
             pub fn json(self: *Context, status: u16, response_body: []const u8) !void {
                 try self.bytes(status, "application/json", response_body);
             }
+
         };
     };
 }

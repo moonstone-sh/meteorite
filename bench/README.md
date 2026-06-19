@@ -11,7 +11,10 @@ These benchmarks measure local framework/runtime overhead on a single machine. T
 - Success/error counts
 - Memory usage over time via `bench/collect_memory.sh`
 - Idle RSS, max RSS under load, and max thread count
-- Binary size and optional section output from `size`
+- Binary file size and optional section output from `size`
+- Build metadata (`zig_optimize`, target, backend, Meteorite mode, Lua runtime) from `GET /__bench/meta`
+- Keep-alive behavior sanity check (`oha` with keep-alive on vs. off)
+- Independent load-generator cross-check with `wrk` when installed
 - Optional CPU counters from `perf stat`
 - Benchmark environment metadata in `env.json`
 
@@ -32,7 +35,7 @@ cargo install oha
 ## Optional Tools
 
 - `wrk`: secondary sanity checks, skipped if unavailable
-- `perf`: CPU counters on Linux, skipped if unavailable or permission denied
+- `perf`: CPU counters on Linux, skipped if unavailable
 - `size`: binary section output, skipped if unavailable
 - `file`, `stat`, `curl`, `python3`: used for metadata, readiness, and summary generation
 
@@ -41,20 +44,23 @@ cargo install oha
 From the Meteorite project root:
 
 ```bash
-bench/run.sh --mode release-static
+# Trustworthy, publishable run (fails on Debug build or keepalive mismatch)
+bench/run.sh --mode release-static --strict-bench
+
 bench/run.sh --mode release-hybrid
-bench/run.sh --duration 60s --concurrency "1,8,32,128,256,512,1024"
+bench/run.sh --duration 60s --concurrency "1,8,32,128,256,512,1024" --strict-bench
 ```
 
 Defaults:
 
 ```text
-mode:        release-static
+mode:        release-static (release-static maps to Zig ReleaseFast)
 duration:    30s
 concurrency: 1,8,32,128,256,512
 host:        127.0.0.1
 port:        8080
 binary:      dist/server
+strict:      off
 ```
 
 The harness writes timestamped result directories:
@@ -63,13 +69,20 @@ The harness writes timestamped result directories:
 bench/results/20260618T120000Z/
   env.json
   bench.json
+  build-info.json
   binary.json
-  binary-sections.txt
+  binary-file-size.txt
+  binary-sections.txt          # Linux GNU size output
+  binary-size-raw.txt          # Darwin size -m output
   build.txt
+  curl-health.txt
+  keepalive-on-smoke.json
+  keepalive-off-smoke.json
   server.log
   memory.csv
-  health-oha-c1.json
-  echo-small-oha-c256.json
+  plain-native-oha-c1.json
+  health-oha-c256.json
+  wrk-health-c256.txt
   perf-c256.txt
   summary.md
 ```
@@ -78,16 +91,16 @@ Raw outputs are intentionally kept. `summary.md` is generated from those files a
 
 ## Scenarios
 
-The harness runs scenarios against routes from the fixture/root service when they exist:
-
-| Scenario | Request | Purpose |
-|---|---|---|
-| `health` | `GET /health` | Static route overhead |
-| `echo-small` | `POST /echo`, small text body | Small body read/write path |
-| `echo-8k` | `POST /echo`, 8192-byte body | Body limit/copy/response overhead |
-| `typed-param` | `GET /users/123` | Typed numeric param parse path |
-| `pattern-param` | `GET /devices/router_01` | DFA-backed param matcher path |
-| `file-pattern` | `GET /files/readme-01.txt` | Pattern with dot/dash classes |
+| Scenario | Request | Handler Kind | Purpose |
+|---|---|---|---|
+| `plain-native` | `GET /__bench/plain` | static Zig | Server/backend ceiling baseline |
+| `health` | `GET /health` | static Zig | Static route overhead |
+| `echo-small` | `POST /echo`, small text body | static Zig | Small body read/write path |
+| `echo-8k` | `POST /echo`, 8192-byte body | static Zig | Body limit/copy/response overhead |
+| `typed-param` | `GET /users/123` | static Zig | Typed numeric param parse path |
+| `pattern-param` | `GET /devices/router_01` | static Zig | DFA-backed param matcher path |
+| `file-pattern` | `GET /files/readme-01.txt` | static Zig | Pattern with dot/dash classes |
+| `hybrid-inline` | `GET /hybrid-inline` | release-static: static Zig; release-hybrid: inline Lua | Hybrid inline-Lua overhead |
 
 If a route is unavailable or returns `404`, the raw `oha` result is still preserved and the summary marks unavailable metrics as `n/a` where it cannot parse them.
 
@@ -96,6 +109,16 @@ If a route is unavailable or returns `404`, the raw `oha` result is still preser
 High max-throughput numbers are useful for detecting regressions, but p95/p99 latency and error rate are usually more important. Compare runs only when environment metadata is comparable: same CPU, OS/kernel, Zig version, build mode, backend, duration, and concurrency matrix.
 
 Localhost benchmarks remove most real network effects. They help isolate Meteorite framework/runtime overhead and generated route behavior, not internet performance, deployment quality, TLS overhead, reverse proxy behavior, or database latency.
+
+The summary emits warnings for suspicious conditions:
+
+- Zig `Debug` optimize mode when the harness mode is `release-static`.
+- Keep-alive on/off producing similar throughput.
+- `oha` and `wrk` disagreeing by more than 2x.
+- All scenarios plateauing at similar low throughput (suggesting a build, keep-alive, or load-generator bottleneck).
+
+Use `--strict-bench` to turn the Debug and keepalive checks into hard failures.
+Use `--strict-bench-fail-dirty` to also fail when the git working directory is dirty.
 
 ## Files
 

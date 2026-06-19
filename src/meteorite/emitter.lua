@@ -992,7 +992,7 @@ local function emit_pattern_tables(graph, lines)
     for state = 0, state_count - 1 do accepts[#accepts + 1] = (state >= min and state <= max) and "true" or "false" end
     lines[#lines + 1] = "        " .. table.concat(accepts, ", ") .. ","
     lines[#lines + 1] = "    };"
-    lines[#lines + 1] = "    pub const " .. zig_ident(pattern.id) .. " = @import(\"meteorite.zig\").DfaMatcher(.{ .class_map = &" .. zig_ident(pattern.id) .. "_class_map, .transition_table = &" .. zig_ident(pattern.id) .. "_transitions, .accept_table = &" .. zig_ident(pattern.id) .. "_accept, .class_count = " .. class_count .. ", .start_state = 0, .dead_state = " .. dead .. ", .max_input_bytes = " .. max .. " });"
+    lines[#lines + 1] = "    pub const " .. zig_ident(pattern.id) .. " = @import(\"meteorite_pattern\").DfaMatcher(.{ .class_map = &" .. zig_ident(pattern.id) .. "_class_map, .transition_table = &" .. zig_ident(pattern.id) .. "_transitions, .accept_table = &" .. zig_ident(pattern.id) .. "_accept, .class_count = " .. class_count .. ", .start_state = 0, .dead_state = " .. dead .. ", .max_input_bytes = " .. max .. " });"
   end
   lines[#lines + 1] = "};"
   lines[#lines + 1] = ""

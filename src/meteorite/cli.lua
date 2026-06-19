@@ -7,6 +7,8 @@ package.path = "src/?.lua;src/?/init.lua;" .. package_root .. "?.lua;" .. packag
 local command = arg[1] or "graph"
 if command ~= "graph" and command ~= "invoke" then error("unknown meteorite command: " .. tostring(command)) end
 local input = arg[2] or "src/main.lua"
+local mode = arg[4] or "release-static"
+_G.METEORITE_BUILD_MODE = mode
 local input_dir = input:match("^(.*[/\\])") or ""
 if input_dir ~= "" then
   package.path = input_dir .. "?.lua;" .. input_dir .. "?/init.lua;" .. package.path

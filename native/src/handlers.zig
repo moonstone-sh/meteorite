@@ -1,5 +1,55 @@
+const std = @import("std");
+const build_info = @import("meteorite_build_info");
+
 pub fn health(ctx: anytype) !void {
     try ctx.text(200, "ok");
+}
+
+pub fn plain(ctx: anytype) !void {
+    try ctx.text(200, "ok");
+}
+
+pub fn plain_static(ctx: anytype) !void {
+    try ctx.text(200, "ok");
+}
+
+pub fn hybrid_zig(ctx: anytype) !void {
+    try ctx.text(200, "ok");
+}
+
+pub fn hybrid_inline(ctx: anytype) !void {
+    try ctx.text(200, "ok");
+}
+
+pub fn bench_hybrid_inline(ctx: anytype) !void {
+    try ctx.text(200, "ok");
+}
+
+pub fn bench_hybrid_inline_text_literal(ctx: anytype) !void {
+    try ctx.text(200, "ok");
+}
+
+pub fn hybrid_inline_params(ctx: anytype) !void {
+    const id = ctx.param("id") orelse "missing";
+    try ctx.text(200, id);
+}
+
+pub fn hybrid_inline_echo(ctx: anytype) !void {
+    const value = try ctx.body();
+    try ctx.text(200, value);
+}
+
+pub fn bench_meta(ctx: anytype) !void {
+    _ = build_info;
+    try ctx.bytes(200, "application/json", "{}");
+}
+
+pub fn bench_raw(ctx: anytype) !void {
+    try ctx.text(200, "ok");
+}
+
+pub fn bench_counters(ctx: anytype) !void {
+    try ctx.bytes(200, "application/json", "{}");
 }
 
 pub fn get_user(ctx: anytype) !void {
