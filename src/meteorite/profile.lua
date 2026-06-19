@@ -1,5 +1,46 @@
 local profile = {}
 
+---@class MeteoriteListenConfig
+---@field host? string bind address (default "127.0.0.1")
+---@field port? integer bind port (default 8080)
+
+---@class MeteoriteProfileBodyLimits
+---@field get? number|string max body bytes for GET (default 0)
+---@field post? number|string max body bytes for POST (default "1mb")
+---@field put? number|string max body bytes for PUT (default "1mb")
+---@field patch? number|string max body bytes for PATCH (default "1mb")
+---@field delete? number|string max body bytes for DELETE (default 0)
+
+---@class MeteoriteProfileRequest
+---@field request_arena? number|string request scratch arena size (default "256kb")
+---@field max_uri_bytes? number|string max URI length (default "8kb")
+---@field max_path_bytes? number|string max path length (default "4kb")
+---@field max_query_bytes? number|string max query string length (default "4kb")
+---@field max_query_pairs? integer max query key/value pairs (default 64)
+---@field max_path_segments? integer max route path segments (default 32)
+---@field max_body? MeteoriteProfileBodyLimits per-method body limits
+---@field max_response_bytes? number|string max response bytes (default "1mb")
+---@field max_capability_response_bytes? number|string max outbound capability response (default "64kb")
+---@field lua_heap? number|string Lua heap budget; 0 disables Lua (default 0)
+
+---@class MeteoriteProfileStatic
+---@field max_patterns? integer max compiled patterns (default 64)
+---@field max_dfa_states_per_pattern? integer max DFA states per pattern (default 256)
+---@field max_dfa_bytes_per_pattern? number|string max DFA bytes per pattern (default "32kb")
+---@field max_dfa_bytes_total? number|string max total DFA bytes (default "128kb")
+---@field max_graph_bytes? number|string max emitted graph bytes (default "256kb")
+
+---@class MeteoriteProfileCapabilities
+---@field max_http_response_bytes? number|string max HTTP capability response (default "64kb")
+---@field max_auth_token_bytes? number|string max auth token bytes (default "8kb")
+
+---@class MeteoriteProfile
+---@field name? string profile name
+---@field request? MeteoriteProfileRequest request/memory budgets
+---@field static? MeteoriteProfileStatic graph/codegen budgets
+---@field capabilities? MeteoriteProfileCapabilities capability budgets
+---@field listen? MeteoriteListenConfig server listen address (currently app-level wins)
+
 local function parse_size(value, default)
   if value == nil then return default end
   if type(value) == "number" then return value end
@@ -12,7 +53,6 @@ local function parse_size(value, default)
   if unit == "gb" or unit == "g" then return n * 1024 * 1024 * 1024 end
   return n
 end
-
 local function clone(value)
   if type(value) ~= "table" then return value end
   local out = {}
@@ -43,9 +83,9 @@ local builtin = {
     },
     static = {
       max_patterns = 64,
-      max_dfa_states_per_pattern = 256,
-      max_dfa_bytes_per_pattern = "32kb",
-      max_dfa_bytes_total = "128kb",
+      max_dfa_states_per_pattern = 2048,
+      max_dfa_bytes_per_pattern = "128kb",
+      max_dfa_bytes_total = "512kb",
       max_graph_bytes = "256kb",
     },
     capabilities = {

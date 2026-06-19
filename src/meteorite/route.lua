@@ -122,6 +122,27 @@ local function static_lua_error(key, declaration)
   }, "\n"))
 end
 
+local function suggest_validator(source)
+  if type(source) ~= "string" then return nil end
+  local lowered = source:lower()
+  if lowered:find("@[a-z0-9%%-]+%.", 1) or lowered:find("[a-z0-9%%.!#%%&'*/=?^_`{|}~-]+@", 1) then
+    return "email"
+  end
+  if source:find("^[a-f0-9]{", 1, true) then
+    return "hex"
+  end
+  if source:find("^[0-9a-f]{8}%-[0-9a-f]{4}%-[0-9a-f]{4}%-[0-9a-f]{4}%-[0-9a-f]{12}$", 1) then
+    return "uuid"
+  end
+  return nil
+end
+
+local function format_bytes(bytes)
+  if bytes >= 1024 * 1024 and bytes % (1024 * 1024) == 0 then return tostring(bytes / (1024 * 1024)) .. "mb" end
+  if bytes >= 1024 and bytes % 1024 == 0 then return tostring(bytes / 1024) .. "kb" end
+  return tostring(bytes) .. "b"
+end
+
 local function validate_pattern_budget(patterns_list, memory)
   if #patterns_list > memory.max_patterns then
     error("pattern count exceeded profile budget: " .. tostring(#patterns_list) .. " > " .. tostring(memory.max_patterns))
@@ -131,8 +152,11 @@ local function validate_pattern_budget(patterns_list, memory)
     local report = pattern.report or {}
     local dfa_states = report.dfa_states or 0
     local estimated_bytes = report.estimated_bytes or 0
+    local source = pattern.source
+    local suggested = suggest_validator(source)
+
     if dfa_states > memory.max_dfa_states_per_pattern then
-      error(table.concat({
+      local lines = {
         "pattern exceeded DFA state budget",
         "",
         "pattern: " .. tostring(pattern.id or pattern.pattern_id or "<anonymous>"),
@@ -140,22 +164,34 @@ local function validate_pattern_budget(patterns_list, memory)
         "generated_states: " .. tostring(dfa_states),
         "",
         "hint:",
-        "  increase profile.static.max_dfa_states_per_pattern",
-        "  simplify alternation",
-      }, "\n"))
+        "  increase profile.static.max_dfa_states_per_pattern in the app profile,",
+        "  or pass a larger max_dfa_states to m.pattern(...).",
+      }
+      if suggested then
+        table.insert(lines, "")
+        table.insert(lines, "This pattern looks like an " .. suggested .. " validator. Consider using:")
+        table.insert(lines, "    " .. (suggested == "hex" and "m.hex({ len = 32 })" or suggested == "uuid" and "m.uuid()" or "m." .. suggested .. "()"))
+      end
+      error(table.concat(lines, "\n"))
     end
     if estimated_bytes > memory.max_dfa_bytes_per_pattern then
-      error(table.concat({
+      local lines = {
         "pattern exceeded DFA byte budget",
         "",
         "pattern: " .. tostring(pattern.id or pattern.pattern_id or "<anonymous>"),
-        "max_dfa_bytes: " .. tostring(memory.max_dfa_bytes_per_pattern),
-        "estimated_size: " .. tostring(estimated_bytes),
+        "max_dfa_bytes: " .. tostring(format_bytes(memory.max_dfa_bytes_per_pattern)),
+        "estimated_size: " .. tostring(format_bytes(estimated_bytes)),
         "",
         "hint:",
-        "  increase profile.static.max_dfa_bytes_per_pattern",
-        "  simplify alternation",
-      }, "\n"))
+        "  increase profile.static.max_dfa_bytes_per_pattern in the app profile,",
+        "  or pass a larger max_dfa_bytes to m.pattern(...).",
+      }
+      if suggested then
+        table.insert(lines, "")
+        table.insert(lines, "This pattern looks like an " .. suggested .. " validator. Consider using:")
+        table.insert(lines, "    " .. (suggested == "hex" and "m.hex({ len = 32 })" or suggested == "uuid" and "m.uuid()" or "m." .. suggested .. "()"))
+      end
+      error(table.concat(lines, "\n"))
     end
     total_dfa_bytes = total_dfa_bytes + estimated_bytes
   end
@@ -163,8 +199,8 @@ local function validate_pattern_budget(patterns_list, memory)
     error(table.concat({
       "pattern exceeded total DFA byte budget",
       "",
-      "max_dfa_bytes_total: " .. tostring(memory.max_dfa_bytes_total),
-      "estimated_size: " .. tostring(total_dfa_bytes),
+      "max_dfa_bytes_total: " .. tostring(format_bytes(memory.max_dfa_bytes_total)),
+      "estimated_size: " .. tostring(format_bytes(total_dfa_bytes)),
       "",
       "hint:",
       "  increase profile.static.max_dfa_bytes_total",
@@ -238,12 +274,17 @@ function route.normalize_app(app, opts)
   end
   local budget_memory = profiles.route_memory(resolved_profile, "GET", {})
   validate_pattern_budget(patterns, budget_memory)
+  local listen = {
+    host = (app.options and app.options.host) or "127.0.0.1",
+    port = (app.options and app.options.port) or 8080,
+  }
   return {
     format = "meteorite.graph.v0",
     meteorite_version = "0.1.0",
     app = { name = app.name },
     profile = resolved_profile,
     mode = mode,
+    listen = listen,
     routes = routes,
     patterns = patterns,
     capabilities = app.capabilities or {},
