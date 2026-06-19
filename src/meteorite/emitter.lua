@@ -289,6 +289,8 @@ local function emit_luals_aids(graph, output)
     "---@field i32 fun(opts?: {max?: integer, max_len?: integer, optional?: boolean, decode?: boolean}): MeteoriteSchemaValue",
     "---@field uuid fun(opts?: {optional?: boolean, decode?: boolean}): MeteoriteSchemaValue",
     "---@field hex fun(opts?: {len?: integer, optional?: boolean, decode?: boolean}): MeteoriteSchemaValue",
+    "---@field email fun(opts?: {max?: integer, max_len?: integer, optional?: boolean, decode?: boolean}): MeteoriteSchemaValue",
+    "---@field token fun(opts?: {max?: integer, max_len?: integer, optional?: boolean, decode?: boolean}): MeteoriteSchemaValue",
     "---@field bool fun(opts?: {optional?: boolean, decode?: boolean}): MeteoriteSchemaValue",
     "---@field pattern fun(name_or_source: string, source_or_opts?: string|table, opts?: table): MeteoritePattern",
     "---@field zig fun(path_or_symbol: string, opts?: {decl?: string}): table",
@@ -937,14 +939,7 @@ local function emit_bindings(graph, output)
 end
 
 local function pattern_class_map(pattern)
-  local parsed = pattern.parsed or pattern
-  local map = {}
-  local other = #parsed.ranges
-  for i = 0, 255 do map[i + 1] = other end
-  for idx, range in ipairs(parsed.ranges) do
-    for b = range[1], range[2] do map[b + 1] = idx - 1 end
-  end
-  return map, other + 1
+  return pattern.class_map or {}, pattern.class_count or 1
 end
 
 local function emit_pattern_tables(graph, lines)
@@ -962,11 +957,12 @@ local function emit_pattern_tables(graph, lines)
   lines[#lines + 1] = "    }"
   for _, pattern in ipairs(graph.patterns) do
     local class_map, class_count = pattern_class_map(pattern)
-    local parsed = pattern.parsed or pattern
-    local max = parsed.max
-    local min = parsed.min
-    local dead = max + 1
-    local state_count = max + 2
+    local state_count = pattern.dfa_states
+    local dead = pattern.dead_state
+    local start = pattern.start_state
+    local max = pattern.max_len
+    local transitions = pattern.transitions
+    local accept = pattern.accept
     lines[#lines + 1] = ""
     lines[#lines + 1] = "    const " .. zig_ident(pattern.id) .. "_class_map = [_]u8{"
     local row = "        "
@@ -977,22 +973,21 @@ local function emit_pattern_tables(graph, lines)
     if row ~= "        " then lines[#lines + 1] = row end
     lines[#lines + 1] = "    };"
     lines[#lines + 1] = "    const " .. zig_ident(pattern.id) .. "_transitions = [_]u16{"
-    for state = 0, state_count - 1 do
+    for state = 1, state_count do
       local items = {}
-      for class = 0, class_count - 1 do
-        local next_state = dead
-        if state < max and class < class_count - 1 then next_state = state + 1 end
-        items[#items + 1] = tostring(next_state)
+      for class = 1, class_count do
+        local idx = (state - 1) * class_count + class
+        items[#items + 1] = tostring(transitions[idx] or dead)
       end
       lines[#lines + 1] = "        " .. table.concat(items, ", ") .. ","
     end
     lines[#lines + 1] = "    };"
     lines[#lines + 1] = "    const " .. zig_ident(pattern.id) .. "_accept = [_]bool{"
     local accepts = {}
-    for state = 0, state_count - 1 do accepts[#accepts + 1] = (state >= min and state <= max) and "true" or "false" end
+    for state = 1, state_count do accepts[#accepts + 1] = accept[state] and "true" or "false" end
     lines[#lines + 1] = "        " .. table.concat(accepts, ", ") .. ","
     lines[#lines + 1] = "    };"
-    lines[#lines + 1] = "    pub const " .. zig_ident(pattern.id) .. " = @import(\"meteorite_pattern\").DfaMatcher(.{ .class_map = &" .. zig_ident(pattern.id) .. "_class_map, .transition_table = &" .. zig_ident(pattern.id) .. "_transitions, .accept_table = &" .. zig_ident(pattern.id) .. "_accept, .class_count = " .. class_count .. ", .start_state = 0, .dead_state = " .. dead .. ", .max_input_bytes = " .. max .. " });"
+    lines[#lines + 1] = "    pub const " .. zig_ident(pattern.id) .. " = @import(\"meteorite_pattern\").DfaMatcher(.{ .class_map = &" .. zig_ident(pattern.id) .. "_class_map, .transition_table = &" .. zig_ident(pattern.id) .. "_transitions, .accept_table = &" .. zig_ident(pattern.id) .. "_accept, .class_count = " .. class_count .. ", .start_state = " .. (start - 1) .. ", .dead_state = " .. (dead - 1) .. ", .max_input_bytes = " .. max .. " });"
   end
   lines[#lines + 1] = "};"
   lines[#lines + 1] = ""
@@ -1117,7 +1112,7 @@ local function emit_graph_zig(graph, output)
     "pub const RuntimeWorkers = struct { strategy: WorkerStrategy = .auto, io_threads: ThreadCount = .auto, worker_threads: ThreadCount = .auto, lua_state: LuaStateStrategy = .single_locked };",
     "pub const runtime_workers = RuntimeWorkers{};",
     "pub const RouteMemory = struct { profile_name: []const u8, request_arena_bytes: usize, max_body_bytes: usize, max_uri_bytes: usize, max_path_bytes: usize, max_query_bytes: usize, max_query_pairs: usize, max_path_segments: usize, max_response_bytes: usize, max_capability_response_bytes: usize, lua_heap_bytes: usize, estimated_peak_bytes: usize };",
-    "pub const ParamKind = enum { string, slug, u64, i32, uuid, hex, bool, pattern };",
+    "pub const ParamKind = enum { string, slug, u64, i32, uuid, hex, email, token, bool, pattern };",
     "pub const ParamSpec = struct { name: []const u8, kind: ParamKind = .string, max_len: usize = 0, exact_len: usize = 0, optional: bool = false, pattern: ?PatternId = null };",
     "pub const Route = struct { id: []const u8, method: Method, raw_path: []const u8, path: []const Segment, params: []const ParamSpec, query: []const ParamSpec, memory: RouteMemory, max_body_bytes: usize, request_arena_bytes: usize, handler: Handler, runtime: RouteRuntime = .{}, execution: RouteExecution = .{}, capabilities: []const CapabilityRef = &.{} };",
     "",
@@ -1230,6 +1225,8 @@ function emitter.emit(app, opts)
   write_file(output .. "/manifest.zon", zon.encode({ format = "meteorite.graph.v0", meteorite_version = "0.1.0", graph_hash = graph_hash, mode = mode_enum(mode) }))
   write_file(output .. "/runtime.zon", zon.encode({ mode = mode_enum(mode), lua_runtime = mode ~= "release-static", backend = { __meteorite_enum = true, value = "std_http" }, workers = { strategy = { __meteorite_enum = true, value = "auto" }, lua_state = { __meteorite_enum = true, value = "single_locked" } }, memory = graph.memory_report }))
   write_file(output .. "/capabilities.zon", zon.encode({ backend = "std.http", methods = { "GET", "POST", "PUT", "PATCH", "DELETE" }, declared = graph.capabilities or {} }))
+  write_file(output .. "/listen.zon", zon.encode(graph.listen or { host = "127.0.0.1", port = 8080 }))
+    write_file(output .. "/listen_config.zig", "pub const listen_zon = @embedFile(\"listen.zon\");\n")
   write_file(output .. "/graph_hash.txt", graph_hash .. "\n")
   emit_patterns_report(graph, output)
   emit_build_report(graph, output, mode)

@@ -1,6 +1,6 @@
 local m = require("meteorite")
 
-local app = m.app({ name = "basic-service" })
+local app = m.app({ name = "basic-service", host = "127.0.0.1", port = 8080 })
 
 app:capability("http", {
   db = {
@@ -74,6 +74,14 @@ app:get("/uuids/:id", {
 app:get("/hex/:digest", {
   params = { digest = m.hex({ len = 32 }) },
 }, "handlers.hex")
+
+app:get("/emails/:email", {
+  params = { email = m.email() },
+}, "handlers.email")
+
+app:get("/tokens/:token", {
+  params = { token = m.token({ max = 64 }) },
+}, "handlers.token")
 
 app:get("/search", {
   query = {

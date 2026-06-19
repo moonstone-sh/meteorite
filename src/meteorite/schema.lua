@@ -21,8 +21,12 @@ function schema.scalar(kind, opts)
     optional = opts.optional == true,
     decode = opts.decode == true,
   }
-  if opts.max then out.max_len = opts.max end
-  if opts.max_len then out.max_len = opts.max_len end
+  local max = opts.max or opts.max_len
+  if kind == "email" and not max then max = 254 end
+  if kind == "token" and not max then max = 128 end
+  if kind == "slug" and not max then max = 128 end
+  if kind == "uuid" and not opts.len then out.exact_len = 36 end
+  if max then out.max_len = max end
   if opts.len then out.exact_len = opts.len end
   if opts.min then out.min = opts.min end
   if opts.pattern then out.pattern = opts.pattern end

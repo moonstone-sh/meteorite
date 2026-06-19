@@ -5,7 +5,9 @@ local profile_mod = require("meteorite.profile")
 
 ---@class MeteoriteAppOptions
 ---@field name? string
----@field profile? string|table
+---@field profile? string|MeteoriteProfile
+---@field host? string bind address (default "127.0.0.1")
+---@field port? integer bind port (default 8080)
 
 ---@class MeteoriteRouteOptions
 ---@field params? table<string, MeteoriteSchemaValue>
@@ -147,6 +149,8 @@ end
 ---@field i32 fun(opts?: {max?: integer, max_len?: integer, optional?: boolean, decode?: boolean}): MeteoriteSchemaValue
 ---@field uuid fun(opts?: {optional?: boolean, decode?: boolean}): MeteoriteSchemaValue
 ---@field hex fun(opts?: {len?: integer, optional?: boolean, decode?: boolean}): MeteoriteSchemaValue
+---@field email fun(opts?: {max?: integer, max_len?: integer, optional?: boolean, decode?: boolean}): MeteoriteSchemaValue
+---@field token fun(opts?: {max?: integer, max_len?: integer, optional?: boolean, decode?: boolean}): MeteoriteSchemaValue
 ---@field bool fun(opts?: {optional?: boolean, decode?: boolean}): MeteoriteSchemaValue
 ---@field pattern fun(name_or_source: string, source_or_opts?: string|table, opts?: table): MeteoritePattern
 ---@field zig fun(path_or_symbol: string, opts?: {decl?: string}): table
@@ -170,7 +174,7 @@ function M.app(opts)
 end
 
 ---@class MeteoritePatternDef
----@field type "string"|"slug"|"u64"|"i32"|"uuid"|"hex"|"bool"|"pattern"
+---@field type "string"|"slug"|"u64"|"i32"|"uuid"|"hex"|"email"|"token"|"bool"|"pattern"
 ---@field optional? boolean
 ---@field decode? boolean
 ---@field max_len? integer
@@ -211,6 +215,16 @@ function M.uuid(opts) return schema.scalar("uuid", opts) end
 ---@return MeteoriteSchemaValue
 ---@return MeteoriteSchemaValue
 function M.hex(opts) return schema.scalar("hex", opts) end
+
+---@param opts? {max?: integer, max_len?: integer, optional?: boolean, decode?: boolean}
+---@return MeteoriteSchemaValue
+---@return MeteoriteSchemaValue
+function M.email(opts) return schema.scalar("email", opts) end
+
+---@param opts? {max?: integer, max_len?: integer, optional?: boolean, decode?: boolean}
+---@return MeteoriteSchemaValue
+---@return MeteoriteSchemaValue
+function M.token(opts) return schema.scalar("token", opts) end
 
 ---@param opts? {optional?: boolean, decode?: boolean}
 ---@return MeteoriteSchemaValue

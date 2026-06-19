@@ -112,6 +112,8 @@ pub const Request = struct {
     close_after_response: bool = true,
     body_cache: ?[]const u8 = null,
     request_count: u64 = 0,
+    target_value: []const u8 = "",
+    target_storage: [4096]u8 = undefined,
 
     pub fn close(self: *Request, io: Io) void {
         if (!self.closed) {
@@ -142,10 +144,22 @@ pub fn rebind(req: *Request, io: Io) void {
     req.reader = req.stream.reader(io, &req.recv_buffer);
     req.writer = req.stream.writer(io, &req.send_buffer);
     req.server = std.http.Server.init(&req.reader.interface, &req.writer.interface);
+    req.target_value = "";
 }
 
 pub fn receiveHead(req: *Request) !void {
     req.inner = try req.server.receiveHead();
+    const request_target = req.inner.head.target;
+    // Defensive copy: std.http.Server head.target points into parser-owned memory
+    // that may be invalid for malformed or pipelined requests. Copy it into a
+    // bounded field and reject obvious garbage so path()/query() stay safe.
+    if (request_target.len == 0 or request_target.len > 4095) return error.BadRequest;
+    for (request_target) |c| {
+        if (c == 0 or c == 13 or c == 10) return error.BadRequest;
+    }
+    const target_dest = req.target_storage[0..request_target.len];
+    @memcpy(target_dest, request_target);
+    req.target_value = target_dest;
     req.request_count += 1;
     if (req.request_count > 1) inc(&counters.keepalive_reuse_count);
     req.close_after_response = !req.inner.head.keep_alive;
@@ -164,16 +178,16 @@ pub fn method(req: *Request) Method {
 }
 
 pub fn path(req: *Request) []const u8 {
-    const request_target = req.inner.head.target;
+    const request_target = req.target_value;
     return if (std.mem.indexOfScalar(u8, request_target, '?')) |idx| request_target[0..idx] else request_target;
 }
 
 pub fn target(req: *Request) []const u8 {
-    return req.inner.head.target;
+    return req.target_value;
 }
 
 pub fn query(req: *Request) []const u8 {
-    const request_target = req.inner.head.target;
+    const request_target = req.target_value;
     return if (std.mem.indexOfScalar(u8, request_target, '?')) |idx| request_target[idx + 1 ..] else "";
 }
 

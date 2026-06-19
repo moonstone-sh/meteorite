@@ -138,3 +138,13 @@ pub fn search(ctx: anytype) !void {
     const q = ctx.query.q;
     try ctx.text(200, q);
 }
+
+pub fn email(ctx: anytype) !void {
+    const value = ctx.param("email") orelse "missing";
+    try ctx.text(200, value);
+}
+
+pub fn token(ctx: anytype) !void {
+    const value = ctx.param("token") orelse "missing";
+    try ctx.text(200, value);
+}
