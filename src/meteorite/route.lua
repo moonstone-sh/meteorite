@@ -286,6 +286,17 @@ function route.normalize_app(app, opts)
     host = (app.options and app.options.host) or "127.0.0.1",
     port = (app.options and app.options.port) or 8080,
   }
+  local plugins = {}
+  local plugin_seen = {}
+  for _, route in ipairs(routes) do
+    for _, plugin in ipairs(route.scope.plugins or {}) do
+      if type(plugin) == "table" and plugin.__meteorite_plugin and not plugin_seen[plugin] then
+        plugin_seen[plugin] = true
+        plugins[#plugins + 1] = { id = plugin.id, kind = plugin.kind, options = plugin.options, execute = plugin.execute }
+      end
+    end
+  end
+  table.sort(plugins, function(a, b) return a.id < b.id end)
   return {
     format = "meteorite.graph.v0",
     meteorite_version = "0.1.0",
@@ -295,6 +306,7 @@ function route.normalize_app(app, opts)
     listen = listen,
     routes = routes,
     patterns = patterns,
+    plugins = plugins,
     capabilities = app.capabilities or {},
     middleware = app.middleware,
   }

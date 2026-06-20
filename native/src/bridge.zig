@@ -23,6 +23,12 @@ pub const LuaRuntimeUnavailable = struct {
         try ctx.text(501, "handler requires Lua runtime");
     }
 
+    pub fn callPlugin(comptime handler: anytype, ctx: anytype) !bool {
+        _ = handler;
+        _ = ctx;
+        return false;
+    }
+
     pub fn reloadAll() !void {}
 };
 
@@ -411,6 +417,15 @@ pub const HybridLuaRuntime = struct {
         c.lua_newtable(L);
         c.lua_setfield(L, -2, "state");
 
+        if (@hasField(@TypeOf(ctx.*), "route") and @hasField(@TypeOf(ctx.route), "scope")) {
+            c.lua_newtable(L);
+            for (ctx.route.scope.context) |ref| {
+                _ = c.lua_pushlstring(L, @ptrCast(ref.value.ptr), ref.value.len);
+                c.lua_setfield(L, -2, @ptrCast(ref.key.ptr));
+            }
+            c.lua_setfield(L, -2, "scope");
+        }
+
         current_ctx = ctx;
         current_vtable = vtable;
         defer {
@@ -456,6 +471,141 @@ pub const HybridLuaRuntime = struct {
             try current_vtable.?.text(current_ctx.?, 204, "");
             c.lua_pop(L, 1);
         }
+    }
+
+    pub fn callPlugin(comptime handler: anytype, ctx: anytype) !bool {
+        incLua(&lua_stats.lua_handler_calls);
+        const vtable = globalVtable(@TypeOf(ctx.*));
+        const L = c.luaL_newstate() orelse {
+            std.log.err("failed to create Lua state for plugin", .{});
+            incLua(&lua_stats.lua_errors);
+            return false;
+        };
+        defer c.lua_close(L);
+        c.luaL_openlibs(L);
+
+        const setup = "package.path = 'src/?.lua;src/?/init.lua;.moonstone/env/share/lua/5.4/?.lua;.moonstone/env/share/lua/5.4/?/init.lua;' .. package.path";
+        if (c.luaL_loadstring(L, setup.ptr) != c.LUA_OK) {
+            std.log.err("lua setup load failed for plugin: {s}", .{c.lua_tolstring(L, -1, null)});
+            incLua(&lua_stats.lua_errors);
+            return false;
+        }
+        if (c.lua_pcallk(L, 0, 0, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
+            std.log.err("lua setup failed for plugin: {s}", .{c.lua_tolstring(L, -1, null)});
+            incLua(&lua_stats.lua_errors);
+            return false;
+        }
+
+        const plugin_path = if (@hasField(@TypeOf(handler), "chunk_path")) handler.chunk_path else handler.path;
+        if (c.luaL_loadfilex(L, @ptrCast(plugin_path.ptr), @as([*c]const u8, null)) != c.LUA_OK) {
+            std.log.err("load plugin {s}: {s}", .{ plugin_path, c.lua_tolstring(L, -1, null) });
+            incLua(&lua_stats.lua_errors);
+            return false;
+        }
+        if (c.lua_pcallk(L, 0, 1, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
+            std.log.err("init plugin {s}: {s}", .{ plugin_path, c.lua_tolstring(L, -1, null) });
+            incLua(&lua_stats.lua_errors);
+            return false;
+        }
+        if (!c.lua_isfunction(L, -1)) {
+            std.log.err("plugin {s} did not return a function", .{plugin_path});
+            incLua(&lua_stats.lua_errors);
+            return false;
+        }
+
+        c.lua_newtable(L);
+        pushMethod(L, "text", l_text);
+        pushMethod(L, "json", l_json);
+        pushMethod(L, "bytes", l_bytes);
+        pushMethod(L, "body", l_body);
+        pushMethod(L, "param", l_param);
+        pushMethod(L, "query", l_query);
+        pushMethod(L, "header", l_header);
+        pushMethod(L, "http", l_http);
+        pushMethod(L, "auth", l_auth);
+        pushMethod(L, "zig", l_zig);
+        pushMethod(L, "get", l_get);
+        pushMethod(L, "set", l_set);
+        pushMethod(L, "debug", l_debug);
+        pushMethod(L, "shared_counter", l_shared_counter);
+        pushMethod(L, "worker_counter", l_worker_counter);
+
+        if (@hasField(@TypeOf(ctx.*), "captures")) {
+            c.lua_newtable(L);
+            const captures = ctx.captures;
+            for (captures.items[0..captures.len]) |item| {
+                _ = c.lua_pushlstring(L, @ptrCast(item.value.ptr), item.value.len);
+                c.lua_setfield(L, -2, @ptrCast(item.name.ptr));
+            }
+            c.lua_setfield(L, -2, "params");
+        }
+
+        if (@hasField(@TypeOf(ctx.*), "route") and @hasField(@TypeOf(ctx.route), "query")) {
+            c.lua_newtable(L);
+            const query_specs = ctx.route.query;
+            for (query_specs) |spec| {
+                if (vtable.query(ctx, spec.name)) |value| {
+                    _ = c.lua_pushlstring(L, @ptrCast(value.ptr), value.len);
+                    c.lua_setfield(L, -2, @ptrCast(spec.name.ptr));
+                }
+            }
+            c.lua_setfield(L, -2, "query");
+        }
+
+        c.lua_newtable(L);
+        c.lua_setfield(L, -2, "state");
+
+        if (@hasField(@TypeOf(ctx.*), "route") and @hasField(@TypeOf(ctx.route), "scope")) {
+            c.lua_newtable(L);
+            for (ctx.route.scope.context) |ref| {
+                _ = c.lua_pushlstring(L, @ptrCast(ref.value.ptr), ref.value.len);
+                c.lua_setfield(L, -2, @ptrCast(ref.key.ptr));
+            }
+            c.lua_setfield(L, -2, "scope");
+        }
+
+        current_ctx = ctx;
+        current_vtable = vtable;
+        defer {
+            current_ctx = null;
+            current_vtable = null;
+        }
+
+        if (c.lua_pcallk(L, 1, 1, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
+            std.log.err("plugin {s}: {s}", .{ plugin_path, c.lua_tolstring(L, -1, null) });
+            incLua(&lua_stats.lua_errors);
+            return false;
+        }
+
+        if (c.lua_istable(L, -1)) {
+            _ = c.lua_getfield(L, -1, "status");
+            const status: u16 = if (c.lua_isinteger(L, -1) != 0) @intCast(c.lua_tointegerx(L, -1, @as([*c]c_int, null))) else 200;
+            c.lua_pop(L, 1);
+            _ = c.lua_getfield(L, -1, "content_type");
+            var content_type_len: usize = 0;
+            const content_type_ptr = c.lua_tolstring(L, -1, &content_type_len);
+            const is_json = content_type_ptr != null and std.mem.eql(u8, content_type_ptr[0..content_type_len], "application/json");
+            c.lua_pop(L, 1);
+            _ = c.lua_getfield(L, -1, "body");
+            var body_len: usize = 0;
+            const body_ptr = c.lua_tolstring(L, -1, &body_len);
+            const body = body_ptr[0..body_len];
+            if (is_json) {
+                try current_vtable.?.json(current_ctx.?, status, body);
+            } else {
+                try current_vtable.?.text(current_ctx.?, status, body);
+            }
+            c.lua_pop(L, 2);
+            return true;
+        } else if (c.lua_isstring(L, -1) != 0) {
+            var len: usize = 0;
+            const ptr = c.lua_tolstring(L, -1, &len);
+            try current_vtable.?.text(current_ctx.?, 200, ptr[0..len]);
+            c.lua_pop(L, 1);
+            return true;
+        }
+        c.lua_pop(L, 1);
+        return false;
     }
 };
 
@@ -1113,6 +1263,15 @@ pub const CachedHybridRuntime = struct {
         c.lua_newtable(L2);
         c.lua_setfield(L2, -2, "state");
 
+        if (@hasField(@TypeOf(ctx.*), "route") and @hasField(@TypeOf(ctx.route), "scope")) {
+            c.lua_newtable(L2);
+            for (ctx.route.scope.context) |ref| {
+                _ = c.lua_pushlstring(L2, @ptrCast(ref.value.ptr), ref.value.len);
+                c.lua_setfield(L2, -2, @ptrCast(ref.key.ptr));
+            }
+            c.lua_setfield(L2, -2, "scope");
+        }
+
         current_ctx = ctx;
         current_vtable = vtable;
         defer {
@@ -1158,5 +1317,123 @@ pub const CachedHybridRuntime = struct {
             try current_vtable.?.text(current_ctx.?, 204, "");
             c.lua_pop(L2, 1);
         }
+    }
+
+    pub fn callPlugin(comptime handler: anytype, ctx: anytype) !bool {
+        incLua(&lua_stats.lua_handler_calls);
+        const vtable = globalVtable(@TypeOf(ctx.*));
+        try init();
+        const L2 = L.?;
+
+        const plugin_path = if (@hasField(@TypeOf(handler), "chunk_path")) handler.chunk_path else handler.path;
+        if (c.luaL_loadfilex(L2, @ptrCast(plugin_path.ptr), @as([*c]const u8, null)) != c.LUA_OK) {
+            std.log.err("cached load plugin {s}: {s}", .{ plugin_path, c.lua_tolstring(L2, -1, null) });
+            incLua(&lua_stats.lua_errors);
+            return false;
+        }
+        if (c.lua_pcallk(L2, 0, 1, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
+            std.log.err("cached init plugin {s}: {s}", .{ plugin_path, c.lua_tolstring(L2, -1, null) });
+            incLua(&lua_stats.lua_errors);
+            return false;
+        }
+        if (!c.lua_isfunction(L2, -1)) {
+            std.log.err("cached plugin {s} did not return a function", .{plugin_path});
+            incLua(&lua_stats.lua_errors);
+            return false;
+        }
+
+        c.lua_newtable(L2);
+        pushMethod(L2, "text", l_text);
+        pushMethod(L2, "json", l_json);
+        pushMethod(L2, "bytes", l_bytes);
+        pushMethod(L2, "body", l_body);
+        pushMethod(L2, "param", l_param);
+        pushMethod(L2, "query", l_query);
+        pushMethod(L2, "header", l_header);
+        pushMethod(L2, "http", l_http);
+        pushMethod(L2, "auth", l_auth);
+        pushMethod(L2, "zig", l_zig);
+        pushMethod(L2, "get", l_get);
+        pushMethod(L2, "set", l_set);
+        pushMethod(L2, "debug", l_debug);
+        pushMethod(L2, "shared_counter", l_shared_counter);
+        pushMethod(L2, "worker_counter", l_worker_counter);
+
+        if (@hasField(@TypeOf(ctx.*), "captures")) {
+            c.lua_newtable(L2);
+            const captures = ctx.captures;
+            for (captures.items[0..captures.len]) |item| {
+                _ = c.lua_pushlstring(L2, @ptrCast(item.value.ptr), item.value.len);
+                c.lua_setfield(L2, -2, @ptrCast(item.name.ptr));
+            }
+            c.lua_setfield(L2, -2, "params");
+        }
+
+        if (@hasField(@TypeOf(ctx.*), "route") and @hasField(@TypeOf(ctx.route), "query")) {
+            c.lua_newtable(L2);
+            const query_specs = ctx.route.query;
+            for (query_specs) |spec| {
+                if (vtable.query(ctx, spec.name)) |value| {
+                    _ = c.lua_pushlstring(L2, @ptrCast(value.ptr), value.len);
+                    c.lua_setfield(L2, -2, @ptrCast(spec.name.ptr));
+                }
+            }
+            c.lua_setfield(L2, -2, "query");
+        }
+
+        c.lua_newtable(L2);
+        c.lua_setfield(L2, -2, "state");
+
+        if (@hasField(@TypeOf(ctx.*), "route") and @hasField(@TypeOf(ctx.route), "scope")) {
+            c.lua_newtable(L2);
+            for (ctx.route.scope.context) |ref| {
+                _ = c.lua_pushlstring(L2, @ptrCast(ref.value.ptr), ref.value.len);
+                c.lua_setfield(L2, -2, @ptrCast(ref.key.ptr));
+            }
+            c.lua_setfield(L2, -2, "scope");
+        }
+
+        current_ctx = ctx;
+        current_vtable = vtable;
+        defer {
+            current_ctx = null;
+            current_vtable = null;
+        }
+
+        if (c.lua_pcallk(L2, 1, 1, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
+            std.log.err("cached plugin {s}: {s}", .{ plugin_path, c.lua_tolstring(L2, -1, null) });
+            incLua(&lua_stats.lua_errors);
+            return false;
+        }
+
+        if (c.lua_istable(L2, -1)) {
+            _ = c.lua_getfield(L2, -1, "status");
+            const status: u16 = if (c.lua_isinteger(L2, -1) != 0) @intCast(c.lua_tointegerx(L2, -1, @as([*c]c_int, null))) else 200;
+            c.lua_pop(L2, 1);
+            _ = c.lua_getfield(L2, -1, "content_type");
+            var content_type_len: usize = 0;
+            const content_type_ptr = c.lua_tolstring(L2, -1, &content_type_len);
+            const is_json = content_type_ptr != null and std.mem.eql(u8, content_type_ptr[0..content_type_len], "application/json");
+            c.lua_pop(L2, 1);
+            _ = c.lua_getfield(L2, -1, "body");
+            var body_len: usize = 0;
+            const body_ptr = c.lua_tolstring(L2, -1, &body_len);
+            const body = body_ptr[0..body_len];
+            if (is_json) {
+                try current_vtable.?.json(current_ctx.?, status, body);
+            } else {
+                try current_vtable.?.text(current_ctx.?, status, body);
+            }
+            c.lua_pop(L2, 2);
+            return true;
+        } else if (c.lua_isstring(L2, -1) != 0) {
+            var len: usize = 0;
+            const ptr = c.lua_tolstring(L2, -1, &len);
+            try current_vtable.?.text(current_ctx.?, 200, ptr[0..len]);
+            c.lua_pop(L2, 1);
+            return true;
+        }
+        c.lua_pop(L2, 1);
+        return false;
     }
 };

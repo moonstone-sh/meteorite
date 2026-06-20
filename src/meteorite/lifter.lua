@@ -137,7 +137,7 @@ function lifter.lift(route, opts)
     }, "\n"))
   end
   local chunk = "return " .. literal .. "\n"
-  local out_dir = (opts.output or ".meteorite/graph/current") .. "/../../lua/inline"
+  local out_dir = opts.out_dir or ((opts.output or ".meteorite/graph/current") .. "/../../lua/inline")
   mkdir_p(out_dir)
   local chunk_path = out_dir .. "/" .. route.id .. ".lua"
   write_file(chunk_path, chunk)
@@ -152,6 +152,23 @@ function lifter.lift(route, opts)
     source_line = first,
     source_column = 1,
   }
+end
+
+function lifter.lift_plugin(plugin, opts)
+  local fn = assert(plugin.execute, "plugin missing execute function")
+  local info = debug.getinfo(fn, "Slu") or {}
+  local source = info.source or "?"
+  if source:sub(1, 1) == "@" then source = source:sub(2) end
+  local route = {
+    id = plugin.id,
+    method = "PLUGIN",
+    raw_path = plugin.id,
+    handler = { kind = "inline_lua", value = fn },
+    source = { file = source, line = info.linedefined or 0, column = 1 },
+  }
+  local output = opts and opts.output or ".meteorite/graph/current"
+  local plugin_opts = { output = output, out_dir = output .. "/../../lua/plugins" }
+  return lifter.lift(route, plugin_opts)
 end
 
 return lifter

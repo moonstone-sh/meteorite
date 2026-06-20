@@ -133,6 +133,11 @@ function Context:body()
   return self.request.body or ""
 end
 
+function Context:header(name)
+  local headers = self.request.headers or {}
+  return headers[name]
+end
+
 function Context:set(key, value)
   self.state[key] = value
   return value
@@ -254,6 +259,10 @@ function Context:zig(name)
   return (self.zig_helpers and self.zig_helpers[name]) or default_zig[name] or error("missing zig helper: " .. tostring(name))
 end
 
+function Context:scope(name)
+  return self.scope[name]
+end
+
 local function new_context(opts)
   local params = opts.params or {}
   return setmetatable({
@@ -261,6 +270,7 @@ local function new_context(opts)
     params = params,
     query = opts.query or {},
     state = {},
+    scope = opts.scope or {},
     worker_cache = opts.worker_cache or {},
     capability_store = opts.capability_store or {},
     capabilities = opts.capabilities or {},
@@ -269,10 +279,39 @@ local function new_context(opts)
   }, Context)
 end
 
+local function build_plugin_map(plugins)
+  local map = {}
+  for _, plugin in ipairs(plugins or {}) do map[plugin.id] = plugin end
+  return map
+end
+
+local function execute_scope_plugins(route, ctx, plugin_map)
+  for _, plugin_ref in ipairs(route.scope.plugins or {}) do
+    local plugin = type(plugin_ref) == "table" and plugin_ref.__meteorite_plugin and plugin_ref or plugin_map[plugin_ref]
+    if plugin and type(plugin.execute) == "function" then
+      local result = plugin.execute(ctx)
+      if result then
+        if type(result) == "string" then
+          return { status = 200, content_type = "text/plain", body = result, http_requests = ctx.http_requests, state = ctx.state }
+        end
+        return {
+          status = result.status or 200,
+          content_type = result.content_type or "text/plain",
+          body = result.body or "",
+          http_requests = ctx.http_requests,
+          state = ctx.state,
+        }
+      end
+    end
+  end
+  return nil
+end
+
 function hybrid.invoke(app, request, opts)
   opts = opts or {}
   local store = opts.store or app_store(app)
   local graph = app:normalize({ mode = opts.mode or "dev" })
+  local plugin_map = build_plugin_map(graph.plugins)
   local method = request.method or "GET"
   local path, raw_query = split_target(request.path or "/")
   local query_values = parse_query(raw_query)
@@ -282,7 +321,9 @@ function hybrid.invoke(app, request, opts)
     if params then
       local query = match_query(route, query_values)
       if not query then return { status = 404, content_type = "text/plain", body = "not found" } end
-      local ctx = new_context({ request = request, params = params, query = query, capabilities = graph.capabilities, zig_helpers = opts.zig_helpers, worker_cache = app.cache, capability_store = store.capabilities })
+      local ctx = new_context({ request = request, params = params, query = query, scope = route.scope.context or {}, capabilities = graph.capabilities, zig_helpers = opts.zig_helpers, worker_cache = app.cache, capability_store = store.capabilities })
+      local plugin_response = execute_scope_plugins(route, ctx, plugin_map)
+      if plugin_response then return plugin_response end
       if route.handler.kind == "inline_lua" then
         local response = route.handler.value(ctx) or ctx.response or ctx:text(204, "")
         response.http_requests = ctx.http_requests

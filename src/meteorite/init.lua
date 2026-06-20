@@ -24,6 +24,8 @@ local profile_mod = require("meteorite.profile")
 ---@type MeteoriteModule
 local M = {}
 
+local plugin_counter = 0
+
 local App = {}
 App.__index = App
 
@@ -157,7 +159,16 @@ end
 ---@return MeteoriteApp
 function App:use(plugin_or_middleware, options)
   if type(plugin_or_middleware) == "table" and plugin_or_middleware.__meteorite_plugin then
-    plugin_or_middleware.apply(self, options or plugin_or_middleware.options or {})
+    local plugin = plugin_or_middleware
+    options = options or {}
+    if plugin.options then
+      for k, v in pairs(options) do plugin.options[k] = v end
+    else
+      plugin.options = options
+    end
+    local scope = self.__meteorite_scope or root_scope()
+    scope.plugins = scope.plugins or {}
+    scope.plugins[#scope.plugins + 1] = plugin
     return self
   end
   self.middleware[#self.middleware + 1] = plugin_or_middleware
@@ -391,8 +402,20 @@ end
 ---@return table
 function M.plugin(spec)
   spec = spec or {}
+  plugin_counter = plugin_counter + 1
   spec.__meteorite_plugin = true
+  spec.kind = spec.kind or "custom"
+  spec.id = spec.id or (spec.kind .. "_" .. tostring(plugin_counter))
+  spec.options = spec.options or {}
   return spec
+end
+
+---@param map table
+---@return table
+function M.context(map)
+  map = map or {}
+  map.__meteorite_context = true
+  return map
 end
 
 ---@param value any

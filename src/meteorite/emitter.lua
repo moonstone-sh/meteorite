@@ -355,9 +355,9 @@ local function emit_luals_aids(graph, output)
     "local meteorite = {}",
     "",
     "---@class MeteoriteContext",
-    "---@field params table",
-    "---@field query table",
-    "---@field state table",
+    "---@field params table<string, string|integer|number|boolean>",
+    "---@field query table<string, string|integer|number|boolean|nil>",
+    "---@field state table<string, any>",
     "local Context = {}",
     "",
     "---@param body string",
@@ -877,7 +877,24 @@ local function validate_capability_refs(graph, route, refs)
 end
 
 local function prepare_graph(graph, output, mode)
+  for _, plugin in ipairs(graph.plugins or {}) do
+    if type(plugin.execute) ~= "function" then
+      error("plugin " .. tostring(plugin.id) .. " must declare an execute function")
+    end
+    local lifted = lifter.lift_plugin(plugin, { output = output })
+    plugin.handler = { kind = "inline_lua", lifted = lifted }
+    plugin.execute = nil
+  end
   for _, route in ipairs(graph.routes) do
+    local plugin_ids = {}
+    for _, plugin in ipairs(route.scope.plugins or {}) do
+      if type(plugin) == "table" and plugin.__meteorite_plugin then
+        plugin_ids[#plugin_ids + 1] = plugin.id
+      elseif type(plugin) == "string" then
+        plugin_ids[#plugin_ids + 1] = plugin
+      end
+    end
+    route.scope.plugins = plugin_ids
     if route.handler.kind == "inline_lua" then
       local lifted = lifter.lift(route, { output = output })
       route.handler.lifted = lifted
@@ -1190,6 +1207,19 @@ local function route_scope_zig(scope)
   return ".{ .id = " .. zig_string(normalized.id) .. ", .parent = " .. zig_string(normalized.parent) .. ", .path_prefix = " .. zig_string(normalized.path_prefix) .. ", .chain = &data.scope_chain, .plugins = &data.scope_plugins, .context = &data.scope_context }"
 end
 
+
+local function plugin_handler_zig(plugin)
+  local handler = plugin.handler or {}
+  if handler.kind == "inline_lua" then
+    return ".{ .inline_lua = .{ .id = " .. zig_string(plugin.id) .. ", .chunk_path = " .. zig_string((handler.lifted or {}).chunk_path or "") .. ", .source_file = " .. zig_string((handler.lifted or {}).source_file or "") .. ", .source_line = " .. tostring((handler.lifted or {}).source_line or 0) .. ", .source_column = " .. tostring((handler.lifted or {}).source_column or 1) .. " } }"
+  elseif handler.kind == "lua" then
+    return ".{ .lua_file = .{ .id = " .. zig_string(plugin.id) .. ", .path = " .. zig_string(handler.path or handler.module) .. " } }"
+  elseif handler.kind == "zig" then
+    return ".{ .zig_symbol = .{ .id = ." .. handler.symbol .. ", .symbol = " .. zig_string(handler.import or handler.symbol) .. " } }"
+  end
+  return ".none"
+end
+
 local function route_module_content(route)
   local lines = {
     "pub fn route(comptime graph: type) graph.Route {",
@@ -1263,6 +1293,8 @@ local function emit_graph_zig(graph, output)
   end
   local lines = {
     "pub const bindings = @import(\"graph_bindings.zig\");",
+    "const std = @import(\"std\");",
+    "",
     "pub const ctx = @import(\"meteorite_ctx\").ctx;",
     "",
     "pub const max_request_arena_bytes = " .. tostring(max_arena) .. ";",
@@ -1293,6 +1325,8 @@ local function emit_graph_zig(graph, output)
     "pub const ScopeRef = struct { id: []const u8, path_prefix: []const u8 };",
     "pub const ScopeContextRef = struct { key: []const u8, value: []const u8 };",
     "pub const RouteScope = struct { id: []const u8 = \"root\", parent: []const u8 = \"\", path_prefix: []const u8 = \"\", chain: []const ScopeRef = &.{}, plugins: []const []const u8 = &.{}, context: []const ScopeContextRef = &.{} };",
+    "pub const PluginHandler = union(enum) { inline_lua: InlineLuaHandler, lua_file: LuaFileHandler, zig_symbol: ZigSymbolHandler, none };",
+    "pub const PluginDescriptor = struct { id: []const u8, kind: []const u8, handler: PluginHandler = .none };",
     "pub const Route = struct { id: []const u8, method: Method, raw_path: []const u8, path: []const Segment, params: []const ParamSpec, query: []const ParamSpec, memory: RouteMemory, max_body_bytes: usize, request_arena_bytes: usize, handler: Handler, runtime: RouteRuntime = .{}, execution: RouteExecution = .{}, capabilities: []const CapabilityRef = &.{}, scope: RouteScope = .{} };",
     "",
   }
@@ -1304,6 +1338,22 @@ local function emit_graph_zig(graph, output)
   for _, route in ipairs(graph.routes) do
     lines[#lines + 1] = "const " .. route_module_name(route) .. " = @import(\"routes/" .. route_module_name(route) .. ".zig\");"
   end
+  lines[#lines + 1] = ""
+
+  if #graph.plugins > 0 then
+    lines[#lines + 1] = "pub const plugins = [_]PluginDescriptor{"
+    for _, plugin in ipairs(graph.plugins) do
+      lines[#lines + 1] = "    .{ .id = " .. zig_string(plugin.id) .. ", .kind = " .. zig_string(plugin.kind) .. ", .handler = " .. plugin_handler_zig(plugin) .. " },"
+    end
+    lines[#lines + 1] = "};"
+  else
+    lines[#lines + 1] = "pub const plugins = [_]PluginDescriptor{};"
+  end
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = "pub fn pluginById(comptime id: []const u8) ?PluginDescriptor {"
+  lines[#lines + 1] = "    inline for (plugins) |p| { if (std.mem.eql(u8, p.id, id)) return p; }"
+  lines[#lines + 1] = "    return null;"
+  lines[#lines + 1] = "}"
   lines[#lines + 1] = ""
   lines[#lines + 1] = "pub const routes = [_]Route{"
   for _, route in ipairs(graph.routes) do
@@ -1427,6 +1477,34 @@ local function capability_descriptor(capabilities)
   return out
 end
 
+local function plugin_handler_descriptor(plugin)
+  local handler = plugin.handler or {}
+  if handler.kind == "inline_lua" then
+    local lifted = handler.lifted or {}
+    return {
+      kind = "inline_lua",
+      id = plugin.id,
+      chunk_path = lifted.chunk_path,
+      source_file = lifted.source_file,
+      source_line = lifted.source_line,
+      source_column = lifted.source_column,
+    }
+  elseif handler.kind == "lua" then
+    return { kind = "lua", id = plugin.id, path = handler.path or handler.module }
+  elseif handler.kind == "zig" then
+    return { kind = "zig", id = plugin.id, symbol = handler.symbol, import = handler.import or handler.symbol }
+  end
+  return { kind = "none", id = plugin.id }
+end
+
+local function plugin_descriptor(plugin)
+  return {
+    id = plugin.id,
+    kind = plugin.kind,
+    handler = plugin_handler_descriptor(plugin),
+  }
+end
+
 local function partition_rows(partitions)
   local rows = {}
   local function add(kind, id, hash)
@@ -1436,11 +1514,13 @@ local function partition_rows(partitions)
   add("handlers", "all", partitions.handler_hash)
   add("patterns", "all", partitions.pattern_hash)
   add("lua_chunks", "all", partitions.lua_chunk_hash)
+  add("plugins", "all", partitions.plugin_hash)
   add("capabilities", "all", partitions.capability_hash)
   add("runtime", "all", partitions.runtime_hash)
   for _, route in ipairs(partitions.routes) do add("route", route.id, route.hash) end
   for _, handler in ipairs(partitions.handlers) do add("handler", handler.id, handler.hash) end
   for _, chunk in ipairs(partitions.lua_chunks) do add("lua_chunk", chunk.id, chunk.hash) end
+  for _, plugin in ipairs(partitions.plugins or {}) do add("plugin", plugin.id, plugin.hash) end
   for _, pattern in ipairs(partitions.patterns) do add("pattern", pattern.id, pattern.hash) end
   table.sort(rows, function(a, b) return a.key < b.key end)
   return rows
@@ -1524,6 +1604,16 @@ local function build_partitions(graph, routes_text, graph_hash, mode)
   for _, pattern in ipairs(graph.patterns or {}) do pattern_graph[#pattern_graph + 1] = pattern_descriptor(pattern) end
   local lua_chunk_graph = {}
   for _, chunk in ipairs(lua_chunks) do lua_chunk_graph[#lua_chunk_graph + 1] = chunk end
+  local plugin_graph = {}
+  local plugin_list = {}
+  for _, plugin in ipairs(graph.plugins or {}) do
+    plugin_graph[#plugin_graph + 1] = plugin_descriptor(plugin)
+    plugin_list[#plugin_list + 1] = { id = plugin.id, kind = plugin.kind, hash = hash_zon(plugin_descriptor(plugin)) }
+    if plugin.handler and plugin.handler.kind == "inline_lua" then
+      local lifted = plugin.handler.lifted
+      lua_chunks[#lua_chunks + 1] = { id = plugin.id, path = lifted.chunk_path, hash = hash_text(read_file(lifted.chunk_path) or "") }
+    end
+  end
   return {
     format = "meteorite.partitions.v0",
     graph_hash = graph_hash,
@@ -1531,6 +1621,7 @@ local function build_partitions(graph, routes_text, graph_hash, mode)
     handler_hash = hash_zon(handler_graph),
     pattern_hash = hash_zon(pattern_graph),
     lua_chunk_hash = hash_zon(lua_chunk_graph),
+    plugin_hash = hash_zon(plugin_graph),
     capability_hash = hash_zon(capability_descriptor(graph.capabilities or {})),
     runtime_hash = hash_zon(runtime),
     routes_zon_hash = hash_text(routes_text),
@@ -1538,6 +1629,7 @@ local function build_partitions(graph, routes_text, graph_hash, mode)
     handlers = handlers,
     patterns = patterns,
     lua_chunks = lua_chunks,
+    plugins = plugin_list,
     runtime = runtime,
   }
 end

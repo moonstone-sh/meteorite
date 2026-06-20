@@ -302,6 +302,35 @@ pub fn compile(comptime spec: anytype) type {
             return dispatchMatchedRoute(route, allocator, io, request, req_path, captures);
         }
 
+        fn executeScopePlugins(comptime route: graph.Route, ctx: *Context) !bool {
+            inline for (route.scope.plugins) |plugin_id| {
+                if (comptime graph.pluginById(plugin_id)) |plugin| {
+                    const short_circuit = try executePlugin(plugin, ctx);
+                    if (short_circuit) return true;
+                }
+            }
+            return false;
+        }
+
+        fn executePlugin(comptime plugin: graph.PluginDescriptor, ctx: *Context) !bool {
+            switch (plugin.handler) {
+                .none => return false,
+                .inline_lua => |handler| {
+                    const short_circuit = try lua_runtime.callPlugin(handler, ctx);
+                    if (short_circuit) return true;
+                },
+                .lua_file => |handler| {
+                    const short_circuit = try lua_runtime.callPlugin(handler, ctx);
+                    if (short_circuit) return true;
+                },
+                .zig_symbol => |handler| {
+                    _ = handler;
+                    // Zig plugin symbols are not executed in v0.1
+                },
+            }
+            return false;
+        }
+
         fn dispatchMatchedRoute(comptime route: graph.Route, allocator: std.mem.Allocator, io: Io, request: *backend.Request, req_path: []const u8, captures: Captures) !bool {
             if (!try enforceRouteTargetLimits(request, req_path, route)) return true;
             if (!matchQuery(route.query, request)) {
@@ -310,6 +339,7 @@ pub fn compile(comptime spec: anytype) type {
             }
             if (!try enforceBodyLimit(allocator, request, route)) return true;
             var ctx = Context{ .allocator = allocator, .io = io, .request = request, .captures = captures, .route = route };
+            if (try executeScopePlugins(route, &ctx)) return true;
             switch (route.handler) {
                 .zig_symbol => try graph.bindings.callRoute(route.id, &ctx),
                 .zig_file => |handler| try ctx.text(501, handler.path),
@@ -729,6 +759,13 @@ pub fn compile(comptime spec: anytype) type {
 
             pub fn json(self: *Context, status: u16, response_body: []const u8) !void {
                 try self.bytes(status, "application/json", response_body);
+            }
+
+            pub fn scope(self: *Context, name: []const u8) ?[]const u8 {
+                for (self.route.scope.context) |ref| {
+                    if (std.mem.eql(u8, ref.key, name)) return ref.value;
+                }
+                return null;
             }
 
         };
