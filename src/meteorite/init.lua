@@ -15,6 +15,9 @@ local profile_mod = require("meteorite.profile")
 ---@field body? {max?: number|string, [string]: any}
 ---@field memory? {max_body?: number|string, request_arena?: number|string}
 ---@field capabilities? table<string, any>
+---@field plugins? table
+---@field context? table
+---@field id? string
 
 ---@alias MeteoriteHandler string|fun(c: MeteoriteContext): any|{kind: "lua", module: string, path?: string}|{kind: "zig", symbol: string}|{kind: "zig_file", path: string, decl?: string}
 
@@ -34,9 +37,53 @@ end
 
 local function add_route(self, method, path, options, handler)
   path, options, handler = normalize_args(path, options, handler)
+  if self.__meteorite_scope then
+    options.scope = self.__meteorite_scope
+  end
   local declaration = route.declare(method, path, options, handler)
   self.routes[#self.routes + 1] = declaration
   return declaration
+end
+
+local function join_path(prefix, path)
+  if prefix == nil or prefix == "" or prefix == "/" then return path end
+  if path == "/" then return prefix end
+  return prefix:gsub("/$", "") .. path
+end
+
+local function merge_map(parent, child)
+  local out = {}
+  for k, v in pairs(parent or {}) do out[k] = v end
+  for k, v in pairs(child or {}) do out[k] = v end
+  return out
+end
+
+local function append_list(parent, child)
+  local out = {}
+  for _, value in ipairs(parent or {}) do out[#out + 1] = value end
+  for _, value in ipairs(child or {}) do out[#out + 1] = value end
+  return out
+end
+
+local function root_scope()
+  return { id = "root", parent = "", path_prefix = "", chain = {}, plugins = {}, context = {} }
+end
+
+local function scope_ref(scope)
+  return { id = scope.id or "root", path_prefix = scope.path_prefix or "" }
+end
+
+local function scope_chain(parent_scope, mounted_scope)
+  local out = {}
+  for _, item in ipairs(parent_scope.chain or {}) do out[#out + 1] = item end
+  out[#out + 1] = scope_ref(mounted_scope)
+  return out
+end
+
+local function scope_id(prefix)
+  local value = tostring(prefix or "/"):gsub("^/", ""):gsub("/$", "")
+  if value == "" then return "root" end
+  return value:gsub("%W", "_")
 end
 
 ---@class MeteoriteApp
@@ -58,6 +105,8 @@ end
 ---@field delete fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table
 ---@field delete fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table
 ---@field use fun(self: MeteoriteApp, plugin_or_middleware: table|function, options?: table): MeteoriteApp
+---@field mount fun(self: MeteoriteApp, prefix: string, options_or_fn?: table|function, maybe_fn?: function): MeteoriteApp
+---@field scope fun(self: MeteoriteApp, prefix: string, options_or_fn?: table|function, maybe_fn?: function): MeteoriteApp
 ---@field capability fun(self: MeteoriteApp, kind: string, spec: table): MeteoriteApp
 ---@field normalize fun(self: MeteoriteApp, opts?: {mode?: string}): table
 ---@field __meteorite_app true
@@ -115,6 +164,49 @@ function App:use(plugin_or_middleware, options)
   return self
 end
 
+---@param prefix string
+---@param options_or_fn? table|function
+---@param maybe_fn? function
+---@return MeteoriteApp
+function App:mount(prefix, options_or_fn, maybe_fn)
+  local options = type(options_or_fn) == "table" and options_or_fn or {}
+  local build_fn = type(options_or_fn) == "function" and options_or_fn or maybe_fn
+  assert(type(prefix) == "string" and prefix:sub(1, 1) == "/", "mount prefix must start with /")
+  assert(type(build_fn) == "function", "mount requires a function")
+  local parent_scope = self.__meteorite_scope or root_scope()
+  local mounted_scope = {
+    id = options.id or scope_id(join_path(parent_scope.path_prefix or "", prefix)),
+    parent = parent_scope.id or "root",
+    path_prefix = join_path(parent_scope.path_prefix or "", prefix),
+    plugins = append_list(parent_scope.plugins, options.plugins),
+    context = merge_map(parent_scope.context, options.context),
+  }
+  mounted_scope.chain = scope_chain(parent_scope, mounted_scope)
+  local child = setmetatable({
+    name = self.name,
+    routes = {},
+    middleware = {},
+    capabilities = self.capabilities,
+    cache = self.cache,
+    options = self.options,
+    profile = self.profile,
+    __meteorite_scope = mounted_scope,
+    __meteorite_app = true,
+  }, App)
+  build_fn(child)
+  for _, declaration in ipairs(child.routes) do
+    declaration.raw_path = join_path(prefix, declaration.raw_path)
+    declaration.path = { segments = route.parse_path(declaration.raw_path) }
+    declaration.params = merge_map(options.params, declaration.params)
+    declaration.query = merge_map(options.query, declaration.query)
+    declaration.capabilities = merge_map(options.capabilities, declaration.capabilities)
+    self.routes[#self.routes + 1] = declaration
+  end
+  return self
+end
+
+App.scope = App.mount
+
 ---@param kind string
 ---@param spec table
 ---@return MeteoriteApp
@@ -169,6 +261,7 @@ function M.app(opts)
       cache = {},
       options = opts,
       profile = opts.profile,
+      __meteorite_scope = root_scope(),
       __meteorite_app = true,
     }, App)
 end

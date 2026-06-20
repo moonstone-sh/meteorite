@@ -221,8 +221,8 @@ pub fn respondText(req: *Request, status: u16, body: []const u8) !void {
 }
 
 pub fn respondBytes(req: *Request, status: u16, content_type: []const u8, body: []const u8) !void {
-    if (status == 200 and std.mem.eql(u8, content_type, "text/plain; charset=utf-8") and body.len <= 4096) {
-        return respondSmall(req, "200 OK", content_type, body);
+    if (std.mem.eql(u8, content_type, "text/plain; charset=utf-8") and body.len <= 4096) {
+        return respondSmall(req, reasonFromCode(status), content_type, body);
     }
     try req.inner.respond(body, .{
         .status = statusFromCode(status),
@@ -252,10 +252,10 @@ pub fn finish(_: *Request) !void {}
 const raw_ok_keepalive = "HTTP/1.1 200 OK\r\ncontent-type: text/plain; charset=utf-8\r\ncontent-length: 2\r\nconnection: keep-alive\r\n\r\nok";
 const raw_ok_close = "HTTP/1.1 200 OK\r\ncontent-type: text/plain; charset=utf-8\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok";
 
-fn respondSmall(req: *Request, comptime reason: []const u8, content_type: []const u8, body: []const u8) !void {
+fn respondSmall(req: *Request, reason: []const u8, content_type: []const u8, body: []const u8) !void {
     var response_buffer: [8192]u8 = undefined;
     const connection = if (req.inner.head.keep_alive) "keep-alive" else "close";
-    const response = try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 " ++ reason ++ "\r\ncontent-type: {s}\r\ncontent-length: {d}\r\nconnection: {s}\r\n\r\n{s}", .{ content_type, body.len, connection, body });
+    const response = try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\nconnection: {s}\r\n\r\n{s}", .{ reason, content_type, body.len, connection, body });
     try writeRaw(req, response);
 }
 
@@ -283,5 +283,19 @@ fn statusFromCode(code: u16) std.http.Status {
         500 => .internal_server_error,
         501 => .not_implemented,
         else => .ok,
+    };
+}
+
+fn reasonFromCode(code: u16) []const u8 {
+    return switch (code) {
+        200 => "200 OK",
+        400 => "400 Bad Request",
+        404 => "404 Not Found",
+        405 => "405 Method Not Allowed",
+        413 => "413 Payload Too Large",
+        414 => "414 URI Too Long",
+        500 => "500 Internal Server Error",
+        501 => "501 Not Implemented",
+        else => "200 OK",
     };
 }

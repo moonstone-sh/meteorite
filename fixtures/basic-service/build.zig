@@ -8,6 +8,7 @@ pub fn build(b: *std.Build) void {
     const fast_http_strategy = "single";
     const fast_http_workers: u32 = 0;
     const fast_http_queue: u32 = 1024;
+    const router_dispatch = b.option([]const u8, "router-dispatch", "Router dispatch strategy: method_buckets, static_fast_path, param_matchers, or legacy_scan") orelse "method_buckets";
     const hybrid_profile = "default";
     const lua_runtime = !std.mem.eql(u8, mode, "release-static");
     const lua_state_strategy = if (lua_runtime and std.mem.eql(u8, hybrid_profile, "optimized")) "per_thread_cached_refs" else if (lua_runtime) "per_request_state" else "none";
@@ -24,13 +25,14 @@ pub fn build(b: *std.Build) void {
         \\pub const lua_runtime = {};
         \\pub const hybrid_profile = "{s}";
         \\pub const lua_state_strategy = "{s}";
+        \\pub const router_dispatch = "{s}";
         \\pub const zig_optimize = @tagName(builtin.mode);
         \\pub const cpu_arch = @tagName(builtin.cpu.arch);
         \\pub const os_tag = @tagName(builtin.os.tag);
         \\pub const abi = @tagName(builtin.abi);
         \\pub const target = cpu_arch ++ "-" ++ os_tag ++ "-" ++ abi;
-        \\\
-    , .{ mode, backend, fast_http_strategy, fast_http_workers, fast_http_queue, lua_runtime, hybrid_profile, lua_state_strategy }) catch @panic("OOM");
+        \\
+    , .{ mode, backend, fast_http_strategy, fast_http_workers, fast_http_queue, lua_runtime, hybrid_profile, lua_state_strategy, router_dispatch }) catch @panic("OOM");
     const write_build_info = b.addWriteFiles();
     const build_info_file = write_build_info.add(".meteorite/graph/current/build_info.zig", build_info_content);
     const build_info_module = b.createModule(.{
@@ -45,6 +47,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    graph_module.addImport("meteorite_pattern", b.createModule(.{
+        .root_source_file = b.path("../../native/src/pattern.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
     const ctx_module = b.createModule(.{
         .root_source_file = b.path(".meteorite/graph/current/ctx.zig"),
         .target = target,

@@ -20,12 +20,41 @@ pub const meteorite_pattern_module = @import("meteorite_pattern");
 pub const DfaMatcher = meteorite_pattern_module.DfaMatcher;
 pub const patterns = meteorite_pattern_module.patterns;
 
+const LuaStats = struct {
+    lua_states_created: u64 = 0,
+    lua_handler_refs_loaded: u64 = 0,
+    lua_handler_calls: u64 = 0,
+    lua_errors: u64 = 0,
+    lua_state_reuse_hits: u64 = 0,
+    lua_state_reuse_misses: u64 = 0,
+    per_thread_state_count: u64 = 0,
+};
+
+const LuaRuntimeUnavailable = struct {
+    pub const lua_state_strategy = "none";
+    pub const lua_handler_ref_strategy = "none";
+    pub const capability_store_strategy = "none";
+    pub const require_cache_strategy = "none";
+
+    pub fn snapshotStats() LuaStats {
+        return .{};
+    }
+
+    pub fn call(comptime handler: anytype, ctx: anytype) !void {
+        _ = handler;
+        try ctx.text(501, "handler requires Lua runtime");
+    }
+};
+
 
 pub fn compile(comptime spec: anytype) type {
     return struct {
         const Self = @This();
         const graph = spec.graph;
         const backend = spec.backend;
+        const build_info = @import("build_options");
+        const lua_runtime = if (@hasField(@TypeOf(spec), "lua_runtime")) spec.lua_runtime else LuaRuntimeUnavailable;
+        const dev_reload_enabled = std.mem.eql(u8, build_info.meteorite_mode, "dev") or std.mem.eql(u8, build_info.meteorite_mode, "hybrid_dev");
         const graph_requires_lua = graphRequiresLua();
         const inline_lua_handlers = countHandlers(.inline_lua);
         const zig_handlers = countZigHandlers();
@@ -181,15 +210,14 @@ pub fn compile(comptime spec: anytype) type {
 
         pub fn countersJson(allocator: std.mem.Allocator) ![]const u8 {
             const c = backend.snapshotCounters();
-            const lua = spec.lua_runtime.snapshotStats();
+            const lua = lua_runtime.snapshotStats();
             return std.fmt.allocPrint(allocator, "{{\"backend\":\"{s}\",\"connection_strategy\":\"{s}\",\"bounded\":{},\"active_connections\":{d},\"total_connections\":{d},\"accepted_connections\":{d},\"threads_spawned\":{d},\"requests_served\":{d},\"requests_per_connection\":{d},\"keepalive_reuse_count\":{d},\"connection_close_count\":{d},\"bytes_read\":{d},\"bytes_written\":{d},\"connection_errors\":{d},\"max_active_connections\":{d},\"queue_depth\":{d},\"max_queue_depth\":{d},\"dropped_connections\":{d},\"lua_states_created\":{d},\"lua_handler_refs_loaded\":{d},\"lua_handler_calls\":{d},\"lua_errors\":{d},\"lua_state_reuse_hits\":{d},\"lua_state_reuse_misses\":{d},\"per_thread_state_count\":{d}}}", .{ backend.name, backend.connection_strategy, backend.bounded, c.active_connections, c.total_connections, c.accepted_connections, c.threads_spawned, c.requests_served, c.requests_per_connection, c.keepalive_reuse_count, c.connection_close_count, c.bytes_read, c.bytes_written, c.connection_errors, c.max_active_connections, c.queue_depth, c.max_queue_depth, c.dropped_connections, lua.lua_states_created, lua.lua_handler_refs_loaded, lua.lua_handler_calls, lua.lua_errors, lua.lua_state_reuse_hits, lua.lua_state_reuse_misses, lua.per_thread_state_count });
         }
 
         pub fn metaJson(allocator: std.mem.Allocator) ![]const u8 {
-            const build_info = @import("build_options");
             const c = backend.snapshotCounters();
-            const lua = spec.lua_runtime.snapshotStats();
-            const prefix = try std.fmt.allocPrint(allocator, "{{\"meteorite_mode\":\"{s}\",\"zig_optimize\":\"{s}\",\"target\":\"{s}\",\"backend\":\"{s}\",\"connection_strategy\":\"{s}\",\"backend_strategy\":\"{s}\",\"worker_strategy\":\"{s}\",\"bounded\":{},\"fast_http_workers\":{d},\"fast_http_queue\":{d},\"worker_count\":{d},\"lua_runtime\":{},\"hybrid_profile\":\"{s}\",\"lua_state_strategy\":\"{s}\",\"lua_handler_ref_strategy\":\"{s}\",\"capability_store_strategy\":\"{s}\",\"require_cache_strategy\":\"{s}\"", .{ build_info.meteorite_mode, build_info.zig_optimize, build_info.target, backend.name, backend.connection_strategy, backend.connection_strategy, backend.connection_strategy, backend.bounded, build_info.fast_http_workers, build_info.fast_http_queue, c.threads_spawned, build_info.lua_runtime, build_info.hybrid_profile, spec.lua_runtime.lua_state_strategy, spec.lua_runtime.lua_handler_ref_strategy, spec.lua_runtime.capability_store_strategy, spec.lua_runtime.require_cache_strategy });
+            const lua = lua_runtime.snapshotStats();
+            const prefix = try std.fmt.allocPrint(allocator, "{{\"meteorite_mode\":\"{s}\",\"zig_optimize\":\"{s}\",\"target\":\"{s}\",\"backend\":\"{s}\",\"connection_strategy\":\"{s}\",\"backend_strategy\":\"{s}\",\"worker_strategy\":\"{s}\",\"bounded\":{},\"fast_http_workers\":{d},\"fast_http_queue\":{d},\"router_dispatch\":\"{s}\",\"worker_count\":{d},\"lua_runtime\":{},\"hybrid_profile\":\"{s}\",\"lua_state_strategy\":\"{s}\",\"lua_handler_ref_strategy\":\"{s}\",\"capability_store_strategy\":\"{s}\",\"require_cache_strategy\":\"{s}\"", .{ build_info.meteorite_mode, build_info.zig_optimize, build_info.target, backend.name, backend.connection_strategy, backend.connection_strategy, backend.connection_strategy, backend.bounded, build_info.fast_http_workers, build_info.fast_http_queue, build_info.router_dispatch, c.threads_spawned, build_info.lua_runtime, build_info.hybrid_profile, lua_runtime.lua_state_strategy, lua_runtime.lua_handler_ref_strategy, lua_runtime.capability_store_strategy, lua_runtime.require_cache_strategy });
             defer allocator.free(prefix);
             const suffix = try std.fmt.allocPrint(allocator, ",\"active_connections\":{d},\"total_connections\":{d},\"accepted_connections\":{d},\"threads_spawned\":{d},\"requests_served\":{d},\"requests_per_connection\":{d},\"bytes_read\":{d},\"bytes_written\":{d},\"connection_errors\":{d},\"max_active_connections\":{d},\"queue_depth\":{d},\"max_queue_depth\":{d},\"dropped_connections\":{d},\"lua_states_created\":{d},\"lua_handler_refs_loaded\":{d},\"lua_handler_calls\":{d},\"lua_errors\":{d},\"lua_state_reuse_hits\":{d},\"lua_state_reuse_misses\":{d},\"per_thread_state_count\":{d}}}", .{ c.active_connections, c.total_connections, c.accepted_connections, c.threads_spawned, c.requests_served, c.requests_per_connection, c.bytes_read, c.bytes_written, c.connection_errors, c.max_active_connections, c.queue_depth, c.max_queue_depth, c.dropped_connections, lua.lua_states_created, lua.lua_handler_refs_loaded, lua.lua_handler_calls, lua.lua_errors, lua.lua_state_reuse_hits, lua.lua_state_reuse_misses, lua.per_thread_state_count });
             defer allocator.free(suffix);
@@ -208,29 +236,114 @@ pub fn compile(comptime spec: anytype) type {
                 const json = try countersJson(allocator);
                 return backend.respondBytes(request, 200, "application/json", json);
             }
-            if (!try enforceGlobalTargetLimits(request, req_path)) return;
-            var path_matched = false;
-
-            inline for (graph.routes) |route| {
-                var captures = Captures{};
-                if (matchPath(route.path, req_path, route.params, &captures)) {
-                    path_matched = true;
-                    if (route.method == req_method) {
-                        if (!try enforceRouteTargetLimits(request, req_path, route)) return;
-                        if (!matchQuery(route.query, request)) return backend.respondText(request, 404, "not found");
-                        if (!try enforceBodyLimit(allocator, request, route)) return;
-                        var ctx = Context{ .allocator = allocator, .io = io, .request = request, .captures = captures, .route = route };
-                        switch (route.handler) {
-                            .zig_symbol => return graph.bindings.callRoute(route.id, &ctx),
-                            .zig_file => |handler| return ctx.text(501, handler.path),
-                            .inline_lua => |handler| return callLuaHandler(handler, &ctx),
-                            .lua_file => |handler| return callLuaHandler(handler, &ctx),
-                        }
+            if (comptime dev_reload_enabled) {
+                if ((req_method == .GET or req_method == .POST) and std.mem.eql(u8, req_path, "/__meteorite/reload-lua")) {
+                    if (@hasDecl(lua_runtime, "reloadAll")) {
+                        try lua_runtime.reloadAll();
+                        return backend.respondText(request, 200, "reloaded");
                     }
+                    return backend.respondText(request, 501, "lua reload unavailable");
                 }
             }
-            if (path_matched) return backend.respondText(request, 405, "method not allowed");
+            if (!try enforceGlobalTargetLimits(request, req_path)) return;
+
+            if (comptime std.mem.eql(u8, build_info.router_dispatch, "legacy_scan")) {
+                if (try dispatchLegacyScan(req_method, allocator, io, request, req_path)) return;
+            } else {
+                switch (req_method) {
+                    .GET => if (try dispatchRoutes(graph.get_routes, allocator, io, request, req_path)) return,
+                    .POST => if (try dispatchRoutes(graph.post_routes, allocator, io, request, req_path)) return,
+                    .PUT => if (try dispatchRoutes(graph.put_routes, allocator, io, request, req_path)) return,
+                    .PATCH => if (try dispatchRoutes(graph.patch_routes, allocator, io, request, req_path)) return,
+                    .DELETE => if (try dispatchRoutes(graph.delete_routes, allocator, io, request, req_path)) return,
+                    .OTHER => if (try dispatchRoutes(graph.other_routes, allocator, io, request, req_path)) return,
+                }
+            }
+            if (pathMatchedAnyRoute(req_path)) return backend.respondText(request, 405, "method not allowed");
             return backend.respondText(request, 404, "not found");
+        }
+
+        fn dispatchLegacyScan(req_method: graph.Method, allocator: std.mem.Allocator, io: Io, request: *backend.Request, req_path: []const u8) !bool {
+            inline for (graph.routes) |route| {
+                if (route.method == req_method and try dispatchRouteGeneric(route, allocator, io, request, req_path)) return true;
+            }
+            return false;
+        }
+
+        fn dispatchRoutes(comptime routes: anytype, allocator: std.mem.Allocator, io: Io, request: *backend.Request, req_path: []const u8) !bool {
+            inline for (routes) |route| {
+                if (try dispatchRoute(route, allocator, io, request, req_path)) return true;
+            }
+            return false;
+        }
+
+        fn dispatchRoute(comptime route: graph.Route, allocator: std.mem.Allocator, io: Io, request: *backend.Request, req_path: []const u8) !bool {
+            if (comptime std.mem.eql(u8, build_info.router_dispatch, "static_fast_path") or std.mem.eql(u8, build_info.router_dispatch, "param_matchers")) {
+                return dispatchRouteStaticFast(route, allocator, io, request, req_path);
+            }
+            return dispatchRouteGeneric(route, allocator, io, request, req_path);
+        }
+
+        fn dispatchRouteGeneric(comptime route: graph.Route, allocator: std.mem.Allocator, io: Io, request: *backend.Request, req_path: []const u8) !bool {
+            var captures = Captures{};
+            if (!matchPath(route.path, req_path, route.params, &captures)) return false;
+            return dispatchMatchedRoute(route, allocator, io, request, req_path, captures);
+        }
+
+        fn dispatchRouteStaticFast(comptime route: graph.Route, allocator: std.mem.Allocator, io: Io, request: *backend.Request, req_path: []const u8) !bool {
+            var captures = Captures{};
+            if (comptime isLiteralRoute(route)) {
+                if (!std.mem.eql(u8, req_path, route.raw_path)) return false;
+            } else if (comptime std.mem.eql(u8, build_info.router_dispatch, "param_matchers")) {
+                if (!matchRoutePathSpecialized(route, req_path, &captures)) return false;
+            } else {
+                if (!matchPath(route.path, req_path, route.params, &captures)) return false;
+            }
+            return dispatchMatchedRoute(route, allocator, io, request, req_path, captures);
+        }
+
+        fn dispatchMatchedRoute(comptime route: graph.Route, allocator: std.mem.Allocator, io: Io, request: *backend.Request, req_path: []const u8, captures: Captures) !bool {
+            if (!try enforceRouteTargetLimits(request, req_path, route)) return true;
+            if (!matchQuery(route.query, request)) {
+                try backend.respondText(request, 404, "not found");
+                return true;
+            }
+            if (!try enforceBodyLimit(allocator, request, route)) return true;
+            var ctx = Context{ .allocator = allocator, .io = io, .request = request, .captures = captures, .route = route };
+            switch (route.handler) {
+                .zig_symbol => try graph.bindings.callRoute(route.id, &ctx),
+                .zig_file => |handler| try ctx.text(501, handler.path),
+                .inline_lua => |handler| try callLuaHandler(handler, &ctx),
+                .lua_file => |handler| try callLuaHandler(handler, &ctx),
+            }
+            return true;
+        }
+
+        fn pathMatchedAnyRoute(req_path: []const u8) bool {
+            inline for (graph.routes) |route| {
+                if (comptime (std.mem.eql(u8, build_info.router_dispatch, "static_fast_path") or std.mem.eql(u8, build_info.router_dispatch, "param_matchers")) and isLiteralRoute(route)) {
+                    if (std.mem.eql(u8, req_path, route.raw_path)) return true;
+                    continue;
+                }
+                if (comptime std.mem.eql(u8, build_info.router_dispatch, "param_matchers")) {
+                    var captures = Captures{};
+                    if (matchRoutePathSpecialized(route, req_path, &captures)) return true;
+                    continue;
+                }
+                var captures = Captures{};
+                if (matchPath(route.path, req_path, route.params, &captures)) return true;
+            }
+            return false;
+        }
+
+        fn isLiteralRoute(comptime route: graph.Route) bool {
+            inline for (route.path) |segment| {
+                switch (segment) {
+                    .literal => {},
+                    .param => return false,
+                }
+            }
+            return true;
         }
 
         fn requestTarget(request: *backend.Request) []const u8 {
@@ -298,17 +411,14 @@ pub fn compile(comptime spec: anytype) type {
         }
 
         fn callLuaHandler(comptime handler: anytype, ctx: anytype) !void {
-            if (@hasField(@TypeOf(spec), "lua_runtime")) {
-                return spec.lua_runtime.call(.{
-                    .id = handler.id,
-                    .path = switch (@TypeOf(handler)) {
-                        graph.InlineLuaHandler => handler.chunk_path,
-                        graph.LuaFileHandler => handler.path,
-                        else => @compileError("unsupported Lua handler type"),
-                    },
-                }, ctx);
-            }
-            return ctx.text(501, "handler requires Lua runtime");
+            return lua_runtime.call(.{
+                .id = handler.id,
+                .path = switch (@TypeOf(handler)) {
+                    graph.InlineLuaHandler => handler.chunk_path,
+                    graph.LuaFileHandler => handler.path,
+                    else => @compileError("unsupported Lua handler type"),
+                },
+            }, ctx);
         }
 
         fn graphRequiresLua() bool {
@@ -391,6 +501,33 @@ pub fn compile(comptime spec: anytype) type {
                 }
             }
             return segment_iter.next() == null;
+        }
+
+        fn matchRoutePathSpecialized(comptime route: graph.Route, request_path: []const u8, captures: *Captures) bool {
+            if (route.path.len == 0) return std.mem.eql(u8, request_path, "/");
+            var segment_iter = std.mem.splitScalar(u8, std.mem.trim(u8, request_path, "/"), '/');
+            inline for (route.path) |segment| {
+                const actual = segment_iter.next() orelse return false;
+                switch (segment) {
+                    .literal => |literal| if (!std.mem.eql(u8, literal, actual)) return false,
+                    .param => |name| {
+                        const param = comptime paramSpecFor(route.params, name);
+                        if (!validateParam(param, actual)) return false;
+                        if (param.pattern) |pattern| {
+                            if (!graph.patterns.match(pattern, actual)) return false;
+                        }
+                        if (!captures.add(name, actual)) return false;
+                    },
+                }
+            }
+            return segment_iter.next() == null;
+        }
+
+        fn paramSpecFor(comptime params: []const graph.ParamSpec, comptime name: []const u8) graph.ParamSpec {
+            inline for (params) |param| {
+                if (std.mem.eql(u8, param.name, name)) return param;
+            }
+            return .{ .name = name };
         }
 
         fn validateParam(comptime param: graph.ParamSpec, value: []const u8) bool {

@@ -12,7 +12,7 @@ These benchmarks measure local framework/runtime overhead on a single machine. T
 - Memory usage over time via `bench/collect_memory.sh`
 - Idle RSS, max RSS under load, and max thread count
 - Binary file size and optional section output from `size`
-- Build metadata (`zig_optimize`, target, backend, Meteorite mode, Lua runtime) from `GET /__bench/meta`
+- Build metadata (`zig_optimize`, target, backend, router dispatch, Meteorite mode, Lua runtime) from `GET /__bench/meta`
 - Keep-alive behavior sanity check (`oha` with keep-alive on vs. off)
 - Independent load-generator cross-check with `wrk` when installed
 - Optional CPU counters from `perf stat`
@@ -49,6 +49,13 @@ bench/run.sh --mode release-static --strict-bench
 
 bench/run.sh --mode release-hybrid
 bench/run.sh --duration 60s --concurrency "1,8,32,128,256,512,1024" --strict-bench
+
+# Router dispatch A/B comparison: old full scan vs generated per-method buckets
+bench/run.sh --mode release-static --router-dispatch legacy_scan --out bench/results/router-legacy
+bench/run.sh --mode release-static --router-dispatch method_buckets --out bench/results/router-method-buckets
+bench/run.sh --mode release-static --router-dispatch static_fast_path --out bench/results/router-static-fast-path
+bench/run.sh --mode release-static --router-dispatch param_matchers --out bench/results/router-param-matchers
+python3 bench/compare.py bench/results/router-legacy bench/results/router-method-buckets bench/results/router-static-fast-path bench/results/router-param-matchers
 ```
 
 Defaults:
@@ -60,6 +67,7 @@ concurrency: 1,8,32,128,256,512
 host:        127.0.0.1
 port:        8080
 binary:      dist/server
+router:      method_buckets
 strict:      off
 ```
 

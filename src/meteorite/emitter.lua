@@ -7,11 +7,22 @@ local function mkdir_p(path)
   os.execute("mkdir -p " .. string.format("%q", path))
 end
 
+local function read_existing_file(path)
+  local file = io.open(path, "rb")
+  if not file then return nil end
+  local data = file:read("*a")
+  file:close()
+  return data
+end
+
 local function write_file(path, content)
+  local existing = read_existing_file(path)
+  if existing == content then return false end
   local file, err = io.open(path, "wb")
   if not file then error("cannot write " .. path .. ": " .. tostring(err)) end
   file:write(content)
   file:close()
+  return true
 end
 
 local function capture(command)
@@ -33,6 +44,17 @@ local function hash_text(text)
   return string.format("fnv32:%08x", h)
 end
 
+local function hash_zon(value)
+  return hash_text(zon.encode(value))
+end
+
+local function sorted_keys(value)
+  local keys = {}
+  for key, _ in pairs(value or {}) do keys[#keys + 1] = key end
+  table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+  return keys
+end
+
 local function method_enum(method) return { __meteorite_enum = true, value = method } end
 local function mode_enum(mode) return { __meteorite_enum = true, value = (mode:gsub("-", "_")) } end
 
@@ -44,6 +66,39 @@ end
 
 local function zig_string(value)
   return '"' .. tostring(value):gsub('\\', '\\\\'):gsub('"', '\\"'):gsub('\n', '\\n') .. '"'
+end
+
+local function scope_value(value)
+  if value == nil then return "" end
+  if type(value) == "string" or type(value) == "number" or type(value) == "boolean" then return tostring(value) end
+  if type(value) == "table" then return tostring(value.id or value.name or value.kind or "table") end
+  return type(value)
+end
+
+local function scope_plugin_ref(plugin)
+  if type(plugin) == "string" then return plugin end
+  if type(plugin) == "table" then return tostring(plugin.id or plugin.name or plugin.kind or "plugin") end
+  return type(plugin)
+end
+
+local function normalized_scope(scope)
+  scope = scope or {}
+  local chain = {}
+  for _, item in ipairs(scope.chain or {}) do
+    chain[#chain + 1] = { id = tostring(item.id or "root"), path_prefix = tostring(item.path_prefix or "") }
+  end
+  local plugins = {}
+  for _, plugin in ipairs(scope.plugins or {}) do plugins[#plugins + 1] = scope_plugin_ref(plugin) end
+  local context = {}
+  for _, key in ipairs(sorted_keys(scope.context or {})) do context[#context + 1] = { key = tostring(key), value = scope_value(scope.context[key]) } end
+  return {
+    id = tostring(scope.id or "root"),
+    parent = tostring(scope.parent or ""),
+    path_prefix = tostring(scope.path_prefix or ""),
+    chain = chain,
+    plugins = plugins,
+    context = context,
+  }
 end
 
 local function dirname(path)
@@ -136,6 +191,7 @@ local function route_to_zon(route)
     execution = execution,
     memory = route.memory,
     capabilities = capabilities,
+    scope = normalized_scope(route.scope),
     source = route.source,
   }
 end
@@ -942,53 +998,72 @@ local function pattern_class_map(pattern)
   return pattern.class_map or {}, pattern.class_count or 1
 end
 
-local function emit_pattern_tables(graph, lines)
+local function pattern_module_name(pattern)
+  return "pattern_" .. zig_ident(pattern.id)
+end
+
+local function pattern_module_content(pattern)
+  local lines = {}
+  local class_map, class_count = pattern_class_map(pattern)
+  local state_count = pattern.dfa_states
+  local dead = pattern.dead_state
+  local start = pattern.start_state
+  local max = pattern.max_len
+  local transitions = pattern.transitions
+  local accept = pattern.accept
+  lines[#lines + 1] = "const class_map = [_]u8{"
+  local row = "    "
+  for i, class in ipairs(class_map) do
+    row = row .. tostring(class) .. ", "
+    if i % 32 == 0 then lines[#lines + 1] = row; row = "    " end
+  end
+  if row ~= "    " then lines[#lines + 1] = row end
+  lines[#lines + 1] = "};"
+  lines[#lines + 1] = "const transitions = [_]u16{"
+  for state = 1, state_count do
+    local items = {}
+    for class = 1, class_count do
+      local idx = (state - 1) * class_count + class
+      items[#items + 1] = tostring(transitions[idx] or dead)
+    end
+    lines[#lines + 1] = "    " .. table.concat(items, ", ") .. ","
+  end
+  lines[#lines + 1] = "};"
+  lines[#lines + 1] = "const accept = [_]bool{"
+  local accepts = {}
+  for state = 1, state_count do accepts[#accepts + 1] = accept[state] and "true" or "false" end
+  lines[#lines + 1] = "    " .. table.concat(accepts, ", ") .. ","
+  lines[#lines + 1] = "};"
+  lines[#lines + 1] = "pub const matcher = @import(\"meteorite_pattern\").DfaMatcher(.{ .class_map = &class_map, .transition_table = &transitions, .accept_table = &accept, .class_count = " .. class_count .. ", .start_state = " .. (start - 1) .. ", .dead_state = " .. (dead - 1) .. ", .max_input_bytes = " .. max .. " });"
+  return table.concat(lines, "\n") .. "\n"
+end
+
+local function emit_pattern_modules(graph, output)
+  local dir = output .. "/patterns"
+  mkdir_p(dir)
+  for _, pattern in ipairs(graph.patterns) do
+    write_file(dir .. "/" .. pattern_module_name(pattern) .. ".zig", pattern_module_content(pattern))
+  end
+end
+
+local function emit_pattern_tables(graph, lines, output)
+  emit_pattern_modules(graph, output)
   lines[#lines + 1] = "pub const PatternId = enum { none" .. (#graph.patterns > 0 and "," or "")
   for _, pattern in ipairs(graph.patterns) do lines[#lines + 1] = "    " .. zig_ident(pattern.id) .. "," end
   lines[#lines + 1] = "};"
   lines[#lines + 1] = ""
+  for _, pattern in ipairs(graph.patterns) do
+    lines[#lines + 1] = "const " .. pattern_module_name(pattern) .. " = @import(\"patterns/" .. pattern_module_name(pattern) .. ".zig\");"
+  end
+  if #graph.patterns > 0 then lines[#lines + 1] = "" end
   lines[#lines + 1] = "pub const patterns = struct {"
   lines[#lines + 1] = "    pub fn match(comptime id: PatternId, input: []const u8) bool {"
   if #graph.patterns == 0 then lines[#lines + 1] = "        _ = input;" end
   lines[#lines + 1] = "        return switch (id) {"
   lines[#lines + 1] = "            .none => true,"
-  for _, pattern in ipairs(graph.patterns) do lines[#lines + 1] = "            ." .. zig_ident(pattern.id) .. " => " .. zig_ident(pattern.id) .. ".match(input)," end
+  for _, pattern in ipairs(graph.patterns) do lines[#lines + 1] = "            ." .. zig_ident(pattern.id) .. " => " .. pattern_module_name(pattern) .. ".matcher.match(input)," end
   lines[#lines + 1] = "        };"
   lines[#lines + 1] = "    }"
-  for _, pattern in ipairs(graph.patterns) do
-    local class_map, class_count = pattern_class_map(pattern)
-    local state_count = pattern.dfa_states
-    local dead = pattern.dead_state
-    local start = pattern.start_state
-    local max = pattern.max_len
-    local transitions = pattern.transitions
-    local accept = pattern.accept
-    lines[#lines + 1] = ""
-    lines[#lines + 1] = "    const " .. zig_ident(pattern.id) .. "_class_map = [_]u8{"
-    local row = "        "
-    for i, class in ipairs(class_map) do
-      row = row .. tostring(class) .. ", "
-      if i % 32 == 0 then lines[#lines + 1] = row; row = "        " end
-    end
-    if row ~= "        " then lines[#lines + 1] = row end
-    lines[#lines + 1] = "    };"
-    lines[#lines + 1] = "    const " .. zig_ident(pattern.id) .. "_transitions = [_]u16{"
-    for state = 1, state_count do
-      local items = {}
-      for class = 1, class_count do
-        local idx = (state - 1) * class_count + class
-        items[#items + 1] = tostring(transitions[idx] or dead)
-      end
-      lines[#lines + 1] = "        " .. table.concat(items, ", ") .. ","
-    end
-    lines[#lines + 1] = "    };"
-    lines[#lines + 1] = "    const " .. zig_ident(pattern.id) .. "_accept = [_]bool{"
-    local accepts = {}
-    for state = 1, state_count do accepts[#accepts + 1] = accept[state] and "true" or "false" end
-    lines[#lines + 1] = "        " .. table.concat(accepts, ", ") .. ","
-    lines[#lines + 1] = "    };"
-    lines[#lines + 1] = "    pub const " .. zig_ident(pattern.id) .. " = @import(\"meteorite_pattern\").DfaMatcher(.{ .class_map = &" .. zig_ident(pattern.id) .. "_class_map, .transition_table = &" .. zig_ident(pattern.id) .. "_transitions, .accept_table = &" .. zig_ident(pattern.id) .. "_accept, .class_count = " .. class_count .. ", .start_state = " .. (start - 1) .. ", .dead_state = " .. (dead - 1) .. ", .max_input_bytes = " .. max .. " });"
-  end
   lines[#lines + 1] = "};"
   lines[#lines + 1] = ""
 end
@@ -1073,6 +1148,107 @@ local function emit_capabilities(graph, lines)
   lines[#lines + 1] = ""
 end
 
+local function route_module_name(route)
+  return "route_" .. zig_ident(route.method .. "_" .. route.raw_path .. "_" .. route.id)
+end
+
+local function param_pattern_zig(param)
+  local pattern = "null"
+  local kind = param.type or param.kind or "string"
+  if param.kind == "pattern" then
+    pattern = "." .. zig_ident(param.id)
+    kind = "pattern"
+  elseif param.pattern_id then
+    pattern = "." .. zig_ident(param.pattern_id)
+  end
+  return kind, pattern
+end
+
+local function route_handler_zig(route)
+  local handler = ".{ .inline_lua = .{ .id = " .. zig_string(route.id) .. ", .chunk_path = " .. zig_string((route.handler.lifted or {}).chunk_path or "") .. ", .source_file = " .. zig_string((route.handler.lifted or {}).source_file or tostring(route.source.file)) .. ", .source_line = " .. tostring((route.handler.lifted or {}).source_line or route.source.line or 0) .. ", .source_column = " .. tostring((route.handler.lifted or {}).source_column or route.source.column or 1) .. " } }"
+  if route.handler.kind == "zig" then handler = ".{ .zig_symbol = .{ .id = ." .. route.handler.symbol .. ", .symbol = " .. zig_string(route.handler.import or route.handler.symbol) .. " } }" end
+  if route.handler.kind == "zig_file" then handler = ".{ .zig_file = .{ .id = " .. zig_string(route.handler.symbol) .. ", .path = " .. zig_string(route.handler.path) .. ", .decl = " .. zig_string(route.handler.decl or "handle") .. " } }" end
+  if route.handler.kind == "lua" then handler = ".{ .lua_file = .{ .id = " .. zig_string(route.id) .. ", .path = " .. zig_string(route.handler.path or route.handler.module) .. " } }" end
+  return handler
+end
+
+local function route_runtime_zig(route)
+  return ".{ .requires_lua = " .. tostring(route.runtime.requires_lua) .. ", .requires_http = " .. tostring(route.runtime.requires_http) .. ", .requires_auth = " .. tostring(route.runtime.requires_auth) .. ", .requires_zig_capability = " .. tostring(route.runtime.requires_zig_capability) .. ", .execution_class = ." .. route.runtime.execution_class .. " }"
+end
+
+local function route_execution_zig(route)
+  return ".{ .class = ." .. route.execution.class .. ", .may_block = " .. tostring(route.execution.may_block) .. ", .requires_lua = " .. tostring(route.execution.requires_lua) .. ", .requires_worker_pool = " .. tostring(route.execution.requires_worker_pool) .. " }"
+end
+
+local function route_memory_zig(route)
+  local memory = route.memory
+  return ".{ .profile_name = " .. zig_string(memory.profile_name) .. ", .request_arena_bytes = " .. memory.request_arena_bytes .. ", .max_body_bytes = " .. memory.max_body_bytes .. ", .max_uri_bytes = " .. memory.max_uri_bytes .. ", .max_path_bytes = " .. memory.max_path_bytes .. ", .max_query_bytes = " .. memory.max_query_bytes .. ", .max_query_pairs = " .. memory.max_query_pairs .. ", .max_path_segments = " .. memory.max_path_segments .. ", .max_response_bytes = " .. memory.max_response_bytes .. ", .max_capability_response_bytes = " .. memory.max_capability_response_bytes .. ", .lua_heap_bytes = " .. memory.lua_heap_bytes .. ", .estimated_peak_bytes = " .. memory.estimated_peak_bytes .. " }"
+end
+
+local function route_scope_zig(scope)
+  local normalized = normalized_scope(scope)
+  return ".{ .id = " .. zig_string(normalized.id) .. ", .parent = " .. zig_string(normalized.parent) .. ", .path_prefix = " .. zig_string(normalized.path_prefix) .. ", .chain = &data.scope_chain, .plugins = &data.scope_plugins, .context = &data.scope_context }"
+end
+
+local function route_module_content(route)
+  local lines = {
+    "pub fn route(comptime graph: type) graph.Route {",
+    "    const data = struct {",
+    "        const segments = [_]graph.Segment{",
+  }
+  for _, segment in ipairs(route.path.segments) do
+    if segment.kind == "literal" then lines[#lines + 1] = "            .{ .literal = " .. zig_string(segment.value) .. " },"
+    else lines[#lines + 1] = "            .{ .param = " .. zig_string(segment.name) .. " }," end
+  end
+  lines[#lines + 1] = "        };"
+  lines[#lines + 1] = "        const query = [_]graph.ParamSpec{"
+  for _, query in ipairs(route.query or {}) do
+    local kind, pattern = param_pattern_zig(query)
+    lines[#lines + 1] = "            .{ .name = " .. zig_string(query.name) .. ", .kind = ." .. kind .. ", .max_len = " .. tostring(query.max_len or 0) .. ", .exact_len = " .. tostring(query.exact_len or 0) .. ", .optional = " .. tostring(query.optional == true) .. ", .pattern = " .. pattern .. " },"
+  end
+  lines[#lines + 1] = "        };"
+  lines[#lines + 1] = "        const params = [_]graph.ParamSpec{"
+  for _, param in ipairs(route.params) do
+    local kind, pattern = param_pattern_zig(param)
+    lines[#lines + 1] = "            .{ .name = " .. zig_string(param.name) .. ", .kind = ." .. kind .. ", .max_len = " .. tostring(param.max_len or 0) .. ", .exact_len = " .. tostring(param.exact_len or 0) .. ", .optional = " .. tostring(param.optional == true) .. ", .pattern = " .. pattern .. " },"
+  end
+  lines[#lines + 1] = "        };"
+  lines[#lines + 1] = "        const capabilities = [_]graph.CapabilityRef{"
+  for _, ref in ipairs(route.capabilities or {}) do
+    lines[#lines + 1] = "            .{ ." .. ref.kind .. " = " .. zig_string(ref.name) .. " },"
+  end
+  lines[#lines + 1] = "        };"
+  local scope = normalized_scope(route.scope)
+  lines[#lines + 1] = "        const scope_chain = [_]graph.ScopeRef{"
+  for _, item in ipairs(scope.chain) do
+    lines[#lines + 1] = "            .{ .id = " .. zig_string(item.id) .. ", .path_prefix = " .. zig_string(item.path_prefix) .. " },"
+  end
+  lines[#lines + 1] = "        };"
+  lines[#lines + 1] = "        const scope_plugins = [_][]const u8{"
+  for _, plugin in ipairs(scope.plugins) do
+    lines[#lines + 1] = "            " .. zig_string(plugin) .. ","
+  end
+  lines[#lines + 1] = "        };"
+  lines[#lines + 1] = "        const scope_context = [_]graph.ScopeContextRef{"
+  for _, item in ipairs(scope.context) do
+    lines[#lines + 1] = "            .{ .key = " .. zig_string(item.key) .. ", .value = " .. zig_string(item.value) .. " },"
+  end
+  lines[#lines + 1] = "        };"
+  lines[#lines + 1] = "    };"
+  local scope_zig = route_scope_zig(route.scope)
+  lines[#lines + 1] = "    return .{ .id = " .. zig_string(route.id) .. ", .method = ." .. route.method .. ", .raw_path = " .. zig_string(route.raw_path) .. ", .path = &data.segments, .params = &data.params, .query = &data.query, .memory = " .. route_memory_zig(route) .. ", .max_body_bytes = " .. route.memory.max_body_bytes .. ", .request_arena_bytes = " .. route.memory.request_arena_bytes .. ", .handler = " .. route_handler_zig(route) .. ", .runtime = " .. route_runtime_zig(route) .. ", .execution = " .. route_execution_zig(route) .. ", .capabilities = &data.capabilities, .scope = " .. scope_zig .. " };"
+  lines[#lines + 1] = "}"
+  return table.concat(lines, "\n") .. "\n"
+end
+
+local function emit_route_modules(graph, output)
+  local dir = output .. "/routes"
+  mkdir_p(dir)
+  for _, route in ipairs(graph.routes) do
+    write_file(dir .. "/" .. route_module_name(route) .. ".zig", route_module_content(route))
+  end
+end
+
 local function emit_graph_zig(graph, output)
   local max_arena = 0
   local max_uri, max_path, max_query, max_query_pairs, max_path_segments = 0, 0, 0, 0, 0
@@ -1114,70 +1290,37 @@ local function emit_graph_zig(graph, output)
     "pub const RouteMemory = struct { profile_name: []const u8, request_arena_bytes: usize, max_body_bytes: usize, max_uri_bytes: usize, max_path_bytes: usize, max_query_bytes: usize, max_query_pairs: usize, max_path_segments: usize, max_response_bytes: usize, max_capability_response_bytes: usize, lua_heap_bytes: usize, estimated_peak_bytes: usize };",
     "pub const ParamKind = enum { string, slug, u64, i32, uuid, hex, email, token, bool, pattern };",
     "pub const ParamSpec = struct { name: []const u8, kind: ParamKind = .string, max_len: usize = 0, exact_len: usize = 0, optional: bool = false, pattern: ?PatternId = null };",
-    "pub const Route = struct { id: []const u8, method: Method, raw_path: []const u8, path: []const Segment, params: []const ParamSpec, query: []const ParamSpec, memory: RouteMemory, max_body_bytes: usize, request_arena_bytes: usize, handler: Handler, runtime: RouteRuntime = .{}, execution: RouteExecution = .{}, capabilities: []const CapabilityRef = &.{} };",
+    "pub const ScopeRef = struct { id: []const u8, path_prefix: []const u8 };",
+    "pub const ScopeContextRef = struct { key: []const u8, value: []const u8 };",
+    "pub const RouteScope = struct { id: []const u8 = \"root\", parent: []const u8 = \"\", path_prefix: []const u8 = \"\", chain: []const ScopeRef = &.{}, plugins: []const []const u8 = &.{}, context: []const ScopeContextRef = &.{} };",
+    "pub const Route = struct { id: []const u8, method: Method, raw_path: []const u8, path: []const Segment, params: []const ParamSpec, query: []const ParamSpec, memory: RouteMemory, max_body_bytes: usize, request_arena_bytes: usize, handler: Handler, runtime: RouteRuntime = .{}, execution: RouteExecution = .{}, capabilities: []const CapabilityRef = &.{}, scope: RouteScope = .{} };",
     "",
   }
-  emit_pattern_tables(graph, lines)
+  emit_pattern_tables(graph, lines, output)
 
     emit_capabilities(graph, lines)
 
-  for i, route in ipairs(graph.routes) do
-    lines[#lines + 1] = "const route_" .. i .. "_segments = [_]Segment{"
-    for _, segment in ipairs(route.path.segments) do
-      if segment.kind == "literal" then lines[#lines + 1] = "    .{ .literal = " .. zig_string(segment.value) .. " },"
-      else lines[#lines + 1] = "    .{ .param = " .. zig_string(segment.name) .. " }," end
-    end
-    lines[#lines + 1] = "};"
-    lines[#lines + 1] = "const route_" .. i .. "_query = [_]ParamSpec{"
-    for _, query in ipairs(route.query or {}) do
-      local pattern = "null"
-      local kind = query.type or query.kind or "string"
-      if query.kind == "pattern" then
-        pattern = "." .. zig_ident(query.id)
-        kind = "pattern"
-      elseif query.pattern_id then
-        pattern = "." .. zig_ident(query.pattern_id)
-      end
-      lines[#lines + 1] = "    .{ .name = " .. zig_string(query.name) .. ", .kind = ." .. kind .. ", .max_len = " .. tostring(query.max_len or 0) .. ", .exact_len = " .. tostring(query.exact_len or 0) .. ", .optional = " .. tostring(query.optional == true) .. ", .pattern = " .. pattern .. " },"
-    end
-    lines[#lines + 1] = "};"
-    lines[#lines + 1] = "const route_" .. i .. "_params = [_]ParamSpec{"
-    for _, param in ipairs(route.params) do
-      local pattern = "null"
-      local kind = param.type or param.kind or "string"
-      if param.kind == "pattern" then
-        pattern = "." .. zig_ident(param.id)
-        kind = "pattern"
-      elseif param.pattern_id then
-        pattern = "." .. zig_ident(param.pattern_id)
-      end
-      lines[#lines + 1] = "    .{ .name = " .. zig_string(param.name) .. ", .kind = ." .. kind .. ", .max_len = " .. tostring(param.max_len or 0) .. ", .exact_len = " .. tostring(param.exact_len or 0) .. ", .optional = " .. tostring(param.optional == true) .. ", .pattern = " .. pattern .. " },"
-    end
-    lines[#lines + 1] = "};"
-    lines[#lines + 1] = "const route_" .. i .. "_capabilities = [_]CapabilityRef{"
-    for _, ref in ipairs(route.capabilities or {}) do
-      lines[#lines + 1] = "    .{ ." .. ref.kind .. " = " .. zig_string(ref.name) .. " },"
-    end
-    lines[#lines + 1] = "};"
-    lines[#lines + 1] = "pub const Route" .. i .. "Context = struct {"
-    lines[#lines + 1] = "    pub const method = Method." .. route.method .. ";"
-    lines[#lines + 1] = "    pub const path = " .. zig_string(route.raw_path) .. ";"
-    lines[#lines + 1] = "    pub const params = route_" .. i .. "_params;"
-    lines[#lines + 1] = "};"
+  emit_route_modules(graph, output)
+  for _, route in ipairs(graph.routes) do
+    lines[#lines + 1] = "const " .. route_module_name(route) .. " = @import(\"routes/" .. route_module_name(route) .. ".zig\");"
   end
   lines[#lines + 1] = ""
   lines[#lines + 1] = "pub const routes = [_]Route{"
-  for i, route in ipairs(graph.routes) do
-    local handler = ".{ .inline_lua = .{ .id = " .. zig_string(route.id) .. ", .chunk_path = " .. zig_string((route.handler.lifted or {}).chunk_path or "") .. ", .source_file = " .. zig_string((route.handler.lifted or {}).source_file or tostring(route.source.file)) .. ", .source_line = " .. tostring((route.handler.lifted or {}).source_line or route.source.line or 0) .. ", .source_column = " .. tostring((route.handler.lifted or {}).source_column or route.source.column or 1) .. " } }"
-    if route.handler.kind == "zig" then handler = ".{ .zig_symbol = .{ .id = ." .. route.handler.symbol .. ", .symbol = " .. zig_string(route.handler.import or route.handler.symbol) .. " } }" end
-    if route.handler.kind == "zig_file" then handler = ".{ .zig_file = .{ .id = " .. zig_string(route.handler.symbol) .. ", .path = " .. zig_string(route.handler.path) .. ", .decl = " .. zig_string(route.handler.decl or "handle") .. " } }" end
-    if route.handler.kind == "lua" then handler = ".{ .lua_file = .{ .id = " .. zig_string(route.id) .. ", .path = " .. zig_string(route.handler.path or route.handler.module) .. " } }" end
-    local runtime = ".{ .requires_lua = " .. tostring(route.runtime.requires_lua) .. ", .requires_http = " .. tostring(route.runtime.requires_http) .. ", .requires_auth = " .. tostring(route.runtime.requires_auth) .. ", .requires_zig_capability = " .. tostring(route.runtime.requires_zig_capability) .. ", .execution_class = ." .. route.runtime.execution_class .. " }"
-    local execution = ".{ .class = ." .. route.execution.class .. ", .may_block = " .. tostring(route.execution.may_block) .. ", .requires_lua = " .. tostring(route.execution.requires_lua) .. ", .requires_worker_pool = " .. tostring(route.execution.requires_worker_pool) .. " }"
-    local memory = ".{ .profile_name = " .. zig_string(route.memory.profile_name) .. ", .request_arena_bytes = " .. route.memory.request_arena_bytes .. ", .max_body_bytes = " .. route.memory.max_body_bytes .. ", .max_uri_bytes = " .. route.memory.max_uri_bytes .. ", .max_path_bytes = " .. route.memory.max_path_bytes .. ", .max_query_bytes = " .. route.memory.max_query_bytes .. ", .max_query_pairs = " .. route.memory.max_query_pairs .. ", .max_path_segments = " .. route.memory.max_path_segments .. ", .max_response_bytes = " .. route.memory.max_response_bytes .. ", .max_capability_response_bytes = " .. route.memory.max_capability_response_bytes .. ", .lua_heap_bytes = " .. route.memory.lua_heap_bytes .. ", .estimated_peak_bytes = " .. route.memory.estimated_peak_bytes .. " }"
-    lines[#lines + 1] = "    .{ .id = " .. zig_string(route.id) .. ", .method = ." .. route.method .. ", .raw_path = " .. zig_string(route.raw_path) .. ", .path = &route_" .. i .. "_segments, .params = &route_" .. i .. "_params, .query = &route_" .. i .. "_query, .memory = " .. memory .. ", .max_body_bytes = " .. route.memory.max_body_bytes .. ", .request_arena_bytes = " .. route.memory.request_arena_bytes .. ", .handler = " .. handler .. ", .runtime = " .. runtime .. ", .execution = " .. execution .. ", .capabilities = &route_" .. i .. "_capabilities },"
+  for _, route in ipairs(graph.routes) do
+    lines[#lines + 1] = "    " .. route_module_name(route) .. ".route(@This()),"
   end
   lines[#lines + 1] = "};"
+  lines[#lines + 1] = ""
+  local method_buckets = { GET = {}, POST = {}, PUT = {}, PATCH = {}, DELETE = {}, OTHER = {} }
+  for i, route in ipairs(graph.routes) do method_buckets[route.method][#method_buckets[route.method] + 1] = i - 1 end
+  local method_names = { "GET", "POST", "PUT", "PATCH", "DELETE", "OTHER" }
+  for _, method in ipairs(method_names) do
+    lines[#lines + 1] = "pub const " .. method:lower() .. "_routes = [_]Route{"
+    for _, route_index in ipairs(method_buckets[method]) do
+      lines[#lines + 1] = "    routes[" .. tostring(route_index) .. "],"
+    end
+    lines[#lines + 1] = "};"
+  end
   lines[#lines + 1] = ""
   write_file(output .. "/graph.zig", table.concat(lines, "\n"))
 end
@@ -1209,6 +1352,213 @@ local function emit_patterns_report(graph, output)
   write_file(output .. "/patterns.graph.json", table.concat(lines, "\n"))
 end
 
+local function handler_descriptor(route)
+  local handler = route.handler or {}
+  if handler.kind == "zig" then
+    return { kind = "zig", symbol = handler.symbol, import = handler.import or handler.symbol }
+  elseif handler.kind == "zig_file" then
+    return { kind = "zig_file", symbol = handler.symbol, path = handler.path, decl = handler.decl or "handle", source_hash = hash_text(read_file(handler.path) or "") }
+  elseif handler.kind == "lua" then
+    local path = handler.path or handler.module
+    return { kind = "lua", id = route.id, path = path }
+  end
+  local lifted = handler.lifted or {}
+  local chunk_path = lifted.chunk_path or ""
+  return {
+    kind = "inline_lua",
+    id = route.id,
+    chunk_path = chunk_path,
+    source_file = lifted.source_file or tostring(route.source and route.source.file or ""),
+    source_line = lifted.source_line or (route.source and route.source.line) or 0,
+    source_column = lifted.source_column or (route.source and route.source.column) or 1,
+  }
+end
+
+local function route_shape_descriptor(route)
+  local segments = {}
+  for _, segment in ipairs(route.path.segments or {}) do
+    if segment.kind == "literal" then
+      segments[#segments + 1] = { kind = "literal", value = segment.value }
+    else
+      segments[#segments + 1] = { kind = "param", name = segment.name }
+    end
+  end
+  local params = {}
+  for _, param in ipairs(route.params or {}) do params[#params + 1] = schema_to_zon(param) end
+  local query = {}
+  for _, item in ipairs(route.query or {}) do query[#query + 1] = schema_to_zon(item) end
+  local capabilities = {}
+  for _, ref in ipairs(route.capabilities or {}) do capabilities[#capabilities + 1] = { kind = ref.kind, name = ref.name } end
+  table.sort(capabilities, function(a, b) return (a.kind .. ":" .. a.name) < (b.kind .. ":" .. b.name) end)
+  return {
+    id = route.id,
+    method = method_enum(route.method),
+    raw_path = route.raw_path,
+    path = { segments = segments },
+    params = params,
+    query = query,
+    memory = route.memory,
+    execution = route.execution,
+    runtime = route.runtime,
+    capabilities = capabilities,
+    scope = normalized_scope(route.scope),
+  }
+end
+
+local function pattern_descriptor(pattern)
+  return {
+    id = pattern.id,
+    report = pattern.report,
+    class_count = pattern.class_count,
+    class_map = pattern.class_map,
+    dfa_accept = pattern.dfa_accept,
+    dfa_transitions = pattern.dfa_transitions,
+  }
+end
+
+local function capability_descriptor(capabilities)
+  local out = {}
+  for _, kind in ipairs(sorted_keys(capabilities or {})) do
+    local names = {}
+    for name, value in pairs(capabilities[kind] or {}) do names[#names + 1] = { name = name, value = value } end
+    table.sort(names, function(a, b) return a.name < b.name end)
+    out[#out + 1] = { kind = kind, names = names }
+  end
+  return out
+end
+
+local function partition_rows(partitions)
+  local rows = {}
+  local function add(kind, id, hash)
+    rows[#rows + 1] = { key = kind .. "\t" .. id, kind = kind, id = id, hash = hash }
+  end
+  add("route_graph", "all", partitions.route_graph_hash)
+  add("handlers", "all", partitions.handler_hash)
+  add("patterns", "all", partitions.pattern_hash)
+  add("lua_chunks", "all", partitions.lua_chunk_hash)
+  add("capabilities", "all", partitions.capability_hash)
+  add("runtime", "all", partitions.runtime_hash)
+  for _, route in ipairs(partitions.routes) do add("route", route.id, route.hash) end
+  for _, handler in ipairs(partitions.handlers) do add("handler", handler.id, handler.hash) end
+  for _, chunk in ipairs(partitions.lua_chunks) do add("lua_chunk", chunk.id, chunk.hash) end
+  for _, pattern in ipairs(partitions.patterns) do add("pattern", pattern.id, pattern.hash) end
+  table.sort(rows, function(a, b) return a.key < b.key end)
+  return rows
+end
+
+local function encode_partition_tsv(partitions)
+  local lines = { "kind\tid\thash" }
+  for _, row in ipairs(partition_rows(partitions)) do
+    lines[#lines + 1] = row.kind .. "\t" .. row.id .. "\t" .. row.hash
+  end
+  return table.concat(lines, "\n") .. "\n"
+end
+
+local function parse_partition_tsv(text)
+  local rows = {}
+  if not text then return rows end
+  for line in text:gmatch("[^\n]+") do
+    if line ~= "kind\tid\thash" then
+      local kind, id, hash = line:match("^([^\t]+)\t([^\t]+)\t(.+)$")
+      if kind and id and hash then rows[kind .. "\t" .. id] = { kind = kind, id = id, hash = hash } end
+    end
+  end
+  return rows
+end
+
+local function partition_diagnostics(previous_text, partitions)
+  local previous = parse_partition_tsv(previous_text)
+  local rows = partition_rows(partitions)
+  local changed = {}
+  local current = {}
+  for _, row in ipairs(rows) do
+    current[row.key] = true
+    local old = previous[row.key]
+    if not old then
+      changed[#changed + 1] = { status = "added", kind = row.kind, id = row.id, hash = row.hash }
+    elseif old.hash ~= row.hash then
+      changed[#changed + 1] = { status = "changed", kind = row.kind, id = row.id, old_hash = old.hash, hash = row.hash }
+    end
+  end
+  for key, row in pairs(previous) do
+    if not current[key] then changed[#changed + 1] = { status = "removed", kind = row.kind, id = row.id, old_hash = row.hash } end
+  end
+  table.sort(changed, function(a, b)
+    local ak = a.kind .. "\t" .. a.id .. "\t" .. a.status
+    local bk = b.kind .. "\t" .. b.id .. "\t" .. b.status
+    return ak < bk
+  end)
+  return changed
+end
+
+local function build_partitions(graph, routes_text, graph_hash, mode)
+  local routes = {}
+  local handlers = {}
+  local lua_chunks = {}
+  for _, route in ipairs(graph.routes or {}) do
+    local shape = route_shape_descriptor(route)
+    local handler = handler_descriptor(route)
+    routes[#routes + 1] = { id = route.id, method = route.method, path = route.raw_path, hash = hash_zon(shape) }
+    handlers[#handlers + 1] = { id = route.id, kind = handler.kind, hash = hash_zon(handler) }
+    if handler.kind == "inline_lua" then
+      lua_chunks[#lua_chunks + 1] = { id = route.id, path = handler.chunk_path, hash = hash_text(read_file(handler.chunk_path) or "") }
+    elseif handler.kind == "lua" then
+      lua_chunks[#lua_chunks + 1] = { id = route.id, path = handler.path, hash = hash_text(read_file(handler.path) or "") }
+    end
+  end
+  local patterns = {}
+  for _, pattern in ipairs(graph.patterns or {}) do
+    patterns[#patterns + 1] = { id = pattern.id, hash = hash_zon(pattern_descriptor(pattern)) }
+  end
+  local runtime = {
+    mode = mode_enum(mode),
+    backend = "fast_http",
+    listen = graph.listen or { host = "127.0.0.1", port = 8080 },
+    memory = graph.memory_report,
+  }
+  local route_graph = {}
+  for _, route in ipairs(graph.routes or {}) do route_graph[#route_graph + 1] = route_shape_descriptor(route) end
+  local handler_graph = {}
+  for _, route in ipairs(graph.routes or {}) do handler_graph[#handler_graph + 1] = handler_descriptor(route) end
+  local pattern_graph = {}
+  for _, pattern in ipairs(graph.patterns or {}) do pattern_graph[#pattern_graph + 1] = pattern_descriptor(pattern) end
+  local lua_chunk_graph = {}
+  for _, chunk in ipairs(lua_chunks) do lua_chunk_graph[#lua_chunk_graph + 1] = chunk end
+  return {
+    format = "meteorite.partitions.v0",
+    graph_hash = graph_hash,
+    route_graph_hash = hash_zon(route_graph),
+    handler_hash = hash_zon(handler_graph),
+    pattern_hash = hash_zon(pattern_graph),
+    lua_chunk_hash = hash_zon(lua_chunk_graph),
+    capability_hash = hash_zon(capability_descriptor(graph.capabilities or {})),
+    runtime_hash = hash_zon(runtime),
+    routes_zon_hash = hash_text(routes_text),
+    routes = routes,
+    handlers = handlers,
+    patterns = patterns,
+    lua_chunks = lua_chunks,
+    runtime = runtime,
+  }
+end
+
+local function emit_partition_json(changed, output)
+  local lines = { "[" }
+  for i, item in ipairs(changed) do
+    local has_hash = item.hash ~= nil
+    local has_old_hash = item.old_hash ~= nil
+    lines[#lines + 1] = "  {"
+    lines[#lines + 1] = "    \"status\": " .. json_quote(item.status) .. ","
+    lines[#lines + 1] = "    \"kind\": " .. json_quote(item.kind) .. ","
+    lines[#lines + 1] = "    \"id\": " .. json_quote(item.id) .. ((has_old_hash or has_hash) and "," or "")
+    if has_old_hash then lines[#lines + 1] = "    \"old_hash\": " .. json_quote(item.old_hash) .. (has_hash and "," or "") end
+    if has_hash then lines[#lines + 1] = "    \"hash\": " .. json_quote(item.hash) end
+    lines[#lines + 1] = "  }" .. (i < #changed and "," or "")
+  end
+  lines[#lines + 1] = "]\n"
+  write_file(output .. "/partition-changes.json", table.concat(lines, "\n"))
+end
+
 function emitter.emit(app, opts)
   opts = opts or {}
   local output = opts.output or ".meteorite/graph/current"
@@ -1221,8 +1571,14 @@ function emitter.emit(app, opts)
   local routes_text = zon.encode(routes_zon)
   graph.memory_report = memory_report(graph, routes_text)
   local graph_hash = hash_text(routes_text)
+  local partitions = build_partitions(graph, routes_text, graph_hash, mode)
+  local previous_partitions = read_file(output .. "/partition-hashes.tsv")
+  local partition_changes = partition_diagnostics(previous_partitions, partitions)
   write_file(output .. "/routes.zon", routes_text)
-  write_file(output .. "/manifest.zon", zon.encode({ format = "meteorite.graph.v0", meteorite_version = "0.1.0", graph_hash = graph_hash, mode = mode_enum(mode) }))
+  write_file(output .. "/manifest.zon", zon.encode({ format = "meteorite.graph.v0", meteorite_version = "0.1.0", graph_hash = graph_hash, mode = mode_enum(mode), partitions = { route_graph = partitions.route_graph_hash, handlers = partitions.handler_hash, patterns = partitions.pattern_hash, lua_chunks = partitions.lua_chunk_hash, capabilities = partitions.capability_hash, runtime = partitions.runtime_hash } }))
+  write_file(output .. "/partitions.zon", zon.encode(partitions))
+  write_file(output .. "/partition-hashes.tsv", encode_partition_tsv(partitions))
+  emit_partition_json(partition_changes, output)
   write_file(output .. "/runtime.zon", zon.encode({ mode = mode_enum(mode), lua_runtime = mode ~= "release-static", backend = { __meteorite_enum = true, value = "fast_http" }, workers = { strategy = { __meteorite_enum = true, value = "auto" }, lua_state = { __meteorite_enum = true, value = "single_locked" } }, memory = graph.memory_report }))
   write_file(output .. "/capabilities.zon", zon.encode({ backend = "fast_http", methods = { "GET", "POST", "PUT", "PATCH", "DELETE" }, declared = graph.capabilities or {} }))
   write_file(output .. "/listen.zon", zon.encode(graph.listen or { host = "127.0.0.1", port = 8080 }))
@@ -1237,7 +1593,7 @@ function emitter.emit(app, opts)
   sync_luarc(output)
   emit_bindings(graph, output)
   emit_graph_zig(graph, output)
-  return { graph = graph, graph_hash = graph_hash, output = output }
+  return { graph = graph, graph_hash = graph_hash, partitions = partitions, partition_changes = partition_changes, output = output }
 end
 
 return emitter

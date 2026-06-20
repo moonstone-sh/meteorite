@@ -11,7 +11,7 @@ abi = "5.4"
 
 [scripts]
 "graph" = "lua src/meteorite/cli.lua graph src/main.lua .meteorite/graph/current release-static"
-"dev" = "lua src/meteorite/cli.lua graph fixtures/demo/src/main.lua fixtures/demo/.meteorite/graph/current dev && lua src/meteorite/cli.lua invoke fixtures/demo/src/main.lua GET / && lua src/meteorite/cli.lua invoke fixtures/demo/src/main.lua GET /health"
+"dev" = "lua src/meteorite/dev.lua src/main.lua .meteorite/graph/current hybrid_dev"
 "build" = "zig build install-server"
 "run" = "zig build run"
 "test-fixture" = "LUA_PATH='../ballad/.moonstone/env/share/lua/5.1/?.lua;../ballad/.moonstone/env/share/lua/5.1/?/init.lua;../ballad/src/?.lua;../ballad/src/?/init.lua;;' luajit ../ballad/src/main.lua play partiture-test.lua"

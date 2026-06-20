@@ -26,6 +26,40 @@ moon run build
 ./dist/server
 ```
 
+For development, run the partition-aware supervisor:
+
+```bash
+moon run dev
+```
+
+`moon run dev` regenerates the graph on source changes, rebuilds/restarts for route/native/build changes, and reloads inline Lua handler chunks in-process when only `lua_chunk` partitions changed. The dev loop uses `hybrid_dev`, `std_http`, and the optimized cached Lua runtime so Lua handler edits update without a Zig rebuild or server restart.
+
+Generated route data is split into `.meteorite/graph/current/routes/<route_id>.zig` modules and DFA tables are split into `.meteorite/graph/current/patterns/<pattern_id>.zig` modules. Generated files are written only when content changes, so route-shape or pattern edits touch the affected module instead of rewriting every generated declaration.
+
+Mounted route scopes are represented in the graph now. `app:mount("/orgs/:org_id", { params = { org_id = m.u64() } }, function(api) ... end)` prefixes child routes, inherits declared mount params/query/capabilities, and records a deterministic scope chain. Scope metadata includes `id`, `parent`, `path_prefix`, inherited plugin refs, and context refs, so later scoped plugins and route execution contexts can be wired without changing the route IR shape.
+
+Nested mounts keep the deepest route scope while inheriting parent declarations:
+
+```lua
+app:mount("/orgs/:org_id", {
+  id = "org",
+  params = { org_id = m.u64() },
+  plugins = { "auth" },
+  context = { tenant = "org" },
+}, function(org)
+  org:mount("/projects/:project_id", {
+    id = "project",
+    params = { project_id = m.uuid() },
+    plugins = { "quota" },
+    context = { tenant = "project" },
+  }, function(project)
+    project:get("/users/:id", { params = { id = m.u64() } }, handler)
+  end)
+end)
+```
+
+The generated route becomes `/orgs/:org_id/projects/:project_id/users/:id`, carries all three param validators, and has a scope chain of `org -> project` for future per-scope plugin/context execution.
+
 Smoke test:
 
 ```bash

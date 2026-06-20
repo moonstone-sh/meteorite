@@ -9,6 +9,7 @@ BACKEND="std_http"
 FAST_HTTP_STRATEGY="threaded_probe"
 FAST_HTTP_WORKERS="0"
 FAST_HTTP_QUEUE="1024"
+ROUTER_DISPATCH="method_buckets"
 HYBRID_PROFILE="default"
 DURATION="30s"
 CONCURRENCY="1,8,32,128,256,512"
@@ -37,6 +38,7 @@ Options:
   --fast-http-strategy S  threaded_probe or pool (default: threaded_probe)
   --fast-http-workers N   pool workers; 0 means CPU count (default: 0)
   --fast-http-queue N     pool queue limit (default: 1024)
+  --router-dispatch MODE  method_buckets, static_fast_path, param_matchers, or legacy_scan (default: method_buckets)
   --hybrid-profile PROF   default | optimized, for Meteorite release-hybrid only (default: default)
   --duration DURATION     oha/wrk duration, e.g. 30s (default: 30s)
   --concurrency LIST      comma-separated concurrency list (default: 1,8,32,128,256,512)
@@ -64,6 +66,7 @@ while [[ $# -gt 0 ]]; do
     --fast-http-strategy) FAST_HTTP_STRATEGY="${2:?missing value for --fast-http-strategy}"; shift 2 ;;
     --fast-http-workers) FAST_HTTP_WORKERS="${2:?missing value for --fast-http-workers}"; shift 2 ;;
     --fast-http-queue) FAST_HTTP_QUEUE="${2:?missing value for --fast-http-queue}"; shift 2 ;;
+    --router-dispatch) ROUTER_DISPATCH="${2:?missing value for --router-dispatch}"; shift 2 ;;
     --hybrid-profile) HYBRID_PROFILE="${2:?missing value for --hybrid-profile}"; shift 2 ;;
     --duration) DURATION="${2:?missing value for --duration}"; shift 2 ;;
     --concurrency) CONCURRENCY="${2:?missing value for --concurrency}"; shift 2 ;;
@@ -103,6 +106,11 @@ esac
 case "$FAST_HTTP_STRATEGY" in
   threaded_probe|pool) ;;
   *) echo "unsupported fast-http-strategy: $FAST_HTTP_STRATEGY" >&2; exit 2 ;;
+esac
+
+case "$ROUTER_DISPATCH" in
+  method_buckets|static_fast_path|param_matchers|legacy_scan) ;;
+  *) echo "unsupported router-dispatch: $ROUTER_DISPATCH" >&2; exit 2 ;;
 esac
 
 if ! command -v oha >/dev/null 2>&1; then
@@ -171,10 +179,10 @@ build_server() {
   if [[ "$TARGET" != meteorite ]]; then
     return 0
   fi
-  echo "Building Meteorite server ($MODE, backend=$BACKEND, fast-http-strategy=$FAST_HTTP_STRATEGY, hybrid-profile=$HYBRID_PROFILE)..."
+  echo "Building Meteorite server ($MODE, backend=$BACKEND, fast-http-strategy=$FAST_HTTP_STRATEGY, router-dispatch=$ROUTER_DISPATCH, hybrid-profile=$HYBRID_PROFILE)..."
   local exit_code=0
   if command -v zig >/dev/null 2>&1; then
-    zig build install-server -Dmode="$MODE" -Dbackend="$BACKEND" -Dfast-http-strategy="$FAST_HTTP_STRATEGY" -Dfast-http-workers="$FAST_HTTP_WORKERS" -Dfast-http-queue="$FAST_HTTP_QUEUE" -Dhybrid-profile="$HYBRID_PROFILE" 2>&1 | tee "$OUT/build.txt"
+    zig build install-server -Dmode="$MODE" -Dbackend="$BACKEND" -Dfast-http-strategy="$FAST_HTTP_STRATEGY" -Dfast-http-workers="$FAST_HTTP_WORKERS" -Dfast-http-queue="$FAST_HTTP_QUEUE" -Drouter-dispatch="$ROUTER_DISPATCH" -Dhybrid-profile="$HYBRID_PROFILE" 2>&1 | tee "$OUT/build.txt"
     exit_code=${PIPESTATUS[0]}
   else
     echo "error: zig is required to build the server" >&2
@@ -562,6 +570,7 @@ write_bench_json() {
   "fast_http_strategy": "$FAST_HTTP_STRATEGY",
   "fast_http_workers": "$FAST_HTTP_WORKERS",
   "fast_http_queue": "$FAST_HTTP_QUEUE",
+  "router_dispatch": "$ROUTER_DISPATCH",
   "hybrid_profile": "$HYBRID_PROFILE",
   "duration": "$DURATION",
   "concurrency": "$CONCURRENCY",

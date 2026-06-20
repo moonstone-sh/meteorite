@@ -28,6 +28,8 @@ local function parse_path(path)
   return segments
 end
 
+route.parse_path = parse_path
+
 local function handler_shape(handler)
   local kind = type(handler)
   if kind == "string" then return { kind = "zig", symbol = handler } end
@@ -36,6 +38,10 @@ local function handler_shape(handler)
   if kind == "table" and handler.kind == "zig" then return { kind = "zig", symbol = handler.symbol } end
   if kind == "table" and handler.kind == "zig_file" then return { kind = "zig_file", path = handler.path, decl = handler.decl or "handle" } end
   error("unsupported handler shape: " .. kind)
+end
+
+local function root_scope()
+  return { id = "root", parent = "", path_prefix = "", chain = {}, plugins = {}, context = {} }
 end
 
 function route.declare(method, path, options, handler)
@@ -51,6 +57,7 @@ function route.declare(method, path, options, handler)
     query = options.query or {},
     memory = memory,
     capabilities = options.capabilities or {},
+    scope = options.scope or root_scope(),
     handler = handler_shape(handler),
     source = source_info(4),
   }
@@ -258,6 +265,7 @@ function route.normalize_app(app, opts)
         requires_worker_pool = false,
       },
       capabilities = declaration.capabilities,
+      scope = declaration.scope or root_scope(),
       memory = memory,
       source = declaration.source,
     }

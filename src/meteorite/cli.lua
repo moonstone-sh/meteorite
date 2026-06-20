@@ -29,6 +29,30 @@ if command == "graph" then
   print("  mode: " .. mode)
   print("  backend: fast_http")
   print("  routes: " .. tostring(#result.graph.routes))
+  if result.partitions then
+    print("  partitions:")
+    print("    route graph: " .. result.partitions.route_graph_hash)
+    print("    handlers: " .. result.partitions.handler_hash)
+    print("    patterns: " .. result.partitions.pattern_hash)
+    print("    lua chunks: " .. result.partitions.lua_chunk_hash)
+    print("    capabilities: " .. result.partitions.capability_hash)
+    print("    runtime: " .. result.partitions.runtime_hash)
+  end
+  if result.partition_changes then
+    if #result.partition_changes == 0 then
+      print("  changed partitions: none")
+    else
+      print("  changed partitions: " .. tostring(#result.partition_changes))
+      local max_changes = 12
+      for i, change in ipairs(result.partition_changes) do
+        if i > max_changes then
+          print("    ... " .. tostring(#result.partition_changes - max_changes) .. " more")
+          break
+        end
+        print("    " .. change.status .. " " .. change.kind .. ":" .. change.id)
+      end
+    end
+  end
   if result.graph.memory_report then
     local memory = result.graph.memory_report
     print("  memory profile: " .. tostring(memory.profile))
