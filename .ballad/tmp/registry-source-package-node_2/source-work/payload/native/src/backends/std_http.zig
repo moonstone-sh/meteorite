@@ -1,7 +1,7 @@
 const std = @import("std");
 const Io = std.Io;
 
-pub const Method = enum { GET, POST, OTHER };
+pub const Method = enum { GET, POST, PUT, PATCH, DELETE, OTHER };
 
 pub const ListenConfig = struct {
     host: []const u8 = "127.0.0.1",
@@ -45,31 +45,37 @@ pub fn listen(config: ListenConfig) !Server {
     };
 }
 
-pub fn accept(server: *Server) !Request {
-    var req = Request{ .stream = try server.inner.accept(server.io) };
+pub fn accept(server: *Server, req: *Request) !void {
+    req.* = Request{ .stream = try server.inner.accept(server.io) };
     req.reader = req.stream.reader(server.io, &req.recv_buffer);
     req.writer = req.stream.writer(server.io, &req.send_buffer);
     req.server = std.http.Server.init(&req.reader.interface, &req.writer.interface);
     req.inner = try req.server.receiveHead();
-    return req;
 }
 
 pub fn method(req: *Request) Method {
     return switch (req.inner.head.method) {
         .GET => .GET,
         .POST => .POST,
+        .PUT => .PUT,
+        .PATCH => .PATCH,
+        .DELETE => .DELETE,
         else => .OTHER,
     };
 }
 
 pub fn path(req: *Request) []const u8 {
-    const target = req.inner.head.target;
-    return if (std.mem.indexOfScalar(u8, target, '?')) |idx| target[0..idx] else target;
+    const request_target = req.inner.head.target;
+    return if (std.mem.indexOfScalar(u8, request_target, '?')) |idx| request_target[0..idx] else request_target;
+}
+
+pub fn target(req: *Request) []const u8 {
+    return req.inner.head.target;
 }
 
 pub fn query(req: *Request) []const u8 {
-    const target = req.inner.head.target;
-    return if (std.mem.indexOfScalar(u8, target, '?')) |idx| target[idx + 1 ..] else "";
+    const request_target = req.inner.head.target;
+    return if (std.mem.indexOfScalar(u8, request_target, '?')) |idx| request_target[idx + 1 ..] else "";
 }
 
 pub fn header(req: *Request, name: []const u8) ?[]const u8 {
@@ -116,6 +122,7 @@ fn statusFromCode(code: u16) std.http.Status {
         404 => .not_found,
         405 => .method_not_allowed,
         413 => .payload_too_large,
+        414 => .uri_too_long,
         500 => .internal_server_error,
         501 => .not_implemented,
         else => .ok,

@@ -7,6 +7,25 @@ pub fn get_user(ctx: anytype) !void {
     try ctx.bytes(200, "application/json", id);
 }
 
+pub fn put_user(ctx: anytype) !void {
+    const id = ctx.param("id") orelse "missing";
+    const body = try ctx.body();
+    _ = body;
+    try ctx.text(200, id);
+}
+
+pub fn patch_user(ctx: anytype) !void {
+    const id = ctx.param("id") orelse "missing";
+    const body = try ctx.body();
+    _ = body;
+    try ctx.text(200, id);
+}
+
+pub fn delete_user(ctx: anytype) !void {
+    const id = ctx.param("id") orelse "missing";
+    try ctx.text(200, id);
+}
+
 pub fn echo(ctx: anytype) !void {
     const value = try ctx.body();
     try ctx.text(200, value);

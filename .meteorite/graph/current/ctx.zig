@@ -565,6 +565,70 @@ pub const ctx = struct {
         pub fn bytes(self: hex, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
         pub fn json(self: hex, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
     };
+    pub const Params_email = struct {
+            email: []const u8,
+        };
+
+    pub const Query_email = struct {
+        };
+
+    pub const email = struct {
+        pub const method_name = "GET";
+        pub const route_path = "/emails/:email";
+        params: Params_email,
+        query: Query_email,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!email {
+            return .{ .params = .{
+                .email = raw.param("email") orelse return error.MissingParam
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: email) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: email) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: email, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: email, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: email, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: email) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: email, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: email, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: email, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
+    pub const Params_token = struct {
+            token: []const u8,
+        };
+
+    pub const Query_token = struct {
+        };
+
+    pub const token = struct {
+        pub const method_name = "GET";
+        pub const route_path = "/tokens/:token";
+        params: Params_token,
+        query: Query_token,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!token {
+            return .{ .params = .{
+                .token = raw.param("token") orelse return error.MissingParam
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: token) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: token) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: token, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: token, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: token, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: token) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: token, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: token, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: token, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
     pub const Params_search = struct {
         };
 

@@ -152,15 +152,50 @@ function Context:cache(name)
   return cache
 end
 
+---@class MeteoriteHttpResponse
+---@field status integer
+---@field headers table<string, string>
+---@field body any
+
+---@class MeteoriteHttpClient
+---@field get fun(self: MeteoriteHttpClient, path: string, opts?: table): MeteoriteHttpResponse
+---@field post fun(self: MeteoriteHttpClient, path: string, opts?: table): MeteoriteHttpResponse
+---@field put fun(self: MeteoriteHttpClient, path: string, opts?: table): MeteoriteHttpResponse
+---@field delete fun(self: MeteoriteHttpClient, path: string, opts?: table): MeteoriteHttpResponse
+local HttpClient = {}
+HttpClient.__index = HttpClient
+
+local http_client = require("meteorite.http_client")
+
+local function http_request(method, base_url, path, opts)
+  return http_client.request(method, base_url, path, opts)
+end
+
+function HttpClient:get(path, opts)
+  return http_request("GET", self.base_url, path, opts)
+end
+
+function HttpClient:post(path, opts)
+  return http_request("POST", self.base_url, path, opts)
+end
+
+function HttpClient:put(path, opts)
+  return http_request("PUT", self.base_url, path, opts)
+end
+
+function HttpClient:patch(path, opts)
+  return http_request("PATCH", self.base_url, path, opts)
+end
+
+function HttpClient:delete(path, opts)
+  return http_request("DELETE", self.base_url, path, opts)
+end
+
 function Context:http(name)
   local capability = assert(self.capabilities.http and self.capabilities.http[name], "undeclared http capability: " .. tostring(name))
-  local client = { capability = capability, requests = self.http_requests }
-  function client:post(path, opts)
-    local request = { method = "POST", capability = name, path = path, options = opts or {} }
-    self.requests[#self.requests + 1] = request
-    return { status = 200, headers = {}, body = { ok = true, capability = name, path = path, headers = opts and opts.headers or {}, echo = opts and opts.body or nil } }
-  end
-  return client
+  local base_url = capability.base_url
+  assert(type(base_url) == "string", "http capability missing base_url")
+  return setmetatable({ base_url = base_url, requests = self.http_requests }, HttpClient)
 end
 
 local Auth = {}

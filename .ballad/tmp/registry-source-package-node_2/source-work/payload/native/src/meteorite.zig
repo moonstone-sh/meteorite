@@ -1,5 +1,6 @@
 const std = @import("std");
 const Io = std.Io;
+const process = std.process;
 
 pub const backends = struct {
     pub const std_http = @import("backends/std_http.zig");
@@ -11,7 +12,7 @@ pub const ListenConfig = struct {
 };
 
 pub const BackendContract = struct {
-    pub const Method = enum { GET, POST, OTHER };
+    pub const Method = enum { GET, POST, PUT, PATCH, DELETE, OTHER };
 };
 
 pub fn DfaMatcher(comptime spec: anytype) type {
@@ -63,7 +64,8 @@ pub fn compile(comptime spec: anytype) type {
             });
 
             while (true) {
-                var request = backend.accept(&server) catch |err| switch (err) {
+                var request: backend.Request = undefined;
+                backend.accept(&server, &request) catch |err| switch (err) {
                     error.HttpConnectionClosing => continue,
                     else => {
                         std.debug.print("accept failed: {s}\n", .{@errorName(err)});
@@ -74,15 +76,16 @@ pub fn compile(comptime spec: anytype) type {
                 var arena_buffer: [graph.max_request_arena_bytes]u8 = undefined;
                 var arena_state = std.heap.FixedBufferAllocator.init(&arena_buffer);
                 const arena = arena_state.allocator();
-                serveRequest(arena, &request) catch |err| {
+                serveRequest(arena, io, &request) catch |err| {
                     std.debug.print("request failed for {s}: {s}\n", .{ backend.path(&request), @errorName(err) });
                 };
             }
         }
 
-        fn serveRequest(allocator: std.mem.Allocator, request: *backend.Request) !void {
+        fn serveRequest(allocator: std.mem.Allocator, io: Io, request: *backend.Request) !void {
             const req_method = backendMethod(backend.method(request));
             const req_path = backend.path(request);
+            if (!try enforceGlobalTargetLimits(request, req_path)) return;
             var path_matched = false;
 
             inline for (graph.routes) |route| {
@@ -90,13 +93,15 @@ pub fn compile(comptime spec: anytype) type {
                 if (matchPath(route.path, req_path, route.params, &captures)) {
                     path_matched = true;
                     if (route.method == req_method) {
+                        if (!try enforceRouteTargetLimits(request, req_path, route)) return;
                         if (!matchQuery(route.query, request)) return backend.respondText(request, 404, "not found");
-                        var ctx = Context{ .allocator = allocator, .request = request, .captures = captures, .route = route };
+                        if (!try enforceBodyLimit(allocator, request, route)) return;
+                        var ctx = Context{ .allocator = allocator, .io = io, .request = request, .captures = captures, .route = route };
                         switch (route.handler) {
                             .zig_symbol => return graph.bindings.callRoute(route.id, &ctx),
                             .zig_file => |handler| return ctx.text(501, handler.path),
-                            .inline_lua => |handler| return callLuaHandler(handler.id, &ctx),
-                            .lua_file => |handler| return callLuaHandler(handler.path, &ctx),
+                            .inline_lua => |handler| return callLuaHandler(handler, &ctx),
+                            .lua_file => |handler| return callLuaHandler(handler, &ctx),
                         }
                     }
                 }
@@ -105,9 +110,80 @@ pub fn compile(comptime spec: anytype) type {
             return backend.respondText(request, 404, "not found");
         }
 
-        fn callLuaHandler(comptime id: []const u8, ctx: anytype) !void {
+        fn requestTarget(request: *backend.Request) []const u8 {
+            if (@hasDecl(backend, "target")) return backend.target(request);
+            return backend.path(request);
+        }
+
+        fn enforceGlobalTargetLimits(request: *backend.Request, req_path: []const u8) !bool {
+            const target_value = requestTarget(request);
+            const query_value = backend.query(request);
+            if (target_value.len > graph.max_uri_bytes or req_path.len > graph.max_path_bytes or query_value.len > graph.max_query_bytes) {
+                try backend.respondText(request, 414, "uri too long");
+                return false;
+            }
+            if (countQueryPairs(query_value) > graph.max_query_pairs or countPathSegments(req_path) > graph.max_path_segments) {
+                try backend.respondText(request, 414, "uri too long");
+                return false;
+            }
+            return true;
+        }
+
+        fn enforceRouteTargetLimits(request: *backend.Request, req_path: []const u8, route: graph.Route) !bool {
+            const target_value = requestTarget(request);
+            const query_value = backend.query(request);
+            if (target_value.len > route.memory.max_uri_bytes or req_path.len > route.memory.max_path_bytes or query_value.len > route.memory.max_query_bytes) {
+                try backend.respondText(request, 414, "uri too long");
+                return false;
+            }
+            if (countQueryPairs(query_value) > route.memory.max_query_pairs or countPathSegments(req_path) > route.memory.max_path_segments) {
+                try backend.respondText(request, 414, "uri too long");
+                return false;
+            }
+            return true;
+        }
+
+        fn countQueryPairs(query_value: []const u8) usize {
+            if (query_value.len == 0) return 0;
+            var count: usize = 1;
+            for (query_value) |byte| {
+                if (byte == '&') count += 1;
+            }
+            return count;
+        }
+
+        fn countPathSegments(path_value: []const u8) usize {
+            if (std.mem.eql(u8, path_value, "/")) return 0;
+            var count: usize = 0;
+            var it = std.mem.splitScalar(u8, path_value, '/');
+            while (it.next()) |segment| {
+                if (segment.len > 0) count += 1;
+            }
+            return count;
+        }
+
+        fn enforceBodyLimit(allocator: std.mem.Allocator, request: *backend.Request, route: graph.Route) !bool {
+            _ = backend.readBody(request, allocator, route.max_body_bytes) catch |err| switch (err) {
+                error.PayloadTooLarge => {
+                    std.debug.print("request body exceeded route limit\n\nroute: {s} {s}\nmax_body_bytes: {d}\n", .{ @tagName(route.method), route.raw_path, route.max_body_bytes });
+                    try backend.respondText(request, 413, "payload too large");
+                    return false;
+                },
+                else => return err,
+            };
+            return true;
+        }
+
+        fn callLuaHandler(comptime handler: anytype, ctx: anytype) !void {
             if (@hasField(@TypeOf(spec), "lua_runtime")) {
-                return spec.lua_runtime.call(id, ctx);
+                return spec.lua_runtime.call(.{
+                    .id = handler.id,
+                    .path = switch (@TypeOf(handler)) {
+                        graph.InlineLuaHandler => handler.chunk_path,
+                        graph.LuaFileHandler => handler.path,
+                        else => @compileError("unsupported Lua handler type"),
+                    },
+                }, ctx);
             }
             return ctx.text(501, "handler requires Lua runtime");
         }
@@ -144,6 +220,9 @@ pub fn compile(comptime spec: anytype) type {
             return switch (method) {
                 .GET => .GET,
                 .POST => .POST,
+                .PUT => .PUT,
+                .PATCH => .PATCH,
+                .DELETE => .DELETE,
                 else => .OTHER,
             };
         }
@@ -280,6 +359,7 @@ pub fn compile(comptime spec: anytype) type {
 
         pub const Context = struct {
             allocator: std.mem.Allocator,
+            io: Io,
             request: *backend.Request,
             captures: Captures,
             route: graph.Route,
@@ -291,6 +371,12 @@ pub fn compile(comptime spec: anytype) type {
 
             pub fn path(self: *Context) []const u8 {
                 return backend.path(self.request);
+            }
+
+            pub fn run(self: *Context, allocator: std.mem.Allocator, argv: []const []const u8) ![]const u8 {
+                const result = try process.run(allocator, self.io, .{ .argv = argv });
+                defer allocator.free(result.stderr);
+                return result.stdout;
             }
 
             pub fn param(self: *Context, name: []const u8) ?[]const u8 {
@@ -319,10 +405,16 @@ pub fn compile(comptime spec: anytype) type {
             }
 
             pub fn text(self: *Context, status: u16, response_body: []const u8) !void {
+                if (response_body.len > self.route.memory.max_response_bytes) {
+                    return backend.respondText(self.request, 500, "response too large");
+                }
                 try backend.respondText(self.request, status, response_body);
             }
 
             pub fn bytes(self: *Context, status: u16, content_type: []const u8, response_body: []const u8) !void {
+                if (response_body.len > self.route.memory.max_response_bytes) {
+                    return backend.respondText(self.request, 500, "response too large");
+                }
                 try backend.respondBytes(self.request, status, content_type, response_body);
             }
 

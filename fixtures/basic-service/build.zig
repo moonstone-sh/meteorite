@@ -4,8 +4,41 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const mode = b.option([]const u8, "mode", "Meteorite build mode") orelse "release-static";
+    const backend = "std_http";
+    const fast_http_strategy = "single";
+    const fast_http_workers: u32 = 0;
+    const fast_http_queue: u32 = 1024;
+    const hybrid_profile = "default";
+    const lua_runtime = !std.mem.eql(u8, mode, "release-static");
+    const lua_state_strategy = if (lua_runtime and std.mem.eql(u8, hybrid_profile, "optimized")) "per_thread_cached_refs" else if (lua_runtime) "per_request_state" else "none";
 
     const graph_step = b.addSystemCommand(&.{ "luajit", "../../src/meteorite/cli.lua", "graph", "src/main.lua", ".meteorite/graph/current", mode });
+
+    const build_info_content = std.fmt.allocPrint(b.allocator,
+        \\const builtin = @import("builtin");
+        \\pub const meteorite_mode = "{s}";
+        \\pub const backend = "{s}";
+        \\pub const fast_http_strategy = "{s}";
+        \\pub const fast_http_workers = {};
+        \\pub const fast_http_queue = {};
+        \\pub const lua_runtime = {};
+        \\pub const hybrid_profile = "{s}";
+        \\pub const lua_state_strategy = "{s}";
+        \\pub const zig_optimize = @tagName(builtin.mode);
+        \\pub const cpu_arch = @tagName(builtin.cpu.arch);
+        \\pub const os_tag = @tagName(builtin.os.tag);
+        \\pub const abi = @tagName(builtin.abi);
+        \\pub const target = cpu_arch ++ "-" ++ os_tag ++ "-" ++ abi;
+        \\\
+    , .{ mode, backend, fast_http_strategy, fast_http_workers, fast_http_queue, lua_runtime, hybrid_profile, lua_state_strategy }) catch @panic("OOM");
+    const write_build_info = b.addWriteFiles();
+    const build_info_file = write_build_info.add(".meteorite/graph/current/build_info.zig", build_info_content);
+    const build_info_module = b.createModule(.{
+        .root_source_file = build_info_file,
+        .target = target,
+        .optimize = optimize,
+    });
+    graph_step.step.dependOn(&write_build_info.step);
 
     const graph_module = b.createModule(.{
         .root_source_file = b.path(".meteorite/graph/current/graph.zig"),
@@ -29,6 +62,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     handlers_module.addImport("meteorite_graph", ctx_module);
+    handlers_module.addImport("meteorite_build_info", build_info_module);
     graph_module.addImport("meteorite_handlers", handlers_module);
     graph_module.addImport("meteorite_validators", validators_module);
 
@@ -37,6 +71,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    meteorite_module.addImport("build_options", build_info_module);
     graph_module.addImport("meteorite.zig", meteorite_module);
 
     const exe = b.addExecutable(.{
@@ -48,6 +83,7 @@ pub fn build(b: *std.Build) void {
             .imports = &.{
                 .{ .name = "meteorite_graph", .module = graph_module },
                 .{ .name = "meteorite.zig", .module = meteorite_module },
+                .{ .name = "build_options", .module = build_info_module },
             },
         }),
     });

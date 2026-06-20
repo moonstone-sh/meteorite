@@ -1,6 +1,6 @@
 .{
     .format = "meteorite.graph.v0",
     .meteorite_version = "0.1.0",
-    .graph_hash = "b3:2cd7be8c3447281ce2e2c557cbfddd11e6332c89ccedffcba4335928d54ed4fc",
+    .graph_hash = "b3:015e4e97756658a3aa979b903859aa2db94d8428e227844e98a2e44000efaae4",
     .mode = .dev,
 }

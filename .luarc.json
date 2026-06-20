@@ -1,6 +1,8 @@
 {
   "workspace": {
     "library": [
+      ".moonstone/env/share/lua",
+      ".meteorite/aids/lua",
       ".moonstone/env/share/lua/5.4"
     ],
     "checkThirdParty": false,

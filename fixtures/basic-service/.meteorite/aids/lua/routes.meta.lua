@@ -1,6 +1,6 @@
 ---@meta
 
----@diagnostic disable: missing-return
+---@diagnostic disable: missing-return, lowercase-global
 
 ---@class MeteoriteContext_health : MeteoriteContext
 
@@ -9,6 +9,24 @@
 
 ---@class MeteoriteContext_get_user : MeteoriteContext
 ---@field params MeteoriteParams_get_user
+
+---@class MeteoriteParams_put_user
+---@field id integer
+
+---@class MeteoriteContext_put_user : MeteoriteContext
+---@field params MeteoriteParams_put_user
+
+---@class MeteoriteParams_patch_user
+---@field id integer
+
+---@class MeteoriteContext_patch_user : MeteoriteContext
+---@field params MeteoriteParams_patch_user
+
+---@class MeteoriteParams_delete_user
+---@field id integer
+
+---@class MeteoriteContext_delete_user : MeteoriteContext
+---@field params MeteoriteParams_delete_user
 
 ---@class MeteoriteContext_echo : MeteoriteContext
 

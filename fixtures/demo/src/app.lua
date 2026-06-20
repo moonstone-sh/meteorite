@@ -1,8 +1,6 @@
 local m = require("meteorite")
 
-local app = m.app({
-  name = "demo",
-})
+local app = m.app({ name = "demo" })
 
 app:capability("http", {
   db = {
@@ -64,7 +62,7 @@ end)
 
 app:get("/devices/:device_id", {
   params = {
-    device_id = m.pattern("^[a-z0-9_-]{1,64}$"),
+    device_id = m.string({ max = 64 }),
   },
 }, function(c)
   local cruncher = c:zig("data_cruncher")

@@ -24,7 +24,7 @@ pub const ThreadCount = union(enum) { auto, fixed: u16 };
 pub const RuntimeWorkers = struct { strategy: WorkerStrategy = .auto, io_threads: ThreadCount = .auto, worker_threads: ThreadCount = .auto, lua_state: LuaStateStrategy = .single_locked };
 pub const runtime_workers = RuntimeWorkers{};
 pub const RouteMemory = struct { profile_name: []const u8, request_arena_bytes: usize, max_body_bytes: usize, max_uri_bytes: usize, max_path_bytes: usize, max_query_bytes: usize, max_query_pairs: usize, max_path_segments: usize, max_response_bytes: usize, max_capability_response_bytes: usize, lua_heap_bytes: usize, estimated_peak_bytes: usize };
-pub const ParamKind = enum { string, slug, u64, i32, uuid, hex, bool, pattern };
+pub const ParamKind = enum { string, slug, u64, i32, uuid, hex, email, token, bool, pattern };
 pub const ParamSpec = struct { name: []const u8, kind: ParamKind = .string, max_len: usize = 0, exact_len: usize = 0, optional: bool = false, pattern: ?PatternId = null };
 pub const Route = struct { id: []const u8, method: Method, raw_path: []const u8, path: []const Segment, params: []const ParamSpec, query: []const ParamSpec, memory: RouteMemory, max_body_bytes: usize, request_arena_bytes: usize, handler: Handler, runtime: RouteRuntime = .{}, execution: RouteExecution = .{}, capabilities: []const CapabilityRef = &.{} };
 
@@ -43,186 +43,186 @@ pub const patterns = struct {
     }
 
     const pattern_1_class_map = [_]u8{
-        4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-        4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 4, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 4, 4, 4, 4, 4, 4, 
-        4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 
-        4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 4, 4, 4, 
-        4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-        4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-        4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-        4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 
+        4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 
+        6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 
+        8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
+        8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
+        8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
+        8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
     };
     const pattern_1_transitions = [_]u16{
-        1, 1, 1, 1, 65,
-        2, 2, 2, 2, 65,
-        3, 3, 3, 3, 65,
-        4, 4, 4, 4, 65,
-        5, 5, 5, 5, 65,
-        6, 6, 6, 6, 65,
-        7, 7, 7, 7, 65,
-        8, 8, 8, 8, 65,
-        9, 9, 9, 9, 65,
-        10, 10, 10, 10, 65,
-        11, 11, 11, 11, 65,
-        12, 12, 12, 12, 65,
-        13, 13, 13, 13, 65,
-        14, 14, 14, 14, 65,
-        15, 15, 15, 15, 65,
-        16, 16, 16, 16, 65,
-        17, 17, 17, 17, 65,
-        18, 18, 18, 18, 65,
-        19, 19, 19, 19, 65,
-        20, 20, 20, 20, 65,
-        21, 21, 21, 21, 65,
-        22, 22, 22, 22, 65,
-        23, 23, 23, 23, 65,
-        24, 24, 24, 24, 65,
-        25, 25, 25, 25, 65,
-        26, 26, 26, 26, 65,
-        27, 27, 27, 27, 65,
-        28, 28, 28, 28, 65,
-        29, 29, 29, 29, 65,
-        30, 30, 30, 30, 65,
-        31, 31, 31, 31, 65,
-        32, 32, 32, 32, 65,
-        33, 33, 33, 33, 65,
-        34, 34, 34, 34, 65,
-        35, 35, 35, 35, 65,
-        36, 36, 36, 36, 65,
-        37, 37, 37, 37, 65,
-        38, 38, 38, 38, 65,
-        39, 39, 39, 39, 65,
-        40, 40, 40, 40, 65,
-        41, 41, 41, 41, 65,
-        42, 42, 42, 42, 65,
-        43, 43, 43, 43, 65,
-        44, 44, 44, 44, 65,
-        45, 45, 45, 45, 65,
-        46, 46, 46, 46, 65,
-        47, 47, 47, 47, 65,
-        48, 48, 48, 48, 65,
-        49, 49, 49, 49, 65,
-        50, 50, 50, 50, 65,
-        51, 51, 51, 51, 65,
-        52, 52, 52, 52, 65,
-        53, 53, 53, 53, 65,
-        54, 54, 54, 54, 65,
-        55, 55, 55, 55, 65,
-        56, 56, 56, 56, 65,
-        57, 57, 57, 57, 65,
-        58, 58, 58, 58, 65,
-        59, 59, 59, 59, 65,
-        60, 60, 60, 60, 65,
-        61, 61, 61, 61, 65,
-        62, 62, 62, 62, 65,
-        63, 63, 63, 63, 65,
-        64, 64, 64, 64, 65,
-        65, 65, 65, 65, 65,
-        65, 65, 65, 65, 65,
+        65, 1, 65, 1, 65, 1, 65, 1, 65, 65,
+        65, 2, 65, 2, 65, 2, 65, 2, 65, 65,
+        65, 3, 65, 3, 65, 3, 65, 3, 65, 65,
+        65, 4, 65, 4, 65, 4, 65, 4, 65, 65,
+        65, 5, 65, 5, 65, 5, 65, 5, 65, 65,
+        65, 6, 65, 6, 65, 6, 65, 6, 65, 65,
+        65, 7, 65, 7, 65, 7, 65, 7, 65, 65,
+        65, 8, 65, 8, 65, 8, 65, 8, 65, 65,
+        65, 9, 65, 9, 65, 9, 65, 9, 65, 65,
+        65, 10, 65, 10, 65, 10, 65, 10, 65, 65,
+        65, 11, 65, 11, 65, 11, 65, 11, 65, 65,
+        65, 12, 65, 12, 65, 12, 65, 12, 65, 65,
+        65, 13, 65, 13, 65, 13, 65, 13, 65, 65,
+        65, 14, 65, 14, 65, 14, 65, 14, 65, 65,
+        65, 15, 65, 15, 65, 15, 65, 15, 65, 65,
+        65, 16, 65, 16, 65, 16, 65, 16, 65, 65,
+        65, 17, 65, 17, 65, 17, 65, 17, 65, 65,
+        65, 18, 65, 18, 65, 18, 65, 18, 65, 65,
+        65, 19, 65, 19, 65, 19, 65, 19, 65, 65,
+        65, 20, 65, 20, 65, 20, 65, 20, 65, 65,
+        65, 21, 65, 21, 65, 21, 65, 21, 65, 65,
+        65, 22, 65, 22, 65, 22, 65, 22, 65, 65,
+        65, 23, 65, 23, 65, 23, 65, 23, 65, 65,
+        65, 24, 65, 24, 65, 24, 65, 24, 65, 65,
+        65, 25, 65, 25, 65, 25, 65, 25, 65, 65,
+        65, 26, 65, 26, 65, 26, 65, 26, 65, 65,
+        65, 27, 65, 27, 65, 27, 65, 27, 65, 65,
+        65, 28, 65, 28, 65, 28, 65, 28, 65, 65,
+        65, 29, 65, 29, 65, 29, 65, 29, 65, 65,
+        65, 30, 65, 30, 65, 30, 65, 30, 65, 65,
+        65, 31, 65, 31, 65, 31, 65, 31, 65, 65,
+        65, 32, 65, 32, 65, 32, 65, 32, 65, 65,
+        65, 33, 65, 33, 65, 33, 65, 33, 65, 65,
+        65, 34, 65, 34, 65, 34, 65, 34, 65, 65,
+        65, 35, 65, 35, 65, 35, 65, 35, 65, 65,
+        65, 36, 65, 36, 65, 36, 65, 36, 65, 65,
+        65, 37, 65, 37, 65, 37, 65, 37, 65, 65,
+        65, 38, 65, 38, 65, 38, 65, 38, 65, 65,
+        65, 39, 65, 39, 65, 39, 65, 39, 65, 65,
+        65, 40, 65, 40, 65, 40, 65, 40, 65, 65,
+        65, 41, 65, 41, 65, 41, 65, 41, 65, 65,
+        65, 42, 65, 42, 65, 42, 65, 42, 65, 65,
+        65, 43, 65, 43, 65, 43, 65, 43, 65, 65,
+        65, 44, 65, 44, 65, 44, 65, 44, 65, 65,
+        65, 45, 65, 45, 65, 45, 65, 45, 65, 65,
+        65, 46, 65, 46, 65, 46, 65, 46, 65, 65,
+        65, 47, 65, 47, 65, 47, 65, 47, 65, 65,
+        65, 48, 65, 48, 65, 48, 65, 48, 65, 65,
+        65, 49, 65, 49, 65, 49, 65, 49, 65, 65,
+        65, 50, 65, 50, 65, 50, 65, 50, 65, 65,
+        65, 51, 65, 51, 65, 51, 65, 51, 65, 65,
+        65, 52, 65, 52, 65, 52, 65, 52, 65, 65,
+        65, 53, 65, 53, 65, 53, 65, 53, 65, 65,
+        65, 54, 65, 54, 65, 54, 65, 54, 65, 65,
+        65, 55, 65, 55, 65, 55, 65, 55, 65, 65,
+        65, 56, 65, 56, 65, 56, 65, 56, 65, 65,
+        65, 57, 65, 57, 65, 57, 65, 57, 65, 65,
+        65, 58, 65, 58, 65, 58, 65, 58, 65, 65,
+        65, 59, 65, 59, 65, 59, 65, 59, 65, 65,
+        65, 60, 65, 60, 65, 60, 65, 60, 65, 65,
+        65, 61, 65, 61, 65, 61, 65, 61, 65, 65,
+        65, 62, 65, 62, 65, 62, 65, 62, 65, 65,
+        65, 63, 65, 63, 65, 63, 65, 63, 65, 65,
+        65, 64, 65, 64, 65, 64, 65, 64, 65, 65,
+        65, 65, 65, 65, 65, 65, 65, 65, 65, 65,
+        65, 65, 65, 65, 65, 65, 65, 65, 65, 65,
     };
     const pattern_1_accept = [_]bool{
         false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false,
     };
-    pub const pattern_1 = @import("meteorite_pattern").DfaMatcher(.{ .class_map = &pattern_1_class_map, .transition_table = &pattern_1_transitions, .accept_table = &pattern_1_accept, .class_count = 5, .start_state = 0, .dead_state = 65, .max_input_bytes = 64 });
+    pub const pattern_1 = @import("meteorite_pattern").DfaMatcher(.{ .class_map = &pattern_1_class_map, .transition_table = &pattern_1_transitions, .accept_table = &pattern_1_accept, .class_count = 10, .start_state = 0, .dead_state = 65, .max_input_bytes = 64 });
 
     const pattern_2_class_map = [_]u8{
-        5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 
-        5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 3, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 5, 5, 5, 5, 5, 
-        5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 2, 
-        5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 5, 5, 5, 5, 
-        5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 
-        5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 
-        5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 
-        5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 
+        4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 
+        6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 
+        8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
+        8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
+        8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
+        8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
     };
     const pattern_2_transitions = [_]u16{
-        1, 1, 1, 1, 1, 81,
-        2, 2, 2, 2, 2, 81,
-        3, 3, 3, 3, 3, 81,
-        4, 4, 4, 4, 4, 81,
-        5, 5, 5, 5, 5, 81,
-        6, 6, 6, 6, 6, 81,
-        7, 7, 7, 7, 7, 81,
-        8, 8, 8, 8, 8, 81,
-        9, 9, 9, 9, 9, 81,
-        10, 10, 10, 10, 10, 81,
-        11, 11, 11, 11, 11, 81,
-        12, 12, 12, 12, 12, 81,
-        13, 13, 13, 13, 13, 81,
-        14, 14, 14, 14, 14, 81,
-        15, 15, 15, 15, 15, 81,
-        16, 16, 16, 16, 16, 81,
-        17, 17, 17, 17, 17, 81,
-        18, 18, 18, 18, 18, 81,
-        19, 19, 19, 19, 19, 81,
-        20, 20, 20, 20, 20, 81,
-        21, 21, 21, 21, 21, 81,
-        22, 22, 22, 22, 22, 81,
-        23, 23, 23, 23, 23, 81,
-        24, 24, 24, 24, 24, 81,
-        25, 25, 25, 25, 25, 81,
-        26, 26, 26, 26, 26, 81,
-        27, 27, 27, 27, 27, 81,
-        28, 28, 28, 28, 28, 81,
-        29, 29, 29, 29, 29, 81,
-        30, 30, 30, 30, 30, 81,
-        31, 31, 31, 31, 31, 81,
-        32, 32, 32, 32, 32, 81,
-        33, 33, 33, 33, 33, 81,
-        34, 34, 34, 34, 34, 81,
-        35, 35, 35, 35, 35, 81,
-        36, 36, 36, 36, 36, 81,
-        37, 37, 37, 37, 37, 81,
-        38, 38, 38, 38, 38, 81,
-        39, 39, 39, 39, 39, 81,
-        40, 40, 40, 40, 40, 81,
-        41, 41, 41, 41, 41, 81,
-        42, 42, 42, 42, 42, 81,
-        43, 43, 43, 43, 43, 81,
-        44, 44, 44, 44, 44, 81,
-        45, 45, 45, 45, 45, 81,
-        46, 46, 46, 46, 46, 81,
-        47, 47, 47, 47, 47, 81,
-        48, 48, 48, 48, 48, 81,
-        49, 49, 49, 49, 49, 81,
-        50, 50, 50, 50, 50, 81,
-        51, 51, 51, 51, 51, 81,
-        52, 52, 52, 52, 52, 81,
-        53, 53, 53, 53, 53, 81,
-        54, 54, 54, 54, 54, 81,
-        55, 55, 55, 55, 55, 81,
-        56, 56, 56, 56, 56, 81,
-        57, 57, 57, 57, 57, 81,
-        58, 58, 58, 58, 58, 81,
-        59, 59, 59, 59, 59, 81,
-        60, 60, 60, 60, 60, 81,
-        61, 61, 61, 61, 61, 81,
-        62, 62, 62, 62, 62, 81,
-        63, 63, 63, 63, 63, 81,
-        64, 64, 64, 64, 64, 81,
-        65, 65, 65, 65, 65, 81,
-        66, 66, 66, 66, 66, 81,
-        67, 67, 67, 67, 67, 81,
-        68, 68, 68, 68, 68, 81,
-        69, 69, 69, 69, 69, 81,
-        70, 70, 70, 70, 70, 81,
-        71, 71, 71, 71, 71, 81,
-        72, 72, 72, 72, 72, 81,
-        73, 73, 73, 73, 73, 81,
-        74, 74, 74, 74, 74, 81,
-        75, 75, 75, 75, 75, 81,
-        76, 76, 76, 76, 76, 81,
-        77, 77, 77, 77, 77, 81,
-        78, 78, 78, 78, 78, 81,
-        79, 79, 79, 79, 79, 81,
-        80, 80, 80, 80, 80, 81,
-        81, 81, 81, 81, 81, 81,
-        81, 81, 81, 81, 81, 81,
+        81, 1, 81, 1, 81, 1, 81, 1, 81, 81,
+        81, 2, 81, 2, 81, 2, 81, 2, 81, 81,
+        81, 3, 81, 3, 81, 3, 81, 3, 81, 81,
+        81, 4, 81, 4, 81, 4, 81, 4, 81, 81,
+        81, 5, 81, 5, 81, 5, 81, 5, 81, 81,
+        81, 6, 81, 6, 81, 6, 81, 6, 81, 81,
+        81, 7, 81, 7, 81, 7, 81, 7, 81, 81,
+        81, 8, 81, 8, 81, 8, 81, 8, 81, 81,
+        81, 9, 81, 9, 81, 9, 81, 9, 81, 81,
+        81, 10, 81, 10, 81, 10, 81, 10, 81, 81,
+        81, 11, 81, 11, 81, 11, 81, 11, 81, 81,
+        81, 12, 81, 12, 81, 12, 81, 12, 81, 81,
+        81, 13, 81, 13, 81, 13, 81, 13, 81, 81,
+        81, 14, 81, 14, 81, 14, 81, 14, 81, 81,
+        81, 15, 81, 15, 81, 15, 81, 15, 81, 81,
+        81, 16, 81, 16, 81, 16, 81, 16, 81, 81,
+        81, 17, 81, 17, 81, 17, 81, 17, 81, 81,
+        81, 18, 81, 18, 81, 18, 81, 18, 81, 81,
+        81, 19, 81, 19, 81, 19, 81, 19, 81, 81,
+        81, 20, 81, 20, 81, 20, 81, 20, 81, 81,
+        81, 21, 81, 21, 81, 21, 81, 21, 81, 81,
+        81, 22, 81, 22, 81, 22, 81, 22, 81, 81,
+        81, 23, 81, 23, 81, 23, 81, 23, 81, 81,
+        81, 24, 81, 24, 81, 24, 81, 24, 81, 81,
+        81, 25, 81, 25, 81, 25, 81, 25, 81, 81,
+        81, 26, 81, 26, 81, 26, 81, 26, 81, 81,
+        81, 27, 81, 27, 81, 27, 81, 27, 81, 81,
+        81, 28, 81, 28, 81, 28, 81, 28, 81, 81,
+        81, 29, 81, 29, 81, 29, 81, 29, 81, 81,
+        81, 30, 81, 30, 81, 30, 81, 30, 81, 81,
+        81, 31, 81, 31, 81, 31, 81, 31, 81, 81,
+        81, 32, 81, 32, 81, 32, 81, 32, 81, 81,
+        81, 33, 81, 33, 81, 33, 81, 33, 81, 81,
+        81, 34, 81, 34, 81, 34, 81, 34, 81, 81,
+        81, 35, 81, 35, 81, 35, 81, 35, 81, 81,
+        81, 36, 81, 36, 81, 36, 81, 36, 81, 81,
+        81, 37, 81, 37, 81, 37, 81, 37, 81, 81,
+        81, 38, 81, 38, 81, 38, 81, 38, 81, 81,
+        81, 39, 81, 39, 81, 39, 81, 39, 81, 81,
+        81, 40, 81, 40, 81, 40, 81, 40, 81, 81,
+        81, 41, 81, 41, 81, 41, 81, 41, 81, 81,
+        81, 42, 81, 42, 81, 42, 81, 42, 81, 81,
+        81, 43, 81, 43, 81, 43, 81, 43, 81, 81,
+        81, 44, 81, 44, 81, 44, 81, 44, 81, 81,
+        81, 45, 81, 45, 81, 45, 81, 45, 81, 81,
+        81, 46, 81, 46, 81, 46, 81, 46, 81, 81,
+        81, 47, 81, 47, 81, 47, 81, 47, 81, 81,
+        81, 48, 81, 48, 81, 48, 81, 48, 81, 81,
+        81, 49, 81, 49, 81, 49, 81, 49, 81, 81,
+        81, 50, 81, 50, 81, 50, 81, 50, 81, 81,
+        81, 51, 81, 51, 81, 51, 81, 51, 81, 81,
+        81, 52, 81, 52, 81, 52, 81, 52, 81, 81,
+        81, 53, 81, 53, 81, 53, 81, 53, 81, 81,
+        81, 54, 81, 54, 81, 54, 81, 54, 81, 81,
+        81, 55, 81, 55, 81, 55, 81, 55, 81, 81,
+        81, 56, 81, 56, 81, 56, 81, 56, 81, 81,
+        81, 57, 81, 57, 81, 57, 81, 57, 81, 81,
+        81, 58, 81, 58, 81, 58, 81, 58, 81, 81,
+        81, 59, 81, 59, 81, 59, 81, 59, 81, 81,
+        81, 60, 81, 60, 81, 60, 81, 60, 81, 81,
+        81, 61, 81, 61, 81, 61, 81, 61, 81, 81,
+        81, 62, 81, 62, 81, 62, 81, 62, 81, 81,
+        81, 63, 81, 63, 81, 63, 81, 63, 81, 81,
+        81, 64, 81, 64, 81, 64, 81, 64, 81, 81,
+        81, 65, 81, 65, 81, 65, 81, 65, 81, 81,
+        81, 66, 81, 66, 81, 66, 81, 66, 81, 81,
+        81, 67, 81, 67, 81, 67, 81, 67, 81, 81,
+        81, 68, 81, 68, 81, 68, 81, 68, 81, 81,
+        81, 69, 81, 69, 81, 69, 81, 69, 81, 81,
+        81, 70, 81, 70, 81, 70, 81, 70, 81, 81,
+        81, 71, 81, 71, 81, 71, 81, 71, 81, 81,
+        81, 72, 81, 72, 81, 72, 81, 72, 81, 81,
+        81, 73, 81, 73, 81, 73, 81, 73, 81, 81,
+        81, 74, 81, 74, 81, 74, 81, 74, 81, 81,
+        81, 75, 81, 75, 81, 75, 81, 75, 81, 81,
+        81, 76, 81, 76, 81, 76, 81, 76, 81, 81,
+        81, 77, 81, 77, 81, 77, 81, 77, 81, 81,
+        81, 78, 81, 78, 81, 78, 81, 78, 81, 81,
+        81, 79, 81, 79, 81, 79, 81, 79, 81, 81,
+        81, 80, 81, 80, 81, 80, 81, 80, 81, 81,
+        81, 81, 81, 81, 81, 81, 81, 81, 81, 81,
+        81, 81, 81, 81, 81, 81, 81, 81, 81, 81,
     };
     const pattern_2_accept = [_]bool{
         false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false,
     };
-    pub const pattern_2 = @import("meteorite_pattern").DfaMatcher(.{ .class_map = &pattern_2_class_map, .transition_table = &pattern_2_transitions, .accept_table = &pattern_2_accept, .class_count = 6, .start_state = 0, .dead_state = 81, .max_input_bytes = 80 });
+    pub const pattern_2 = @import("meteorite_pattern").DfaMatcher(.{ .class_map = &pattern_2_class_map, .transition_table = &pattern_2_transitions, .accept_table = &pattern_2_accept, .class_count = 10, .start_state = 0, .dead_state = 81, .max_input_bytes = 80 });
 };
 
 pub const capabilities = struct {
@@ -477,7 +477,7 @@ const route_16_segments = [_]Segment{
 const route_16_query = [_]ParamSpec{
 };
 const route_16_params = [_]ParamSpec{
-    .{ .name = "id", .kind = .uuid, .max_len = 0, .exact_len = 0, .optional = false, .pattern = null },
+    .{ .name = "id", .kind = .uuid, .max_len = 0, .exact_len = 36, .optional = false, .pattern = null },
 };
 const route_16_capabilities = [_]CapabilityRef{
 };
@@ -503,41 +503,44 @@ pub const Route17Context = struct {
     pub const params = route_17_params;
 };
 const route_18_segments = [_]Segment{
-    .{ .literal = "search" },
+    .{ .literal = "emails" },
+    .{ .param = "email" },
 };
 const route_18_query = [_]ParamSpec{
-    .{ .name = "exact", .kind = .bool, .max_len = 0, .exact_len = 0, .optional = true, .pattern = null },
-    .{ .name = "page", .kind = .u64, .max_len = 0, .exact_len = 0, .optional = true, .pattern = null },
-    .{ .name = "q", .kind = .string, .max_len = 80, .exact_len = 0, .optional = false, .pattern = null },
 };
 const route_18_params = [_]ParamSpec{
+    .{ .name = "email", .kind = .email, .max_len = 254, .exact_len = 0, .optional = false, .pattern = null },
 };
 const route_18_capabilities = [_]CapabilityRef{
 };
 pub const Route18Context = struct {
     pub const method = Method.GET;
-    pub const path = "/search";
+    pub const path = "/emails/:email";
     pub const params = route_18_params;
 };
 const route_19_segments = [_]Segment{
-    .{ .literal = "hybrid-inline" },
+    .{ .literal = "tokens" },
+    .{ .param = "token" },
 };
 const route_19_query = [_]ParamSpec{
 };
 const route_19_params = [_]ParamSpec{
+    .{ .name = "token", .kind = .token, .max_len = 64, .exact_len = 0, .optional = false, .pattern = null },
 };
 const route_19_capabilities = [_]CapabilityRef{
 };
 pub const Route19Context = struct {
     pub const method = Method.GET;
-    pub const path = "/hybrid-inline";
+    pub const path = "/tokens/:token";
     pub const params = route_19_params;
 };
 const route_20_segments = [_]Segment{
-    .{ .literal = "__bench" },
-    .{ .literal = "hybrid-inline" },
+    .{ .literal = "search" },
 };
 const route_20_query = [_]ParamSpec{
+    .{ .name = "exact", .kind = .bool, .max_len = 0, .exact_len = 0, .optional = true, .pattern = null },
+    .{ .name = "page", .kind = .u64, .max_len = 0, .exact_len = 0, .optional = true, .pattern = null },
+    .{ .name = "q", .kind = .string, .max_len = 80, .exact_len = 0, .optional = false, .pattern = null },
 };
 const route_20_params = [_]ParamSpec{
 };
@@ -545,12 +548,11 @@ const route_20_capabilities = [_]CapabilityRef{
 };
 pub const Route20Context = struct {
     pub const method = Method.GET;
-    pub const path = "/__bench/hybrid-inline";
+    pub const path = "/search";
     pub const params = route_20_params;
 };
 const route_21_segments = [_]Segment{
-    .{ .literal = "__bench" },
-    .{ .literal = "hybrid-inline-text-literal" },
+    .{ .literal = "hybrid-inline" },
 };
 const route_21_query = [_]ParamSpec{
 };
@@ -560,29 +562,27 @@ const route_21_capabilities = [_]CapabilityRef{
 };
 pub const Route21Context = struct {
     pub const method = Method.GET;
-    pub const path = "/__bench/hybrid-inline-text-literal";
+    pub const path = "/hybrid-inline";
     pub const params = route_21_params;
 };
 const route_22_segments = [_]Segment{
     .{ .literal = "__bench" },
-    .{ .literal = "hybrid-inline-params" },
-    .{ .param = "id" },
+    .{ .literal = "hybrid-inline" },
 };
 const route_22_query = [_]ParamSpec{
 };
 const route_22_params = [_]ParamSpec{
-    .{ .name = "id", .kind = .u64, .max_len = 0, .exact_len = 0, .optional = false, .pattern = null },
 };
 const route_22_capabilities = [_]CapabilityRef{
 };
 pub const Route22Context = struct {
     pub const method = Method.GET;
-    pub const path = "/__bench/hybrid-inline-params/:id";
+    pub const path = "/__bench/hybrid-inline";
     pub const params = route_22_params;
 };
 const route_23_segments = [_]Segment{
     .{ .literal = "__bench" },
-    .{ .literal = "hybrid-inline-echo" },
+    .{ .literal = "hybrid-inline-text-literal" },
 };
 const route_23_query = [_]ParamSpec{
 };
@@ -591,28 +591,30 @@ const route_23_params = [_]ParamSpec{
 const route_23_capabilities = [_]CapabilityRef{
 };
 pub const Route23Context = struct {
-    pub const method = Method.POST;
-    pub const path = "/__bench/hybrid-inline-echo";
+    pub const method = Method.GET;
+    pub const path = "/__bench/hybrid-inline-text-literal";
     pub const params = route_23_params;
 };
 const route_24_segments = [_]Segment{
     .{ .literal = "__bench" },
-    .{ .literal = "lua-debug-state" },
+    .{ .literal = "hybrid-inline-params" },
+    .{ .param = "id" },
 };
 const route_24_query = [_]ParamSpec{
 };
 const route_24_params = [_]ParamSpec{
+    .{ .name = "id", .kind = .u64, .max_len = 0, .exact_len = 0, .optional = false, .pattern = null },
 };
 const route_24_capabilities = [_]CapabilityRef{
 };
 pub const Route24Context = struct {
     pub const method = Method.GET;
-    pub const path = "/__bench/lua-debug-state";
+    pub const path = "/__bench/hybrid-inline-params/:id";
     pub const params = route_24_params;
 };
 const route_25_segments = [_]Segment{
     .{ .literal = "__bench" },
-    .{ .literal = "lua-global-counter" },
+    .{ .literal = "hybrid-inline-echo" },
 };
 const route_25_query = [_]ParamSpec{
 };
@@ -621,13 +623,13 @@ const route_25_params = [_]ParamSpec{
 const route_25_capabilities = [_]CapabilityRef{
 };
 pub const Route25Context = struct {
-    pub const method = Method.GET;
-    pub const path = "/__bench/lua-global-counter";
+    pub const method = Method.POST;
+    pub const path = "/__bench/hybrid-inline-echo";
     pub const params = route_25_params;
 };
 const route_26_segments = [_]Segment{
     .{ .literal = "__bench" },
-    .{ .literal = "lua-state-leak" },
+    .{ .literal = "lua-debug-state" },
 };
 const route_26_query = [_]ParamSpec{
 };
@@ -637,12 +639,12 @@ const route_26_capabilities = [_]CapabilityRef{
 };
 pub const Route26Context = struct {
     pub const method = Method.GET;
-    pub const path = "/__bench/lua-state-leak";
+    pub const path = "/__bench/lua-debug-state";
     pub const params = route_26_params;
 };
 const route_27_segments = [_]Segment{
     .{ .literal = "__bench" },
-    .{ .literal = "lua-shared-store" },
+    .{ .literal = "lua-global-counter" },
 };
 const route_27_query = [_]ParamSpec{
 };
@@ -652,12 +654,12 @@ const route_27_capabilities = [_]CapabilityRef{
 };
 pub const Route27Context = struct {
     pub const method = Method.GET;
-    pub const path = "/__bench/lua-shared-store";
+    pub const path = "/__bench/lua-global-counter";
     pub const params = route_27_params;
 };
 const route_28_segments = [_]Segment{
     .{ .literal = "__bench" },
-    .{ .literal = "lua-worker-store" },
+    .{ .literal = "lua-state-leak" },
 };
 const route_28_query = [_]ParamSpec{
 };
@@ -667,12 +669,12 @@ const route_28_capabilities = [_]CapabilityRef{
 };
 pub const Route28Context = struct {
     pub const method = Method.GET;
-    pub const path = "/__bench/lua-worker-store";
+    pub const path = "/__bench/lua-state-leak";
     pub const params = route_28_params;
 };
 const route_29_segments = [_]Segment{
     .{ .literal = "__bench" },
-    .{ .literal = "lua-require-cache" },
+    .{ .literal = "lua-shared-store" },
 };
 const route_29_query = [_]ParamSpec{
 };
@@ -682,8 +684,38 @@ const route_29_capabilities = [_]CapabilityRef{
 };
 pub const Route29Context = struct {
     pub const method = Method.GET;
-    pub const path = "/__bench/lua-require-cache";
+    pub const path = "/__bench/lua-shared-store";
     pub const params = route_29_params;
+};
+const route_30_segments = [_]Segment{
+    .{ .literal = "__bench" },
+    .{ .literal = "lua-worker-store" },
+};
+const route_30_query = [_]ParamSpec{
+};
+const route_30_params = [_]ParamSpec{
+};
+const route_30_capabilities = [_]CapabilityRef{
+};
+pub const Route30Context = struct {
+    pub const method = Method.GET;
+    pub const path = "/__bench/lua-worker-store";
+    pub const params = route_30_params;
+};
+const route_31_segments = [_]Segment{
+    .{ .literal = "__bench" },
+    .{ .literal = "lua-require-cache" },
+};
+const route_31_query = [_]ParamSpec{
+};
+const route_31_params = [_]ParamSpec{
+};
+const route_31_capabilities = [_]CapabilityRef{
+};
+pub const Route31Context = struct {
+    pub const method = Method.GET;
+    pub const path = "/__bench/lua-require-cache";
+    pub const params = route_31_params;
 };
 
 pub const routes = [_]Route{
@@ -704,16 +736,18 @@ pub const routes = [_]Route{
     .{ .id = "slug", .method = .GET, .raw_path = "/slugs/:slug", .path = &route_15_segments, .params = &route_15_params, .query = &route_15_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .slug, .symbol = "handlers.slug" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_15_capabilities },
     .{ .id = "uuid", .method = .GET, .raw_path = "/uuids/:id", .path = &route_16_segments, .params = &route_16_params, .query = &route_16_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .uuid, .symbol = "handlers.uuid" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_16_capabilities },
     .{ .id = "hex", .method = .GET, .raw_path = "/hex/:digest", .path = &route_17_segments, .params = &route_17_params, .query = &route_17_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .hex, .symbol = "handlers.hex" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_17_capabilities },
-    .{ .id = "search", .method = .GET, .raw_path = "/search", .path = &route_18_segments, .params = &route_18_params, .query = &route_18_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .search, .symbol = "handlers.search" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_18_capabilities },
-    .{ .id = "hybrid_inline", .method = .GET, .raw_path = "/hybrid-inline", .path = &route_19_segments, .params = &route_19_params, .query = &route_19_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .hybrid_inline, .symbol = "handlers.hybrid_inline" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_19_capabilities },
-    .{ .id = "bench_hybrid_inline", .method = .GET, .raw_path = "/__bench/hybrid-inline", .path = &route_20_segments, .params = &route_20_params, .query = &route_20_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .bench_hybrid_inline, .symbol = "handlers.bench_hybrid_inline" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_20_capabilities },
-    .{ .id = "bench_hybrid_inline_text_literal", .method = .GET, .raw_path = "/__bench/hybrid-inline-text-literal", .path = &route_21_segments, .params = &route_21_params, .query = &route_21_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .bench_hybrid_inline_text_literal, .symbol = "handlers.bench_hybrid_inline_text_literal" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_21_capabilities },
-    .{ .id = "hybrid_inline_params", .method = .GET, .raw_path = "/__bench/hybrid-inline-params/:id", .path = &route_22_segments, .params = &route_22_params, .query = &route_22_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .hybrid_inline_params, .symbol = "handlers.hybrid_inline_params" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_22_capabilities },
-    .{ .id = "hybrid_inline_echo", .method = .POST, .raw_path = "/__bench/hybrid-inline-echo", .path = &route_23_segments, .params = &route_23_params, .query = &route_23_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 16384, .max_body_bytes = 8192, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1146880 }, .max_body_bytes = 8192, .request_arena_bytes = 16384, .handler = .{ .zig_symbol = .{ .id = .hybrid_inline_echo, .symbol = "handlers.hybrid_inline_echo" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_23_capabilities },
-    .{ .id = "bench_unavailable_state", .method = .GET, .raw_path = "/__bench/lua-debug-state", .path = &route_24_segments, .params = &route_24_params, .query = &route_24_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .bench_unavailable_state, .symbol = "handlers.bench_unavailable_state" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_24_capabilities },
-    .{ .id = "bench_unavailable_global", .method = .GET, .raw_path = "/__bench/lua-global-counter", .path = &route_25_segments, .params = &route_25_params, .query = &route_25_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .bench_unavailable_global, .symbol = "handlers.bench_unavailable_global" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_25_capabilities },
-    .{ .id = "bench_unavailable_leak", .method = .GET, .raw_path = "/__bench/lua-state-leak", .path = &route_26_segments, .params = &route_26_params, .query = &route_26_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .bench_unavailable_leak, .symbol = "handlers.bench_unavailable_leak" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_26_capabilities },
-    .{ .id = "bench_unavailable_shared", .method = .GET, .raw_path = "/__bench/lua-shared-store", .path = &route_27_segments, .params = &route_27_params, .query = &route_27_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .bench_unavailable_shared, .symbol = "handlers.bench_unavailable_shared" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_27_capabilities },
-    .{ .id = "bench_unavailable_worker", .method = .GET, .raw_path = "/__bench/lua-worker-store", .path = &route_28_segments, .params = &route_28_params, .query = &route_28_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .bench_unavailable_worker, .symbol = "handlers.bench_unavailable_worker" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_28_capabilities },
-    .{ .id = "bench_unavailable_require", .method = .GET, .raw_path = "/__bench/lua-require-cache", .path = &route_29_segments, .params = &route_29_params, .query = &route_29_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .bench_unavailable_require, .symbol = "handlers.bench_unavailable_require" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_29_capabilities },
+    .{ .id = "email", .method = .GET, .raw_path = "/emails/:email", .path = &route_18_segments, .params = &route_18_params, .query = &route_18_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .email, .symbol = "handlers.email" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_18_capabilities },
+    .{ .id = "token", .method = .GET, .raw_path = "/tokens/:token", .path = &route_19_segments, .params = &route_19_params, .query = &route_19_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .token, .symbol = "handlers.token" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_19_capabilities },
+    .{ .id = "search", .method = .GET, .raw_path = "/search", .path = &route_20_segments, .params = &route_20_params, .query = &route_20_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .search, .symbol = "handlers.search" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_20_capabilities },
+    .{ .id = "hybrid_inline", .method = .GET, .raw_path = "/hybrid-inline", .path = &route_21_segments, .params = &route_21_params, .query = &route_21_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .hybrid_inline, .symbol = "handlers.hybrid_inline" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_21_capabilities },
+    .{ .id = "bench_hybrid_inline", .method = .GET, .raw_path = "/__bench/hybrid-inline", .path = &route_22_segments, .params = &route_22_params, .query = &route_22_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .bench_hybrid_inline, .symbol = "handlers.bench_hybrid_inline" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_22_capabilities },
+    .{ .id = "bench_hybrid_inline_text_literal", .method = .GET, .raw_path = "/__bench/hybrid-inline-text-literal", .path = &route_23_segments, .params = &route_23_params, .query = &route_23_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .bench_hybrid_inline_text_literal, .symbol = "handlers.bench_hybrid_inline_text_literal" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_23_capabilities },
+    .{ .id = "hybrid_inline_params", .method = .GET, .raw_path = "/__bench/hybrid-inline-params/:id", .path = &route_24_segments, .params = &route_24_params, .query = &route_24_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .hybrid_inline_params, .symbol = "handlers.hybrid_inline_params" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_24_capabilities },
+    .{ .id = "hybrid_inline_echo", .method = .POST, .raw_path = "/__bench/hybrid-inline-echo", .path = &route_25_segments, .params = &route_25_params, .query = &route_25_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 16384, .max_body_bytes = 8192, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1146880 }, .max_body_bytes = 8192, .request_arena_bytes = 16384, .handler = .{ .zig_symbol = .{ .id = .hybrid_inline_echo, .symbol = "handlers.hybrid_inline_echo" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_25_capabilities },
+    .{ .id = "bench_unavailable_state", .method = .GET, .raw_path = "/__bench/lua-debug-state", .path = &route_26_segments, .params = &route_26_params, .query = &route_26_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .bench_unavailable_state, .symbol = "handlers.bench_unavailable_state" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_26_capabilities },
+    .{ .id = "bench_unavailable_global", .method = .GET, .raw_path = "/__bench/lua-global-counter", .path = &route_27_segments, .params = &route_27_params, .query = &route_27_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .bench_unavailable_global, .symbol = "handlers.bench_unavailable_global" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_27_capabilities },
+    .{ .id = "bench_unavailable_leak", .method = .GET, .raw_path = "/__bench/lua-state-leak", .path = &route_28_segments, .params = &route_28_params, .query = &route_28_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .bench_unavailable_leak, .symbol = "handlers.bench_unavailable_leak" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_28_capabilities },
+    .{ .id = "bench_unavailable_shared", .method = .GET, .raw_path = "/__bench/lua-shared-store", .path = &route_29_segments, .params = &route_29_params, .query = &route_29_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .bench_unavailable_shared, .symbol = "handlers.bench_unavailable_shared" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_29_capabilities },
+    .{ .id = "bench_unavailable_worker", .method = .GET, .raw_path = "/__bench/lua-worker-store", .path = &route_30_segments, .params = &route_30_params, .query = &route_30_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .bench_unavailable_worker, .symbol = "handlers.bench_unavailable_worker" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_30_capabilities },
+    .{ .id = "bench_unavailable_require", .method = .GET, .raw_path = "/__bench/lua-require-cache", .path = &route_31_segments, .params = &route_31_params, .query = &route_31_query, .memory = .{ .profile_name = "default", .request_arena_bytes = 262144, .max_body_bytes = 0, .max_uri_bytes = 8192, .max_path_bytes = 4096, .max_query_bytes = 4096, .max_query_pairs = 64, .max_path_segments = 32, .max_response_bytes = 1048576, .max_capability_response_bytes = 65536, .lua_heap_bytes = 0, .estimated_peak_bytes = 1384448 }, .max_body_bytes = 0, .request_arena_bytes = 262144, .handler = .{ .zig_symbol = .{ .id = .bench_unavailable_require, .symbol = "handlers.bench_unavailable_require" } }, .runtime = .{ .requires_lua = false, .requires_http = false, .requires_auth = false, .requires_zig_capability = false, .execution_class = .default }, .execution = .{ .class = .default, .may_block = false, .requires_lua = false, .requires_worker_pool = false }, .capabilities = &route_31_capabilities },
 };

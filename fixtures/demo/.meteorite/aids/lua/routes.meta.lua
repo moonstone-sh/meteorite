@@ -1,6 +1,6 @@
 ---@meta
 
----@diagnostic disable: missing-return
+---@diagnostic disable: missing-return, lowercase-global
 
 ---@class MeteoriteContext_route_1 : MeteoriteContext
 

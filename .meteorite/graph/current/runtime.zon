@@ -1,12 +1,12 @@
 .{
     .mode = .release_static,
-    .backend = .std_http,
+    .backend = .fast_http,
     .lua_runtime = false,
     .memory = .{
-        .dfa_bytes = 2304,
+        .dfa_bytes = 3620,
         .dfa_states = 148,
         .estimated_peak_bytes = 2433024,
-        .graph_bytes = 53348,
+        .graph_bytes = 57240,
         .max_path_bytes = 4096,
         .max_path_segments = 32,
         .max_query_bytes = 4096,

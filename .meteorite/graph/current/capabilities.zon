@@ -1,5 +1,5 @@
 .{
-    .backend = "std.http",
+    .backend = "fast_http",
     .declared = .{
         .http = .{
             .db = .{

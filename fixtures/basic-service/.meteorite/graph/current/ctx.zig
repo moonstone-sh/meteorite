@@ -99,6 +99,102 @@ pub const ctx = struct {
         pub fn bytes(self: get_user, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
         pub fn json(self: get_user, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
     };
+    pub const Params_put_user = struct {
+            id: u64,
+        };
+
+    pub const Query_put_user = struct {
+        };
+
+    pub const put_user = struct {
+        pub const method_name = "PUT";
+        pub const route_path = "/users/:id";
+        params: Params_put_user,
+        query: Query_put_user,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!put_user {
+            return .{ .params = .{
+                .id = try std.fmt.parseInt(u64, raw.param("id") orelse return error.MissingParam, 10)
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: put_user) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: put_user) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: put_user, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: put_user, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: put_user, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: put_user) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: put_user, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: put_user, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: put_user, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
+    pub const Params_patch_user = struct {
+            id: u64,
+        };
+
+    pub const Query_patch_user = struct {
+        };
+
+    pub const patch_user = struct {
+        pub const method_name = "PATCH";
+        pub const route_path = "/users/:id";
+        params: Params_patch_user,
+        query: Query_patch_user,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!patch_user {
+            return .{ .params = .{
+                .id = try std.fmt.parseInt(u64, raw.param("id") orelse return error.MissingParam, 10)
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: patch_user) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: patch_user) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: patch_user, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: patch_user, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: patch_user, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: patch_user) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: patch_user, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: patch_user, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: patch_user, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
+    pub const Params_delete_user = struct {
+            id: u64,
+        };
+
+    pub const Query_delete_user = struct {
+        };
+
+    pub const delete_user = struct {
+        pub const method_name = "DELETE";
+        pub const route_path = "/users/:id";
+        params: Params_delete_user,
+        query: Query_delete_user,
+        raw: *anyopaque,
+        vtable: *const VTable,
+
+        pub fn from(raw: anytype) Error!delete_user {
+            return .{ .params = .{
+                .id = try std.fmt.parseInt(u64, raw.param("id") orelse return error.MissingParam, 10)
+            }, .query = .{
+            }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
+        }
+
+        pub fn method(self: delete_user) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: delete_user) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: delete_user, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: delete_user, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: delete_user, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: delete_user) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: delete_user, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: delete_user, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: delete_user, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+    };
     pub const Params_echo = struct {
         };
 
