@@ -94,12 +94,15 @@ Meteorite owns production service exports through its Ballad plugin. Use `meteor
 local ballad = require("ballad")
 
 return ballad.partiture(function(p)
+  local moonstone = p:use(ballad.plugins.moonstone)
   local meteorite = p:use("meteorite.ballad")
+  local project = moonstone.project({ root = "." })
 
   local release = meteorite.release({
-    root = ".",
+    project = project,
     input = "src/main.lua",
     mode = "hybrid", -- or "static"
+    target = "aarch64-linux-gnu", -- optional cross target
     output = "dist/server",
     backend = "std_http",
     router_dispatch = "param_matchers",
@@ -109,7 +112,7 @@ return ballad.partiture(function(p)
 end)
 ```
 
-Static and hybrid are release compiler validation modes over the same normalized graph. Lua may build the graph in either mode; static fails if the graph retains Lua runtime execution nodes. Hybrid may retain Lua handlers/plugins, records the retained-node contract in `meteorite-release.json`, and must materialize target Lua plus target Lua modules for cross-target releases. Same-host hybrid exports currently include the server binary, lifted inline chunks, external Lua handlers, and Moonstone Lua module/C-module trees so `require(...)` works from inline isolates in the exported layout.
+Static and hybrid are release compiler validation modes over the same normalized graph. Lua may build the graph in either mode; static fails if the graph retains Lua runtime execution nodes. Hybrid may retain Lua handlers/plugins, records the retained-node contract in `meteorite-release.json`, and materializes target Lua plus target Lua modules for cross-target releases when Moonstone provides runtime/package source payloads. Same-host hybrid exports include the server binary, lifted inline chunks, external Lua handlers, and Moonstone Lua module/C-module trees so `require(...)` works from inline isolates in the exported layout.
 
 v0.1 intentionally generates graph data and bindings only; route matching and server behavior live in Zig.
 

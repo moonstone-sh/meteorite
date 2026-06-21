@@ -85,13 +85,15 @@ Implemented now:
 - Hybrid mode records release-contract metadata in `meteorite-release.json`.
 - Hybrid cross-target mode fails early when retained Lua runtime nodes exist but no Lua runtime source payload is supplied.
 - Hybrid same-host mode packages lifted inline chunks, app Lua sources, and current Moonstone Lua module/C-module trees.
+- `meteorite.release({ project = moonstone.project(...) })` consumes Moonstone runtime/package store facts automatically.
+- Cross-target hybrid release invokes `scripts/build-target-lua.sh` to build PUC Lua from `runtime.source_payload_path` with `zig cc` and passes the result to Zig via `-Dlua-root`.
+- Cross-target hybrid release schedules per-package Lua C-module rebuilds through `scripts/build-lua-cmodule.sh` when C-module packages expose `source_payload_path` and `rockspec_payload_path`.
 
 Still pending:
 
-- Moonstone plugin API should pass runtime/package source payload facts directly to `meteorite.release`.
-- Meteorite should compile PUC Lua from `source_payload_path` with `zig cc` for `opts.target`.
-- Meteorite should rebuild Lua C modules from source for the selected target/ABI.
 - LuaJIT support needs a separate target matrix and host `buildvm` stage.
+- Lua C-module rebuilds currently rely on package rockspecs and a local `luarocks` executable; packages without source/rockspec payloads fail with package-specific diagnostics.
+- Moonstone runtime/package descriptors should consistently publish source payloads for all production-supported hybrid targets.
 
 ## Target Hybrid Build Flow
 

@@ -5,6 +5,7 @@ pub fn build(b: *std.Build) void {
     const mode = b.option([]const u8, "mode", "Meteorite build mode") orelse "release-static";
     const graph_input = b.option([]const u8, "graph-input", "Meteorite app entry Lua file") orelse "src/main.lua";
     const graph_output = b.option([]const u8, "graph-output", "Generated Meteorite graph directory") orelse ".meteorite/graph/current";
+    const lua_root = b.option([]const u8, "lua-root", "Lua runtime root with include/ and lib/") orelse ".moonstone/env/libexec/lua/files";
     const hybrid_profile = b.option([]const u8, "hybrid-profile", "Hybrid profile") orelse "default";
     const backend = b.option([]const u8, "backend", "HTTP backend: fast_http or std_http") orelse "fast_http";
     const fast_http_strategy = b.option([]const u8, "fast-http-strategy", "fast_http strategy: threaded_probe or pool") orelse "threaded_probe";
@@ -95,8 +96,8 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    bridge_module.addIncludePath(b.path(".moonstone/env/libexec/lua/files/include"));
-    bridge_module.addLibraryPath(b.path(".moonstone/env/libexec/lua/files/lib"));
+    bridge_module.addIncludePath(b.path(std.fs.path.join(b.allocator, &.{ lua_root, "include" }) catch @panic("OOM")));
+    bridge_module.addLibraryPath(b.path(std.fs.path.join(b.allocator, &.{ lua_root, "lib" }) catch @panic("OOM")));
     bridge_module.linkSystemLibrary("lua", .{});
     bridge_module.linkSystemLibrary("m", .{});
 

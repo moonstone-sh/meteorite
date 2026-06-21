@@ -3,6 +3,12 @@ local path = require("ballad.path")
 local fs = require("ballad.fs")
 local emitter = require("meteorite.emitter")
 
+local function plugin_root()
+  local source = debug.getinfo(1, "S").source or ""
+  source = source:gsub("^@", "")
+  return path.dirname(path.dirname(path.dirname(source)))
+end
+
 local function join(root, value)
   if not value or value == "" then return root end
   if value:sub(1, 1) == "/" then return value end
@@ -29,6 +35,18 @@ local function normalize_mode(mode)
   if mode == "hybrid" or mode == "release-hybrid" then return "release-hybrid", "hybrid" end
   if mode == "static" or mode == "release-static" then return "release-static", "static" end
   error("meteorite.release: unsupported mode `" .. tostring(mode) .. "`; expected hybrid or static")
+end
+
+local function normalize_release_opts(opts)
+  opts = opts or {}
+  local project = opts.project or opts.moonstone_project
+  if project then
+    opts.root = opts.root or project.root
+    opts.runtime = opts.runtime or project.runtime
+    opts.packages = opts.packages or project.packages
+    opts.target = opts.target or (project.runtime and project.runtime.target)
+  end
+  return opts
 end
 
 local function load_app(root, input, mode)
@@ -130,6 +148,10 @@ local function target_from_opts(opts)
   return opts.target or runtime.target or runtime.abi_target
 end
 
+local function is_cross_target(target)
+  return target and target ~= "" and target ~= "native" and target ~= "any"
+end
+
 local function validate_hybrid_target_lua(ctx, root, contract, opts)
   if contract.validation_mode ~= "hybrid" then
     return { status = "not_required" }
@@ -140,7 +162,7 @@ local function validate_hybrid_target_lua(ctx, root, contract, opts)
   end
 
   local source = runtime_source_from_opts(opts)
-  if target and target ~= "" and (not source or source == "") then
+  if is_cross_target(target) and (not source or source == "") then
     local lines = {
       "meteorite.release({ mode = 'hybrid', target = '" .. tostring(target) .. "' }) failed the release compiler contract.",
       "",
@@ -165,10 +187,40 @@ local function validate_hybrid_target_lua(ctx, root, contract, opts)
     if not file_exists(full) then
       ctx.fail("meteorite.release({ mode = 'hybrid' }) runtime source_payload_path does not exist: " .. tostring(source))
     end
-    return { status = "source_payload_available", target = target, source_payload_path = source }
+    return { status = is_cross_target(target) and "target_build_required" or "source_payload_available", target = target, source_payload_path = source }
   end
 
   return { status = "host_env", target = target }
+end
+
+local function package_is_lua_cmodule(package)
+  local kind = package.kind or ""
+  if kind == "lua_cmodule" or kind == "cmodule" or kind == "native" then return true end
+  if package.lua_api or package.lua_abi then
+    local artifact_path = package.artifact_path or ""
+    if artifact_path ~= "" and fs.is_dir(path.join(artifact_path, "files/lib/lua")) then return true end
+  end
+  return false
+end
+
+local function package_is_lua_module(package)
+  local kind = package.kind or ""
+  return kind == "lua_module" or kind == "lib" or fs.is_dir(path.join(package.artifact_path or "", "files/share/lua"))
+end
+
+local function validate_hybrid_packages(ctx, contract, opts)
+  local target = target_from_opts(opts)
+  if contract.validation_mode ~= "hybrid" or not contract.requires_target_lua or not is_cross_target(target) then return end
+  for _, package in ipairs(opts.packages or {}) do
+    if package_is_lua_cmodule(package) then
+      if not package.source_payload_path or package.source_payload_path == "" then
+        ctx.fail("meteorite.release({ mode = 'hybrid', target = '" .. tostring(target) .. "' }) cannot rebuild Lua C module `" .. tostring(package.name) .. "`: missing source_payload_path")
+      end
+      if not package.rockspec_payload_path or package.rockspec_payload_path == "" then
+        ctx.fail("meteorite.release({ mode = 'hybrid', target = '" .. tostring(target) .. "' }) cannot rebuild Lua C module `" .. tostring(package.name) .. "`: missing rockspec_payload_path")
+      end
+    end
+  end
 end
 
 function file_exists(file_path)
@@ -236,6 +288,63 @@ local function add_runtime_source_asset(ctx, assets, root, target_lua)
   add_file_asset(ctx, assets, root, source_path, path.join("runtime/source", name), "lua_runtime_source", { target = target_lua.target or "host" })
 end
 
+local function compile_target_lua(ctx, root, opts, target_lua)
+  if not target_lua or target_lua.status ~= "target_build_required" then return nil end
+  local target = target_lua.target
+  local output = opts.target_lua_root or path.join(".meteorite/release", target, "lua")
+  local output_path = join(root, output)
+  local script = path.join(plugin_root(), "scripts/build-target-lua.sh")
+  return ctx:native_task({
+    tool = "sh",
+    args = { script, target_lua.source_payload_path, output_path, target, opts.optimize or "ReleaseFast" },
+    cwd = root,
+    outputs = { output_path },
+    inputs = { target_lua.source_payload_path, script },
+    cacheable = true,
+    parallel_safe = false,
+    description = "Build target Lua runtime for " .. tostring(target),
+  }), output
+end
+
+local function rebuild_lua_cmodules(ctx, root, opts, target_lua, lua_root)
+  local target = target_from_opts(opts)
+  if not is_cross_target(target) or not target_lua or not target_lua.source_payload_path then return {} end
+  local outputs = {}
+  local script = path.join(plugin_root(), "scripts/build-lua-cmodule.sh")
+  for _, package in ipairs(opts.packages or {}) do
+    if package_is_lua_cmodule(package) then
+      local package_id = tostring(package.name or "package"):gsub("[^%w_.-]", "_")
+      local output = path.join(".meteorite/release", target, "lua-cmodules", package_id)
+      local output_path = join(root, output)
+      outputs[#outputs + 1] = ctx:native_task({
+        tool = "sh",
+        args = { script, package.source_payload_path, package.rockspec_payload_path, join(root, lua_root), output_path, target, package_id },
+        cwd = root,
+        outputs = { output_path },
+        inputs = { package.source_payload_path, package.rockspec_payload_path, script },
+        cacheable = true,
+        parallel_safe = false,
+        description = "Rebuild Lua C module " .. tostring(package.name) .. " for " .. tostring(target),
+      })
+    end
+  end
+  return outputs
+end
+
+local function add_package_assets(ctx, assets, packages)
+  for _, package in ipairs(packages or {}) do
+    local artifact_path = package.artifact_path
+    if artifact_path and artifact_path ~= "" then
+      if package_is_lua_module(package) then
+        copy_tree_assets(ctx, assets, artifact_path, "files/share/lua", path.join("lua/share", package.name or "package"), "lua_module")
+      end
+      if package.target and package.target ~= "native" and package_is_lua_cmodule(package) then
+        copy_tree_assets(ctx, assets, artifact_path, "files/lib/lua", path.join("lua/lib", package.name or "package"), "lua_cmodule")
+      end
+    end
+  end
+end
+
 local function build_args_for(mode, opts)
   local args = {
     "build",
@@ -249,6 +358,7 @@ local function build_args_for(mode, opts)
   }
   if opts.optimize then args[#args + 1] = "-Doptimize=" .. opts.optimize end
   if opts.target then args[#args + 1] = "-Dtarget=" .. opts.target end
+  if opts.lua_root then args[#args + 1] = "-Dlua-root=" .. opts.lua_root end
   args[#args + 1] = "--"
   args[#args + 1] = opts.output or opts.out or "dist/server"
   return args
@@ -295,7 +405,7 @@ return {
   },
 
   graph = function(ctx, inputs, opts)
-    opts = opts or {}
+    opts = normalize_release_opts(opts)
     local root = opts.root or "."
     local input = join(root, opts.input or "src/main.lua")
     local output = join(root, opts.output or ".meteorite/graph/current")
@@ -326,7 +436,7 @@ return {
   end,
 
   release = function(ctx, inputs, opts)
-    opts = opts or {}
+    opts = normalize_release_opts(opts)
     local root = opts.root or "."
     local input = join(root, opts.input or "src/main.lua")
     local graph_output = join(root, opts.graph_output or ".meteorite/graph/current")
@@ -340,11 +450,15 @@ return {
     local contract = release_contract(normalized, release_mode)
     if release_mode == "static" then fail_static_lua(ctx, contract.retained_lua_nodes) end
     local target_lua = validate_hybrid_target_lua(ctx, root, contract, opts)
+    validate_hybrid_packages(ctx, contract, opts)
+    local lua_task_assets, lua_root = compile_target_lua(ctx, root, opts, target_lua)
+    lua_root = lua_root or opts.lua_root
+    local cmodule_task_sets = rebuild_lua_cmodules(ctx, root, opts, target_lua, lua_root)
 
     local result = emitter.emit(app, { output = graph_output, mode = mode })
     local task_assets = ctx:native_task({
       tool = opts.tool or "zig",
-      args = build_args_for(mode, { output = output, graph_input = opts.input or "src/main.lua", graph_output = opts.graph_output or ".meteorite/graph/current", backend = opts.backend, hybrid_profile = opts.hybrid_profile, ["hybrid-profile"] = opts["hybrid-profile"], router_dispatch = opts.router_dispatch, ["router-dispatch"] = opts["router-dispatch"], optimize = opts.optimize, target = opts.target }),
+      args = build_args_for(mode, { output = output, graph_input = opts.input or "src/main.lua", graph_output = opts.graph_output or ".meteorite/graph/current", backend = opts.backend, hybrid_profile = opts.hybrid_profile, ["hybrid-profile"] = opts["hybrid-profile"], router_dispatch = opts.router_dispatch, ["router-dispatch"] = opts["router-dispatch"], optimize = opts.optimize, target = opts.target, lua_root = lua_root }),
       cwd = root,
       outputs = { output_path },
       cacheable = false,
@@ -353,6 +467,22 @@ return {
     })
 
     local assets = graph_mod.AssetSet.new()
+    if lua_task_assets then
+      for _, asset in ipairs(lua_task_assets.assets or {}) do
+        asset.virtual_path = "runtime/lua"
+        asset.kind = "lua_runtime"
+        asset.metadata = asset.metadata or {}
+        asset.metadata.target = target_lua.target
+        assets:add(asset)
+      end
+    end
+    for _, task_set in ipairs(cmodule_task_sets) do
+      for _, asset in ipairs(task_set.assets or {}) do
+        asset.virtual_path = path.join("runtime/lua-cmodules", path.basename and path.basename(asset.output_path or asset.virtual_path or "module") or "module")
+        asset.kind = "lua_cmodule"
+        assets:add(asset)
+      end
+    end
     for _, asset in ipairs(task_assets.assets or {}) do
       asset.virtual_path = opts.bin or "bin/server"
       asset.kind = "meteorite_server"
@@ -369,6 +499,7 @@ return {
     }))
     if release_mode == "hybrid" then
       add_hybrid_lua_assets(ctx, assets, root, result.graph)
+      add_package_assets(ctx, assets, opts.packages)
       add_runtime_source_asset(ctx, assets, root, target_lua)
     end
     return assets
