@@ -15,6 +15,7 @@ return ballad.partiture(function(p)
       "build.zig",
       "src/**",
       "native/**",
+      "scripts/**",
       "README.md",
     },
     exclude = {

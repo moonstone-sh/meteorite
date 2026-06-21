@@ -34,7 +34,7 @@ local function handler_shape(handler)
   local kind = type(handler)
   if kind == "string" then return { kind = "zig", symbol = handler } end
   if kind == "function" then return { kind = "inline_lua", value = handler } end
-  if kind == "table" and handler.kind == "lua" then return { kind = "lua", module = handler.module } end
+  if kind == "table" and handler.kind == "lua" then return { kind = "lua", module = handler.module, path = handler.path } end
   if kind == "table" and handler.kind == "zig" then return { kind = "zig", symbol = handler.symbol } end
   if kind == "table" and handler.kind == "zig_file" then return { kind = "zig_file", path = handler.path, decl = handler.decl or "handle" } end
   error("unsupported handler shape: " .. kind)
@@ -106,7 +106,7 @@ end
 local function normalize_handler(handler)
   if handler.kind == "zig" then return { kind = "zig", symbol = symbol_id(handler.symbol), import = handler.symbol } end
   if handler.kind == "zig_file" then return { kind = "zig_file", symbol = symbol_id(handler.path), path = handler.path, decl = handler.decl or "handle" } end
-  if handler.kind == "lua" then return { kind = "lua", module = handler.module } end
+  if handler.kind == "lua" then return { kind = "lua", module = handler.module, path = handler.path } end
   return { kind = "inline_lua", value = handler.value }
 end
 
@@ -292,7 +292,7 @@ function route.normalize_app(app, opts)
     for _, plugin in ipairs(route.scope.plugins or {}) do
       if type(plugin) == "table" and plugin.__meteorite_plugin and not plugin_seen[plugin] then
         plugin_seen[plugin] = true
-        plugins[#plugins + 1] = { id = plugin.id, kind = plugin.kind, options = plugin.options, execute = plugin.execute }
+        plugins[#plugins + 1] = { id = plugin.id, kind = plugin.kind, options = plugin.options, execute = plugin.execute, source = plugin.source }
       end
     end
   end

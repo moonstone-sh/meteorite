@@ -6,6 +6,8 @@ local server = arg[5] or "dist/server"
 local state_dir = ".meteorite/dev"
 local pid_file = state_dir .. "/server.pid"
 local log_file = state_dir .. "/server.log"
+local guard_script = "scripts/guard.sh"
+local dev_port = os.getenv("METEORITE_DEV_PORT") or "8080"
 
 local function path_exists(path)
   local file = io.open(path, "rb")
@@ -21,6 +23,11 @@ end
 
 local function run(command)
   io.stderr:write("$ " .. command .. "\n")
+  local ok, _, code = os.execute(command)
+  return ok == true or ok == 0 or code == 0
+end
+
+local function quiet_run(command)
   local ok, _, code = os.execute(command)
   return ok == true or ok == 0 or code == 0
 end
@@ -52,20 +59,49 @@ local function write_file(path, content)
   file:close()
 end
 
-local function stop_server()
+local function guard(command)
+  if not path_exists(guard_script) then return false end
+  local env = table.concat({
+    "METEORITE_DEV_STATE_DIR=" .. shell_quote(state_dir),
+    "METEORITE_DEV_PID_FILE=" .. shell_quote(pid_file),
+    "METEORITE_DEV_PORT=" .. shell_quote(dev_port),
+    "METEORITE_DEV_SERVER=" .. shell_quote(server),
+  }, " ")
+  return run(env .. " " .. shell_quote(guard_script) .. " " .. shell_quote(command))
+end
+
+local function pid_running(pid)
+  return pid ~= nil and quiet_run("kill -0 " .. tostring(pid) .. " >/dev/null 2>&1")
+end
+
+local function current_server_pid()
   local pid = read_file(pid_file)
+  return pid and pid:match("%d+") or nil
+end
+
+local function server_running()
+  return pid_running(current_server_pid())
+end
+
+local function stop_server()
+  if guard("cleanup") then return end
+  local pid = current_server_pid()
   if pid then
-    pid = pid:match("%d+")
-    if pid then os.execute("kill " .. pid .. " >/dev/null 2>&1 || true") end
+    os.execute("kill " .. pid .. " >/dev/null 2>&1 || true")
+    os.remove(pid_file)
   end
 end
 
 local function start_server()
-  stop_server()
+  if not guard("assert-free") then stop_server() end
   local command = shell_quote(server) .. " >" .. shell_quote(log_file) .. " 2>&1 & echo $!"
   local pid = capture(command):match("%d+")
   if pid then write_file(pid_file, pid .. "\n") end
-  io.stderr:write("Meteorite dev server: http://127.0.0.1:8080 pid=" .. tostring(pid or "?") .. " log=" .. log_file .. "\n")
+  os.execute("sleep 0.1")
+  if pid and not pid_running(pid) then
+    io.stderr:write("Meteorite dev server failed to stay running; see " .. log_file .. "\n")
+  end
+  io.stderr:write("Meteorite dev server: http://127.0.0.1:" .. dev_port .. " pid=" .. tostring(pid or "?") .. " log=" .. log_file .. "\n")
 end
 
 local function source_fingerprint()
@@ -179,7 +215,7 @@ while running do
       local action, reason = classify_changes(changes, force_build)
       io.stderr:write("Meteorite dev: action=" .. action .. " reason=" .. reason .. "\n")
       if action == "none" then
-        if not read_file(pid_file) then start_server() end
+        if not server_running() then start_server() end
       elseif action == "reload" then
         if reload_lua() then
           io.stderr:write("Meteorite dev: Lua handlers reloaded in-process.\n")

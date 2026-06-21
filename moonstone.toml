@@ -11,7 +11,7 @@ abi = "5.4"
 
 [scripts]
 "graph" = "lua src/meteorite/cli.lua graph src/main.lua .meteorite/graph/current release-static"
-"dev" = "lua src/meteorite/dev.lua src/main.lua .meteorite/graph/current hybrid_dev"
+"dev" = "sh -c 'METEORITE_GUARD_EXCLUDE_PID=$$ scripts/guard.sh handoff; trap \"scripts/guard.sh cleanup >/dev/null 2>&1 || true\" EXIT INT TERM; lua src/meteorite/dev.lua src/main.lua .meteorite/graph/current hybrid_dev'"
 "build" = "zig build install-server"
 "run" = "zig build run"
 "test-fixture" = "LUA_PATH='../ballad/.moonstone/env/share/lua/5.1/?.lua;../ballad/.moonstone/env/share/lua/5.1/?/init.lua;../ballad/src/?.lua;../ballad/src/?/init.lua;;' luajit ../ballad/src/main.lua play partiture-test.lua"

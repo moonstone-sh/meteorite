@@ -88,6 +88,18 @@ local function scope_id(prefix)
   return value:gsub("%W", "_")
 end
 
+local function lua_handler_path(module_ref)
+  if tostring(module_ref):find("/", 1, true) or tostring(module_ref):match("%.lua$") then return module_ref end
+  return "src/" .. tostring(module_ref):gsub("%.", "/") .. ".lua"
+end
+
+local function source_info(level)
+  local info = debug.getinfo(level or 3, "Sl") or {}
+  local source = info.source or info.short_src or "<unknown>"
+  if source:sub(1, 1) == "@" then source = source:sub(2) end
+  return { file = source, line = info.currentline or info.linedefined or 0, column = 1 }
+end
+
 ---@class MeteoriteApp
 ---@field name string
 ---@field routes table
@@ -367,7 +379,7 @@ end
 ---@param module_ref string
 ---@return {kind: "lua", module: string, path: string}
 function M.lua(module_ref)
-  return { kind = "lua", module = module_ref, path = module_ref }
+  return { kind = "lua", module = module_ref, path = lua_handler_path(module_ref) }
 end
 
 ---@param kind "zig"|"zig_file"|"lua"
@@ -378,7 +390,7 @@ function M.handler(kind, ref, opts)
   opts = opts or {}
   if kind == "zig" then return { kind = "zig", symbol = ref } end
   if kind == "zig_file" then return { kind = "zig_file", path = ref, decl = opts.decl or "handle" } end
-  if kind == "lua" then return { kind = "lua", module = ref, path = opts.path or ref } end
+  if kind == "lua" then return { kind = "lua", module = ref, path = opts.path or lua_handler_path(ref) } end
   error("unsupported handler kind: " .. tostring(kind))
 end
 
@@ -407,6 +419,7 @@ function M.plugin(spec)
   spec.kind = spec.kind or "custom"
   spec.id = spec.id or (spec.kind .. "_" .. tostring(plugin_counter))
   spec.options = spec.options or {}
+  spec.source = spec.source or source_info(3)
   return spec
 end
 

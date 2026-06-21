@@ -343,19 +343,7 @@ pub const HybridLuaRuntime = struct {
         defer c.lua_close(L);
         c.luaL_openlibs(L);
 
-        const setup = "package.path = 'src/?.lua;src/?/init.lua;.moonstone/env/share/lua/5.4/?.lua;.moonstone/env/share/lua/5.4/?/init.lua;' .. package.path";
-        if (c.luaL_loadstring(L, setup.ptr) != c.LUA_OK) {
-            const err = c.lua_tolstring(L, -1, null);
-            std.log.err("lua setup load failed: {s}", .{err});
-            incLua(&lua_stats.lua_errors);
-            return error.LuaLoadFailed;
-        }
-        if (c.lua_pcallk(L, 0, 0, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
-            const err = c.lua_tolstring(L, -1, null);
-            std.log.err("lua setup failed: {s}", .{err});
-            incLua(&lua_stats.lua_errors);
-            return error.LuaRuntimeError;
-        }
+        try setupLuaPackagePaths(L);
 
         if (c.luaL_loadfilex(L, @ptrCast(handler.path.ptr), @as([*c]const u8, null)) != c.LUA_OK) {
             const err = c.lua_tolstring(L, -1, null);
@@ -484,17 +472,7 @@ pub const HybridLuaRuntime = struct {
         defer c.lua_close(L);
         c.luaL_openlibs(L);
 
-        const setup = "package.path = 'src/?.lua;src/?/init.lua;.moonstone/env/share/lua/5.4/?.lua;.moonstone/env/share/lua/5.4/?/init.lua;' .. package.path";
-        if (c.luaL_loadstring(L, setup.ptr) != c.LUA_OK) {
-            std.log.err("lua setup load failed for plugin: {s}", .{c.lua_tolstring(L, -1, null)});
-            incLua(&lua_stats.lua_errors);
-            return false;
-        }
-        if (c.lua_pcallk(L, 0, 0, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
-            std.log.err("lua setup failed for plugin: {s}", .{c.lua_tolstring(L, -1, null)});
-            incLua(&lua_stats.lua_errors);
-            return false;
-        }
+        setupLuaPackagePaths(L) catch return false;
 
         const plugin_path = if (@hasField(@TypeOf(handler), "chunk_path")) handler.chunk_path else handler.path;
         if (c.luaL_loadfilex(L, @ptrCast(plugin_path.ptr), @as([*c]const u8, null)) != c.LUA_OK) {
@@ -608,6 +586,25 @@ pub const HybridLuaRuntime = struct {
         return false;
     }
 };
+
+fn setupLuaPackagePaths(L: ?*c.lua_State) !void {
+    const setup =
+        \\package.path = 'src/?.lua;src/?/init.lua;.moonstone/env/share/lua/5.4/?.lua;.moonstone/env/share/lua/5.4/?/init.lua;.moonstone/env/share/lua/5.3/?.lua;.moonstone/env/share/lua/5.3/?/init.lua;.moonstone/env/share/lua/5.2/?.lua;.moonstone/env/share/lua/5.2/?/init.lua;.moonstone/env/share/lua/5.1/?.lua;.moonstone/env/share/lua/5.1/?/init.lua;lua/?.lua;lua/?/init.lua;lua/5.4/?.lua;lua/5.4/?/init.lua;lua/5.3/?.lua;lua/5.3/?/init.lua;lua/5.2/?.lua;lua/5.2/?/init.lua;lua/5.1/?.lua;lua/5.1/?/init.lua;' .. package.path
+        \\package.cpath = '.moonstone/env/lib/lua/5.4/?.so;.moonstone/env/lib/lua/5.4/?.dylib;.moonstone/env/lib/lua/5.4/?.dll;.moonstone/env/lib/lua/5.3/?.so;.moonstone/env/lib/lua/5.3/?.dylib;.moonstone/env/lib/lua/5.3/?.dll;.moonstone/env/lib/lua/5.2/?.so;.moonstone/env/lib/lua/5.2/?.dylib;.moonstone/env/lib/lua/5.2/?.dll;.moonstone/env/lib/lua/5.1/?.so;.moonstone/env/lib/lua/5.1/?.dylib;.moonstone/env/lib/lua/5.1/?.dll;lib/?.so;lib/?.dylib;lib/?.dll;lib/5.4/?.so;lib/5.4/?.dylib;lib/5.4/?.dll;lib/5.3/?.so;lib/5.3/?.dylib;lib/5.3/?.dll;lib/5.2/?.so;lib/5.2/?.dylib;lib/5.2/?.dll;lib/5.1/?.so;lib/5.1/?.dylib;lib/5.1/?.dll;' .. package.cpath
+    ;
+    if (c.luaL_loadstring(L, setup.ptr) != c.LUA_OK) {
+        const err = c.lua_tolstring(L, -1, null);
+        std.log.err("lua package setup load failed: {s}", .{err});
+        incLua(&lua_stats.lua_errors);
+        return error.LuaLoadFailed;
+    }
+    if (c.lua_pcallk(L, 0, 0, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
+        const err = c.lua_tolstring(L, -1, null);
+        std.log.err("lua package setup failed: {s}", .{err});
+        incLua(&lua_stats.lua_errors);
+        return error.LuaRuntimeError;
+    }
+}
 
 pub fn pushMethod(L: ?*c.lua_State, name: [*c]const u8, func: c.lua_CFunction) void {
     c.lua_pushcfunction(L, func);
@@ -1162,17 +1159,7 @@ pub const CachedHybridRuntime = struct {
         incLua(&lua_stats.lua_states_created);
         c.luaL_openlibs(L.?);
 
-        const setup = "package.path = 'src/?.lua;src/?/init.lua;.moonstone/env/share/lua/5.4/?.lua;.moonstone/env/share/lua/5.4/?/init.lua;' .. package.path";
-        if (c.luaL_loadstring(L.?, setup.ptr) != c.LUA_OK) {
-            std.log.err("cached lua setup load failed: {s}", .{c.lua_tolstring(L.?, -1, null)});
-            incLua(&lua_stats.lua_errors);
-            return error.LuaLoadFailed;
-        }
-        if (c.lua_pcallk(L.?, 0, 0, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
-            std.log.err("cached lua setup failed: {s}", .{c.lua_tolstring(L.?, -1, null)});
-            incLua(&lua_stats.lua_errors);
-            return error.LuaRuntimeError;
-        }
+        try setupLuaPackagePaths(L.?);
 
         comptime var idx: usize = 0;
         inline for (graph_cached.routes) |route| {
