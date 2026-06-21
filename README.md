@@ -109,7 +109,7 @@ return ballad.partiture(function(p)
 end)
 ```
 
-Static releases fail before building if graph-visible Lua remains, and the diagnostic lists each inline handler, Lua file/module handler, or scoped Lua plugin with a source location. Hybrid releases include the server binary, lifted inline chunks, external Lua handlers, and Moonstone Lua module/C-module trees so `require(...)` works from inline isolates in the exported layout.
+Static and hybrid are release compiler validation modes over the same normalized graph. Lua may build the graph in either mode; static fails if the graph retains Lua runtime execution nodes. Hybrid may retain Lua handlers/plugins, records the retained-node contract in `meteorite-release.json`, and must materialize target Lua plus target Lua modules for cross-target releases. Same-host hybrid exports currently include the server binary, lifted inline chunks, external Lua handlers, and Moonstone Lua module/C-module trees so `require(...)` works from inline isolates in the exported layout.
 
 v0.1 intentionally generates graph data and bindings only; route matching and server behavior live in Zig.
 

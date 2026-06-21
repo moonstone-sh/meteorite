@@ -86,9 +86,11 @@ end
 local function fail_static_lua(ctx, refs)
   if #refs == 0 then return end
   local lines = {
-    "meteorite.release({ mode = 'static' }) cannot ship Lua handlers/plugins.",
+    "meteorite.release({ mode = 'static' }) failed the release compiler contract.",
     "",
-    "Lua references found:",
+    "The graph may be produced by Lua, but static mode cannot retain Lua runtime execution nodes.",
+    "",
+    "Lua runtime nodes found:",
   }
   for _, ref in ipairs(refs) do
     lines[#lines + 1] = "  - " .. ref.kind .. ": " .. ref.label
@@ -100,7 +102,76 @@ local function fail_static_lua(ctx, refs)
   ctx.fail(table.concat(lines, "\n"))
 end
 
-local function file_exists(file_path)
+local file_exists
+
+local function release_contract(graph, release_mode)
+  local refs = lua_references(graph)
+  return {
+    format = "meteorite.release_contract.v0",
+    validation_mode = release_mode,
+    graph_may_be_produced_by_lua = true,
+    retained_lua_nodes = refs,
+    requires_target_lua = release_mode == "hybrid" and #refs > 0,
+  }
+end
+
+local function runtime_source_from_opts(opts)
+  local runtime = opts.runtime or {}
+  return opts.lua_source
+    or opts.runtime_source
+    or runtime.source_payload_path
+    or runtime.source_payload
+    or runtime.source
+    or os.getenv("METEORITE_LUA_SOURCE")
+end
+
+local function target_from_opts(opts)
+  local runtime = opts.runtime or {}
+  return opts.target or runtime.target or runtime.abi_target
+end
+
+local function validate_hybrid_target_lua(ctx, root, contract, opts)
+  if contract.validation_mode ~= "hybrid" then
+    return { status = "not_required" }
+  end
+  local target = target_from_opts(opts)
+  if not contract.requires_target_lua then
+    return { status = "not_required", target = target }
+  end
+
+  local source = runtime_source_from_opts(opts)
+  if target and target ~= "" and (not source or source == "") then
+    local lines = {
+      "meteorite.release({ mode = 'hybrid', target = '" .. tostring(target) .. "' }) failed the release compiler contract.",
+      "",
+      "Hybrid mode may retain Lua runtime execution nodes, but cross-target release must materialize target Lua and target Lua modules.",
+      "",
+      "Missing:",
+      "  source_payload_path",
+      "",
+      "Lua runtime nodes found:",
+    }
+    for _, ref in ipairs(contract.retained_lua_nodes) do
+      lines[#lines + 1] = "  - " .. ref.kind .. ": " .. ref.label
+      lines[#lines + 1] = "    at: " .. ref.source
+    end
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "Hint: pass runtime = { source_payload_path = ... } from the Moonstone/Ballad plugin, set lua_source/runtime_source, or build static after replacing Lua runtime handlers/plugins."
+    ctx.fail(table.concat(lines, "\n"))
+  end
+
+  if source and source ~= "" then
+    local full = join(root, source)
+    if not file_exists(full) then
+      ctx.fail("meteorite.release({ mode = 'hybrid' }) runtime source_payload_path does not exist: " .. tostring(source))
+    end
+    return { status = "source_payload_available", target = target, source_payload_path = source }
+  end
+
+  return { status = "host_env", target = target }
+end
+
+function file_exists(file_path)
   local f = io.open(file_path, "rb")
   if f then f:close(); return true end
   return false
@@ -158,6 +229,13 @@ local function add_hybrid_lua_assets(ctx, assets, root, graph)
   end
 end
 
+local function add_runtime_source_asset(ctx, assets, root, target_lua)
+  if not target_lua or not target_lua.source_payload_path then return end
+  local source_path = target_lua.source_payload_path
+  local name = source_path:match("([^/]+)$") or "lua-source.tar.gz"
+  add_file_asset(ctx, assets, root, source_path, path.join("runtime/source", name), "lua_runtime_source", { target = target_lua.target or "host" })
+end
+
 local function build_args_for(mode, opts)
   local args = {
     "build",
@@ -176,14 +254,31 @@ local function build_args_for(mode, opts)
   return args
 end
 
-local function build_manifest(result, release_mode, output_path)
+local function json_string(value)
+  return "\"" .. tostring(value or ""):gsub('\\', '\\\\'):gsub('"', '\\"'):gsub('\n', '\\n') .. "\""
+end
+
+local function build_manifest(result, release_mode, output_path, contract, target_lua)
+  local retained = contract and contract.retained_lua_nodes or {}
   local lines = {
     "{",
     "  \"format\": \"meteorite.release.v0\",",
     "  \"mode\": \"" .. release_mode .. "\",",
     "  \"graph_hash\": \"" .. tostring(result.graph_hash) .. "\",",
     "  \"routes\": " .. tostring(#(result.graph.routes or {})) .. ",",
-    "  \"output\": \"" .. tostring(output_path):gsub('\\', '\\\\'):gsub('"', '\\"') .. "\"",
+    "  \"output\": " .. json_string(output_path) .. ",",
+    "  \"contract\": {",
+    "    \"format\": \"meteorite.release_contract.v0\",",
+    "    \"validation_mode\": " .. json_string(contract and contract.validation_mode or release_mode) .. ",",
+    "    \"graph_may_be_produced_by_lua\": true,",
+    "    \"retained_lua_nodes\": " .. tostring(#retained) .. ",",
+    "    \"requires_target_lua\": " .. tostring(contract and contract.requires_target_lua or false),
+    "  },",
+    "  \"target_lua\": {",
+    "    \"status\": " .. json_string(target_lua and target_lua.status or "not_required") .. ",",
+    "    \"target\": " .. json_string(target_lua and target_lua.target or "") .. ",",
+    "    \"source_payload_path\": " .. json_string(target_lua and target_lua.source_payload_path or ""),
+    "  }",
     "}",
     "",
   }
@@ -242,7 +337,9 @@ return {
     if type(app) ~= "table" or not app.__meteorite_app then ctx.fail(input .. " must return a Meteorite app") end
 
     local normalized = app:normalize({ mode = "dev" })
-    if release_mode == "static" then fail_static_lua(ctx, lua_references(normalized)) end
+    local contract = release_contract(normalized, release_mode)
+    if release_mode == "static" then fail_static_lua(ctx, contract.retained_lua_nodes) end
+    local target_lua = validate_hybrid_target_lua(ctx, root, contract, opts)
 
     local result = emitter.emit(app, { output = graph_output, mode = mode })
     local task_assets = ctx:native_task({
@@ -266,11 +363,14 @@ return {
     assets:add(ctx.graph:add_asset({
       kind = "meteorite_release_manifest",
       virtual_path = "meteorite-release.json",
-      content = build_manifest(result, release_mode, output),
+      content = build_manifest(result, release_mode, output, contract, target_lua),
       generated = true,
-      metadata = { mode = release_mode, graph_hash = result.graph_hash },
+      metadata = { mode = release_mode, graph_hash = result.graph_hash, contract = contract.format },
     }))
-    if release_mode == "hybrid" then add_hybrid_lua_assets(ctx, assets, root, result.graph) end
+    if release_mode == "hybrid" then
+      add_hybrid_lua_assets(ctx, assets, root, result.graph)
+      add_runtime_source_asset(ctx, assets, root, target_lua)
+    end
     return assets
   end,
 }

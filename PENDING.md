@@ -1,14 +1,50 @@
-# Pending: Production Hybrid Runtime Builds
+# Pending: Meteorite Release Compiler Contract
 
-Meteorite's production release path should split host graph construction from target runtime execution.
+Meteorite release export should be treated as a compiler contract over one normalized application graph. Lua may construct the graph in every release mode; the mode only changes which runtime execution nodes the final graph is allowed to retain and what target artifacts must be materialized.
 
-## Desired Release Model
+## Contract Modes
 
-`meteorite.release({ mode = "static" })` should produce a Zig-only server and fail if any runtime Lua remains in the emitted graph.
+### Static
 
-`meteorite.release({ mode = "hybrid" })` should build and ship the Lua runtime for the requested target alongside the Meteorite server. The Lua runtime should not be copied from the developer machine's current `.moonstone/env`; it should be built from source with `zig cc` for the release target.
+`meteorite.release({ mode = "static" })` validates the graph as a Zig-only runtime artifact.
 
-Example API shape:
+Allowed:
+
+- Lua DSL code that runs on the host to produce the graph.
+- Lua plugins/macros that expand entirely into graph facts or Zig/static references during graph construction.
+- Generated Zig route tables, handler bindings, static route constants, and compile-time-known limits.
+
+Forbidden:
+
+- inline Lua route handlers retained in the emitted graph;
+- `m.lua(...)` file/module route handlers retained in the emitted graph;
+- scoped plugin runtime `execute` functions retained in the graph;
+- plugin handlers that lower to Lua runtime handlers;
+- any other runtime node that requires an embedded Lua interpreter after export.
+
+Failure must list each retained Lua runtime node with source location and suggest either `mode = "hybrid"` or replacing the non-graphable Lua with Zig/graph-expanded equivalents.
+
+### Hybrid
+
+`meteorite.release({ mode = "hybrid" })` validates the same graph as a mixed Zig + Lua runtime artifact.
+
+Allowed:
+
+- all static-mode graph construction behavior;
+- retained inline Lua route handlers;
+- retained Lua file/module handlers;
+- retained scoped Lua plugin execution nodes.
+
+Required when Lua runtime nodes remain:
+
+- materialize the target Lua runtime, not the developer machine's host runtime;
+- materialize target-compatible pure Lua modules;
+- rebuild/materialize target-compatible Lua C modules for the selected runtime ABI;
+- emit artifact-local runtime metadata so the server can set `LUA_PATH` and `LUA_CPATH` without depending on the host `.moonstone/env`.
+
+For same-host development exports, the current implementation can package the materialized `.moonstone/env` Lua module trees. For cross-target exports, the compiler must require Moonstone store facts for target runtime source/module source before building.
+
+## API Shape
 
 ```lua
 local release = meteorite.release({
@@ -16,72 +52,74 @@ local release = meteorite.release({
   target = "aarch64-linux-gnu", -- e.g. Raspberry Pi 5
   optimize = "ReleaseFast",
   output = "dist/server",
+  runtime = {
+    id = "lua@5.4.7",
+    abi = "lua54",
+    source_payload_path = "/store/.../lua-5.4.7.tar.gz",
+  },
 })
 ```
 
-## Ownership
+`mode` selects validation over the normalized graph. It should not select a separate graph builder.
 
-The Moonstone Ballad plugin should expose runtime/store facts:
+## Moonstone/Ballad Store Contract
+
+The Moonstone Ballad plugin should expose runtime and package facts from the Moonstone store:
 
 - selected runtime identity, version, ABI, and target support;
-- host runtime executable path for graph construction;
-- runtime artifact path in the local content-addressed store;
-- runtime source payload path in the store;
+- host runtime executable path used only for graph construction;
+- runtime binary artifact path in the content-addressed store;
+- runtime source payload path in the content-addressed store;
 - runtime headers/libs metadata when materialized;
-- package source payloads for Lua C modules.
+- pure Lua module payloads selected by the project lock;
+- Lua C-module source payloads and ABI metadata selected by the project lock.
 
-The Meteorite Ballad plugin should consume those facts:
+Meteorite consumes those facts as compiler inputs. Static mode may ignore target Lua materialization because the validated graph cannot retain Lua runtime nodes. Hybrid mode must fail if retained Lua nodes exist and the required target Lua facts are unavailable.
 
-- static release: validate no Lua refs remain in the runtime graph;
-- hybrid release: build target Lua with `zig cc`, build the server against it, collect Lua files/packages, and compile Lua C modules for the same target/ABI.
+## Current Implementation Status
 
-## Hybrid Build Flow
+Implemented now:
 
-1. Use host Lua from Moonstone env to evaluate `src/main.lua` and emit the graph.
-2. Ask Moonstone for the selected runtime source payload and ABI metadata.
-3. Build PUC Lua with `zig cc` for `opts.target`.
-4. Build Meteorite server against the target-built Lua headers/library.
-5. Collect release files:
+- `meteorite.release` creates one normalized graph and validates it as `static` or `hybrid`.
+- Static mode fails before Zig build when retained Lua runtime execution nodes are present.
+- Hybrid mode records release-contract metadata in `meteorite-release.json`.
+- Hybrid cross-target mode fails early when retained Lua runtime nodes exist but no Lua runtime source payload is supplied.
+- Hybrid same-host mode packages lifted inline chunks, app Lua sources, and current Moonstone Lua module/C-module trees.
+
+Still pending:
+
+- Moonstone plugin API should pass runtime/package source payload facts directly to `meteorite.release`.
+- Meteorite should compile PUC Lua from `source_payload_path` with `zig cc` for `opts.target`.
+- Meteorite should rebuild Lua C modules from source for the selected target/ABI.
+- LuaJIT support needs a separate target matrix and host `buildvm` stage.
+
+## Target Hybrid Build Flow
+
+1. Host Lua evaluates the Meteorite app and produces the normalized graph.
+2. Meteorite validates the graph using the selected release mode.
+3. If hybrid retains Lua nodes, Meteorite asks Moonstone/Ballad for target runtime and module source facts.
+4. Meteorite builds target Lua with `zig cc` and selected Zig target flags.
+5. Meteorite builds the server against the target Lua headers/library when needed.
+6. Meteorite collects release files:
    - `bin/server`;
    - target-built `liblua` if dynamically linked;
    - lifted inline Lua chunks;
    - external Lua handler/plugin files;
    - pure Lua package modules;
    - target-built Lua C modules.
-6. Generate artifact-local runtime metadata and package paths:
-   - `LUA_PATH` for shipped Lua files/modules;
-   - `LUA_CPATH` for target-built C modules.
+7. Meteorite emits artifact-local runtime metadata and uses it at startup for `LUA_PATH`/`LUA_CPATH`.
 
-## Static Mode Validation
+## Missing Runtime Source Diagnostic
 
-Static mode should allow Lua that runs only during graph construction. It should fail only for Lua that remains in the emitted runtime graph, including:
-
-- inline Lua route handlers;
-- `m.lua(...)` file/module route handlers;
-- scoped Lua plugins with runtime `execute` functions;
-- plugin handlers that compile to Lua runtime handlers.
-
-The error should include every source location and suggest either `mode = "hybrid"` or replacing non-graphable Lua with Zig/graph-expanded handlers/plugins.
-
-## Missing Runtime Source
-
-Hybrid cross-target release should fail early if Moonstone cannot provide runtime source:
+Hybrid cross-target release should fail before build when retained Lua nodes require target Lua but Moonstone cannot provide source:
 
 ```text
-meteorite.release({ mode = "hybrid", target = "aarch64-linux-gnu" }) requires Lua runtime source.
+meteorite.release({ mode = 'hybrid', target = 'aarch64-linux-gnu' }) failed the release compiler contract.
 
-Runtime:
-  lua@5.4.7
+Hybrid mode may retain Lua runtime execution nodes, but cross-target release must materialize target Lua and target Lua modules.
 
 Missing:
   source_payload_path
 
-Hint:
-  run moon sync with source artifacts enabled, or install a runtime package that includes source.
+Hint: pass runtime = { source_payload_path = ... } from the Moonstone/Ballad plugin, set lua_source/runtime_source, or build static after replacing Lua runtime handlers/plugins.
 ```
-
-## Staging
-
-1. Support PUC Lua 5.4 source builds with `zig cc`.
-2. Rebuild Lua C modules from source for the target ABI.
-3. Add LuaJIT later with an explicit target support matrix, because LuaJIT cross-compilation needs a host `buildvm` stage and target-specific flags.
