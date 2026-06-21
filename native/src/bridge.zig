@@ -1033,35 +1033,40 @@ fn lookupZig(comptime T: type, name: []const u8) ?[]const u8 {
 }
 
 fn encodeLuaValue(L: ?*c.lua_State, idx: c_int, list: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator) !void {
-    const t = c.lua_type(L, idx);
+    // Pin the incoming index to an absolute stack position so recursive calls
+    // can still address the table after we push more values on top of it.
+    const top = c.lua_gettop(L);
+    const abs_idx = if (idx <= 0) top + idx + 1 else idx;
+
+    const t = c.lua_type(L, abs_idx);
     switch (t) {
         c.LUA_TNIL => try list.appendSlice(allocator, "null"),
-        c.LUA_TBOOLEAN => try list.appendSlice(allocator, if (c.lua_toboolean(L, idx) != 0) "true" else "false"),
+        c.LUA_TBOOLEAN => try list.appendSlice(allocator, if (c.lua_toboolean(L, abs_idx) != 0) "true" else "false"),
         c.LUA_TNUMBER => {
-            const buf = if (c.lua_isinteger(L, idx) != 0)
-                try std.fmt.allocPrint(allocator, "{d}", .{c.lua_tointegerx(L, idx, @as([*c]c_int, null))})
+            const buf = if (c.lua_isinteger(L, abs_idx) != 0)
+                try std.fmt.allocPrint(allocator, "{d}", .{c.lua_tointegerx(L, abs_idx, @as([*c]c_int, null))})
             else
-                try std.fmt.allocPrint(allocator, "{d}", .{c.lua_tonumberx(L, idx, @as([*c]c_int, null))});
+                try std.fmt.allocPrint(allocator, "{d}", .{c.lua_tonumberx(L, abs_idx, @as([*c]c_int, null))});
             defer allocator.free(buf);
             try list.appendSlice(allocator, buf);
         },
         c.LUA_TSTRING => {
             var len: usize = 0;
-            const ptr = c.lua_tolstring(L, idx, &len);
+            const ptr = c.lua_tolstring(L, abs_idx, &len);
             try list.appendSlice(allocator, "\"");
             try encodeJsonString(ptr[0..len], list, allocator);
             try list.appendSlice(allocator, "\"");
         },
         c.LUA_TTABLE => {
-            const len = c.lua_rawlen(L, idx);
+            const len = c.lua_rawlen(L, abs_idx);
             if (len > 0) {
                 try list.appendSlice(allocator, "[");
                 var i: usize = 1;
                 while (i <= len) : (i += 1) {
                     if (i > 1) try list.appendSlice(allocator, ",");
                     c.lua_pushinteger(L, @intCast(i));
-                    _ = c.lua_gettable(L, idx);
-                    try encodeLuaValue(L, -1, list, allocator);
+                    _ = c.lua_gettable(L, abs_idx);
+                    try encodeLuaValue(L, c.lua_gettop(L), list, allocator);
                     c.lua_pop(L, 1);
                 }
                 try list.appendSlice(allocator, "]");
@@ -1069,7 +1074,7 @@ fn encodeLuaValue(L: ?*c.lua_State, idx: c_int, list: *std.ArrayListUnmanaged(u8
                 try list.appendSlice(allocator, "{");
                 var first = true;
                 c.lua_pushnil(L);
-                while (c.lua_next(L, idx) != 0) {
+                while (c.lua_next(L, abs_idx) != 0) {
                     if (!first) try list.appendSlice(allocator, ",");
                     first = false;
                     var key_len: usize = 0;
@@ -1077,7 +1082,7 @@ fn encodeLuaValue(L: ?*c.lua_State, idx: c_int, list: *std.ArrayListUnmanaged(u8
                     try list.appendSlice(allocator, "\"");
                     try encodeJsonString(key_ptr[0..key_len], list, allocator);
                     try list.appendSlice(allocator, "\":");
-                    try encodeLuaValue(L, -1, list, allocator);
+                    try encodeLuaValue(L, c.lua_gettop(L), list, allocator);
                     c.lua_pop(L, 1);
                 }
                 try list.appendSlice(allocator, "}");
