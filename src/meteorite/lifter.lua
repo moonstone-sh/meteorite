@@ -141,7 +141,7 @@ function lifter.lift(route, opts)
   mkdir_p(out_dir)
   local chunk_path = out_dir .. "/" .. route.id .. ".lua"
   write_file(chunk_path, chunk)
-  local loaded, load_err = loadfile(chunk_path)
+  local loaded, load_err = load(chunk, "@" .. chunk_path)
   if not loaded then error("lifted inline Lua chunk failed to load: " .. tostring(load_err)) end
   local ok, result = pcall(loaded)
   if not ok or type(result) ~= "function" then error("lifted inline Lua chunk did not return a function: " .. chunk_path) end
