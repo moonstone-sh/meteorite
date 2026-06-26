@@ -2,6 +2,8 @@
 
 This directory contains a reproducible local benchmark harness for Meteorite. It builds the current Meteorite service, starts the generated native server, drives a fixed set of HTTP scenarios with `oha`, records memory samples, captures binary metadata, and generates a Markdown summary from raw machine-readable artifacts.
 
+Benchmarks use the dedicated `fixtures/apps/bench-service` fixture. Keep `/__bench/*` routes and Lua-state stress routes there so showcase and acceptance fixtures stay focused.
+
 These benchmarks measure local framework/runtime overhead on a single machine. They are not a claim of real-world network throughput. Public benchmark claims should include CPU, OS/kernel, Zig version, Meteorite commit, build mode, backend, route scenario, concurrency, load generator, duration, binary size, RSS, and p95/p99 latency.
 
 ## What It Measures
@@ -44,6 +46,12 @@ cargo install oha
 From the Meteorite project root:
 
 ```bash
+# Default smoke-sized run through Moonstone scripts
+moon run bench
+moon run bench:matrix
+moon run bench:hybrid
+moon run bench:lua-stability
+
 # Trustworthy, publishable run (fails on Debug build or keepalive mismatch)
 bench/run.sh --mode release-static --strict-bench
 

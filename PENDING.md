@@ -99,18 +99,19 @@ Still pending:
 
 Meteorite should be organized by compiler/runtime responsibility, not by historical growth. Large mixed-purpose files should be split until each module owns one clear concern.
 
-- [ ] Split `src/meteorite/emitter.lua` into focused compiler modules:
+- [x] Unroll Lua source into `src/{core,codegen,ballad,cli,utils}` with public Meteorite facades.
+- [ ] Finish splitting `src/codegen/emitter.lua` into focused compiler modules:
   - [x] static asset compiler/scanner/manifest builder;
   - [ ] Zig graph type/table emitter;
   - [ ] handler binding/stub sync;
   - [x] partition hash/diff reporting;
   - [ ] build report/LSP aid generation.
-- [ ] Split `src/meteorite/init.lua` into:
+- [ ] Finish splitting `src/meteorite.lua` into:
   - [ ] public DSL/app construction;
   - [x] route macros such as `m.site`;
   - [x] handler factories such as `m.file` and `m.dir`;
   - [ ] schema/validator exports.
-- [x] Split `src/meteorite/ballad.lua` into:
+- [x] Split `src/ballad/` into:
   - [x] release contract validation;
   - [x] release manifest generation;
   - [x] Moonstone runtime/package asset collection;
@@ -136,6 +137,17 @@ Meteorite should be organized by compiler/runtime responsibility, not by histori
   - [ ] hybrid release packaging Lua C modules;
   - [ ] no host absolute paths or `.moonstone/env` leaks in static release text metadata.
 - [ ] Document the stable v0.1 deploy layout contract and dev workflow.
+
+## Fixture Publication Checklist
+
+Fixtures should be shaped like small public examples, not incidental local scratch projects. Each fixture needs a distinct goal, a stable command surface, and no committed generated artifacts.
+
+- [x] Move app fixtures under `fixtures/apps/<name>` and partitures under `fixtures/partitures`.
+- [x] Add `fixtures/README.md` with fixture goals, standards, and publication rules.
+- [x] Add fixture-local READMEs documenting purpose, coverage, and ownership.
+- [x] Split benchmark routes into `fixtures/apps/bench-service` so showcase stays demo-focused.
+- [x] Update benchmark scripts and root `moon run bench*` commands to use `bench-service`.
+- [x] Remove committed fixture build outputs and ignore only fixture-root generated artifacts.
 
 ## Target Hybrid Build Flow
 

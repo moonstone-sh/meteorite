@@ -11,9 +11,9 @@ Meteorite lands.
 
 ## Package Shape
 
-- `src/meteorite/` contains the Meteorite Lua DSL, normalizer, ZON emitter, and Ballad plugin surface.
-- `src/app.lua` is the local acceptance app that exercises the DSL.
-- `src/main.lua` returns the local app for graph materialization.
+- `src/` contains Meteorite Lua implementation modules grouped by responsibility: `core`, `codegen`, `ballad`, `cli`, and `utils`.
+- `src/meteorite.lua` is the public `require("meteorite")` facade.
+- `fixtures/apps/showcase-service/` is the local acceptance app used by default graph/build scripts.
 - `native/src/` contains handwritten Zig runtime behavior, handlers, validators, and the `std.http` backend implementation.
 - `.meteorite/graph/current/` contains generated graph data and Zig bindings.
 - `partiture.lua` exports Meteorite itself as a Moonstone source package for the registry.
@@ -143,7 +143,7 @@ v0.1 intentionally generates graph data and bindings only; route matching and se
 
 ## Demo Surface
 
-`fixtures/demo/src/app.lua` shows the intended hybrid authoring feel: Lua handlers stay Hono-like, while outbound services and native helpers are declared as graph-visible capabilities.
+`fixtures/apps/hybrid-demo/src/app.lua` shows the intended hybrid authoring feel: Lua handlers stay Hono-like, while outbound services and native helpers are declared as graph-visible capabilities.
 
 ```lua
 local m = require("meteorite")
@@ -183,7 +183,7 @@ Cross-request mutable state belongs inside capabilities, not inside `c`.
 The prototype hybrid runner can invoke inline Lua routes without starting the Zig server:
 
 ```bash
-luajit src/meteorite/cli.lua invoke fixtures/demo/src/main.lua GET /devices/router_01
+luajit src/cli/main.lua invoke fixtures/apps/hybrid-demo/src/main.lua GET /devices/router_01
 ```
 
 This runner exercises request-local state, declared HTTP/auth capability stubs, declared Zig helper stubs, typed params, and pattern validation. The native Zig runtime now has a bridge hook for inline/module Lua handlers; embedding a real Lua VM behind that hook is the next step.

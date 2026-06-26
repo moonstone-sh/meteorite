@@ -1,5 +1,5 @@
 package.path = "src/?.lua;src/?/init.lua;" .. package.path
-local hybrid = require("meteorite.hybrid")
+local hybrid = require("cli.hybrid")
 local m = require("meteorite")
 
 local app = m.app({ name = "test" })

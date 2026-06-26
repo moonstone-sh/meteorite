@@ -15,3 +15,11 @@ bench/results/*
 
 # OS
 .DS_Store
+
+# Fixture-generated artifacts at fixture app roots.
+fixtures/apps/*/.meteorite/
+fixtures/apps/*/.moonstone/
+fixtures/apps/*/.moonstone-home/
+fixtures/apps/*/.zig-cache/
+fixtures/apps/*/dist/
+fixtures/apps/*/zig-cache/

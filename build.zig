@@ -3,7 +3,7 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const mode = b.option([]const u8, "mode", "Meteorite build mode") orelse "release-static";
-    const graph_input = b.option([]const u8, "graph-input", "Meteorite app entry Lua file") orelse "src/main.lua";
+    const graph_input = b.option([]const u8, "graph-input", "Meteorite app entry Lua file") orelse "fixtures/apps/showcase-service/src/main.lua";
     const graph_output = b.option([]const u8, "graph-output", "Generated Meteorite graph directory") orelse ".meteorite/graph/current";
     const lua_root = b.option([]const u8, "lua-root", "Lua runtime root with include/ and lib/") orelse ".moonstone/env/libexec/lua/files";
     const hybrid_profile = b.option([]const u8, "hybrid-profile", "Hybrid profile") orelse "default";
@@ -29,7 +29,7 @@ pub fn build(b: *std.Build) void {
     const lua_runtime = !std.mem.eql(u8, mode, "release-static");
     const lua_state_strategy = if (lua_runtime and std.mem.eql(u8, hybrid_profile, "optimized")) "per_thread_cached_refs" else if (lua_runtime) "per_request_state" else "none";
 
-    const graph_step = b.addSystemCommand(&.{ ".moonstone/env/bin/lua", "src/meteorite/cli.lua", "graph", graph_input, graph_output, mode });
+    const graph_step = b.addSystemCommand(&.{ ".moonstone/env/bin/lua", "src/cli/main.lua", "graph", graph_input, graph_output, mode });
 
     // Generated build metadata so the server can report exactly what was compiled.
     const build_info_content = std.fmt.allocPrint(b.allocator,

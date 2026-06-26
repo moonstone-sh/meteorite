@@ -1,4 +1,6 @@
-local patterns = require("meteorite.patterns")
+package.path = "src/?.lua;src/?/init.lua;" .. package.path
+
+local patterns = require("core.patterns")
 
 local function simulate_match(p, input)
   if #input > p.max_len then return false end
