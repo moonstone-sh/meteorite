@@ -137,13 +137,14 @@ pub fn build(b: *std.Build) void {
     });
     exe.step.dependOn(&graph_step.step);
 
-    const install_server = b.addSystemCommand(&.{ "sh", "-c", "mkdir -p dist && cp \"$1\" \"${2:-dist/server}\"", "sh" });
+    const install_server = b.addSystemCommand(&.{ "sh", "-c", "out=\"${2:-dist/server}\"; dir=$(dirname \"$out\"); mkdir -p \"$dir\"; cp \"$1\" \"$out\"; if [ -d \"$3/static\" ]; then rm -rf \"$dir/static\"; cp -R \"$3/static\" \"$dir/static\"; fi", "sh" });
     install_server.addFileArg(exe.getEmittedBin());
     if (b.args) |args| {
         if (args.len > 0) install_server.addArg(args[0]) else install_server.addArg("dist/server");
     } else {
         install_server.addArg("dist/server");
     }
+    install_server.addArg(graph_output);
     install_server.step.dependOn(&exe.step);
 
     const install_step = b.step("install-server", "Build the Meteorite HTTP server into dist/server");

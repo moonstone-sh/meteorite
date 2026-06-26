@@ -11,7 +11,7 @@ pub const pooled_connections = std.mem.eql(u8, build_options.fast_http_strategy,
 pub const configured_workers: u16 = build_options.fast_http_workers;
 pub const queue_limit: usize = build_options.fast_http_queue;
 
-pub const Method = enum { GET, POST, PUT, PATCH, DELETE, OTHER };
+pub const Method = enum { GET, HEAD, POST, PUT, PATCH, DELETE, OTHER };
 
 pub const Counters = struct {
     active_connections: u64 = 0,
@@ -288,6 +288,27 @@ pub fn respondBytes(req: *Request, status: u16, content_type: []const u8, body: 
     try writeRaw(req, response);
 }
 
+pub fn respondStatic(req: *Request, status: u16, content_type: []const u8, content_length: u64, cache_control: []const u8, etag: []const u8, content_encoding: ?[]const u8, body: []const u8, head_only: bool) !void {
+    const reason = reasonPhrase(status);
+    var response_buffer: [16384]u8 = undefined;
+    const connection = if (req.keep_alive) "keep-alive" else "close";
+    const encoding = content_encoding orelse "";
+    const response = if (status == 304 and content_encoding != null)
+        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 304 Not Modified\r\ncache-control: {s}\r\netag: {s}\r\nvary: Accept-Encoding\r\nconnection: {s}\r\n\r\n", .{ cache_control, etag, connection })
+    else if (status == 304)
+        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 304 Not Modified\r\ncache-control: {s}\r\netag: {s}\r\nconnection: {s}\r\n\r\n", .{ cache_control, etag, connection })
+    else if (content_encoding != null)
+        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {d} {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\ncache-control: {s}\r\netag: {s}\r\ncontent-encoding: {s}\r\nvary: Accept-Encoding\r\nconnection: {s}\r\n\r\n", .{ status, reason, content_type, content_length, cache_control, etag, encoding, connection })
+    else
+        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {d} {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\ncache-control: {s}\r\netag: {s}\r\nconnection: {s}\r\n\r\n", .{ status, reason, content_type, content_length, cache_control, etag, connection });
+    try req.writer.interface.writeAll(response);
+    if (!head_only and status != 304) try req.writer.interface.writeAll(body);
+    try req.writer.interface.flush();
+    inc(&counters.requests_served);
+    add(&counters.bytes_written, response.len + if (head_only or status == 304) 0 else body.len);
+    req.close_after_response = !req.keep_alive;
+}
+
 pub fn respondRawOk(req: *Request) !void {
     const bytes = if (req.keep_alive) raw_ok_keepalive else raw_ok_close;
     try writeRaw(req, bytes);
@@ -313,6 +334,7 @@ fn trimCr(line: []const u8) []const u8 {
 
 fn parseMethod(value: []const u8) Method {
     if (std.mem.eql(u8, value, "GET")) return .GET;
+    if (std.mem.eql(u8, value, "HEAD")) return .HEAD;
     if (std.mem.eql(u8, value, "POST")) return .POST;
     if (std.mem.eql(u8, value, "PUT")) return .PUT;
     if (std.mem.eql(u8, value, "PATCH")) return .PATCH;

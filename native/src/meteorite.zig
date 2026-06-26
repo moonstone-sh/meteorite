@@ -13,7 +13,7 @@ pub const ListenConfig = struct {
 };
 
 pub const BackendContract = struct {
-    pub const Method = enum { GET, POST, PUT, PATCH, DELETE, OTHER };
+    pub const Method = enum { GET, HEAD, POST, PUT, PATCH, DELETE, OTHER };
 };
 
 pub const meteorite_pattern_module = @import("meteorite_pattern");
@@ -252,6 +252,7 @@ pub fn compile(comptime spec: anytype) type {
             } else {
                 switch (req_method) {
                     .GET => if (try dispatchRoutes(graph.get_routes, allocator, io, request, req_path)) return,
+                    .HEAD => if (try dispatchRoutes(graph.head_routes, allocator, io, request, req_path)) return,
                     .POST => if (try dispatchRoutes(graph.post_routes, allocator, io, request, req_path)) return,
                     .PUT => if (try dispatchRoutes(graph.put_routes, allocator, io, request, req_path)) return,
                     .PATCH => if (try dispatchRoutes(graph.patch_routes, allocator, io, request, req_path)) return,
@@ -345,8 +346,164 @@ pub fn compile(comptime spec: anytype) type {
                 .zig_file => |handler| try ctx.text(501, handler.path),
                 .inline_lua => |handler| try callLuaHandler(handler, &ctx),
                 .lua_file => |handler| try callLuaHandler(handler, &ctx),
+                .file => |handler| try serveFileHandler(handler, allocator, io, request),
+                .dir => |handler| try serveDirHandler(handler, allocator, io, request, captures),
             }
             return true;
+        }
+
+        fn accepts(request: *backend.Request, expected: []const u8) bool {
+            const header_value = backend.header(request, "accept") orelse return true;
+            return mediaListAccepts(header_value, expected);
+        }
+
+        fn mediaListAccepts(header_value: []const u8, expected: []const u8) bool {
+            const slash = std.mem.indexOfScalar(u8, expected, '/') orelse return tokenListContains(header_value, expected);
+            const expected_type = expected[0..slash];
+            const expected_subtype_end = std.mem.indexOfScalarPos(u8, expected, slash + 1, ';') orelse expected.len;
+            const expected_subtype = std.mem.trim(u8, expected[slash + 1 .. expected_subtype_end], " \t");
+            var it = std.mem.splitScalar(u8, header_value, ',');
+            while (it.next()) |raw_item| {
+                const media_range = std.mem.trim(u8, raw_item, " \t");
+                if (media_range.len == 0 or qualityIsZero(media_range)) continue;
+                const token_end = std.mem.indexOfScalar(u8, media_range, ';') orelse media_range.len;
+                const token = std.mem.trim(u8, media_range[0..token_end], " \t");
+                if (std.mem.eql(u8, token, "*/*")) return true;
+                const token_slash = std.mem.indexOfScalar(u8, token, '/') orelse continue;
+                const token_type = token[0..token_slash];
+                const token_subtype = token[token_slash + 1 ..];
+                if (!std.ascii.eqlIgnoreCase(token_type, expected_type)) continue;
+                if (std.mem.eql(u8, token_subtype, "*")) return true;
+                if (std.ascii.eqlIgnoreCase(token_subtype, expected_subtype)) return true;
+            }
+            return false;
+        }
+
+        fn tokenListContains(header_value: []const u8, expected: []const u8) bool {
+            var it = std.mem.splitScalar(u8, header_value, ',');
+            while (it.next()) |raw_item| {
+                const item = std.mem.trim(u8, raw_item, " \t");
+                const token_end = std.mem.indexOfScalar(u8, item, ';') orelse item.len;
+                if (!qualityIsZero(item) and std.ascii.eqlIgnoreCase(std.mem.trim(u8, item[0..token_end], " \t"), expected)) return true;
+            }
+            return false;
+        }
+
+        fn qualityIsZero(item: []const u8) bool {
+            var params = std.mem.splitScalar(u8, item, ';');
+            _ = params.next();
+            while (params.next()) |raw_param| {
+                const param = std.mem.trim(u8, raw_param, " \t");
+                if (std.mem.startsWith(u8, param, "q=")) {
+                    const value = std.mem.trim(u8, param[2..], " \t");
+                    if (std.mem.eql(u8, value, "0") or std.mem.eql(u8, value, "0.0") or std.mem.eql(u8, value, "0.00") or std.mem.eql(u8, value, "0.000")) return true;
+                }
+            }
+            return false;
+        }
+
+        fn serveFileHandler(comptime handler: graph.FileHandler, allocator: std.mem.Allocator, io: Io, request: *backend.Request) !void {
+            if (handler.only_accept) |expected| {
+                if (!accepts(request, expected)) return backend.respondText(request, 404, "not found");
+            }
+            try respondStaticFile(allocator, io, request, handler.artifact_path, handler.content_type, handler.content_length, handler.cache_control, handler.etag, null);
+        }
+
+        fn serveDirHandler(comptime handler: graph.DirHandler, allocator: std.mem.Allocator, io: Io, request: *backend.Request, captures: Captures) !void {
+            const raw_path = captures.get(handler.param_name) orelse return backend.respondText(request, 404, "not found");
+            const normalized = normalizeStaticPath(allocator, raw_path) catch return backend.respondText(request, 404, "not found");
+            defer allocator.free(normalized);
+            inline for (handler.manifest) |asset| {
+                if (std.mem.eql(u8, asset.request_path, normalized)) {
+                    if (selectCompressedAsset(request, asset)) |selected| {
+                        return respondStaticFile(allocator, io, request, selected.path, asset.content_type, selected.length, asset.cache_control, selected.etag, selected.encoding);
+                    }
+                    return respondStaticFile(allocator, io, request, asset.artifact_path, asset.content_type, asset.content_length, asset.cache_control, asset.etag, null);
+                }
+            }
+            return backend.respondText(request, 404, "not found");
+        }
+
+        const SelectedAsset = struct { path: []const u8, length: u64, etag: []const u8, encoding: []const u8 };
+
+        fn selectCompressedAsset(request: *backend.Request, comptime asset: graph.StaticAsset) ?SelectedAsset {
+            const accept_encoding = backend.header(request, "accept-encoding") orelse return null;
+            if (asset.compressed_br_path) |path| {
+                if (tokenListContains(accept_encoding, "br")) return .{ .path = path, .length = asset.compressed_br_length, .etag = asset.compressed_br_etag orelse asset.etag, .encoding = "br" };
+            }
+            if (asset.compressed_gzip_path) |path| {
+                if (tokenListContains(accept_encoding, "gzip")) return .{ .path = path, .length = asset.compressed_gzip_length, .etag = asset.compressed_gzip_etag orelse asset.etag, .encoding = "gzip" };
+            }
+            return null;
+        }
+
+        fn respondStaticFile(allocator: std.mem.Allocator, io: Io, request: *backend.Request, artifact_path: []const u8, content_type: []const u8, content_length: u64, cache_control: []const u8, etag: []const u8, content_encoding: ?[]const u8) !void {
+            const head_only = backend.method(request) == .HEAD;
+            if (backend.header(request, "if-none-match")) |value| {
+                if (ifNoneMatch(value, etag)) {
+                    return backend.respondStatic(request, 304, content_type, 0, cache_control, etag, content_encoding, "", head_only);
+                }
+            }
+            if (head_only) return backend.respondStatic(request, 200, content_type, content_length, cache_control, etag, content_encoding, "", true);
+            const body = try readArtifactFile(allocator, io, artifact_path, content_length);
+            defer allocator.free(body);
+            return backend.respondStatic(request, 200, content_type, content_length, cache_control, etag, content_encoding, body, head_only);
+        }
+
+        fn readArtifactFile(allocator: std.mem.Allocator, io: Io, artifact_path: []const u8, content_length: u64) ![]u8 {
+            const limit = Io.Limit.limited64(content_length + 1);
+            if (std.fs.path.isAbsolute(artifact_path)) return std.Io.Dir.cwd().readFileAlloc(io, artifact_path, allocator, limit);
+            const exe_dir = try std.process.executableDirPathAlloc(io, allocator);
+            defer allocator.free(exe_dir);
+            const full_path = try std.fs.path.join(allocator, &.{ exe_dir, artifact_path });
+            defer allocator.free(full_path);
+            return std.Io.Dir.cwd().readFileAlloc(io, full_path, allocator, limit) catch |err| switch (err) {
+                error.FileNotFound => {
+                    const release_root_path = try std.fs.path.join(allocator, &.{ exe_dir, "..", artifact_path });
+                    defer allocator.free(release_root_path);
+                    return std.Io.Dir.cwd().readFileAlloc(io, release_root_path, allocator, limit);
+                },
+                else => return err,
+            };
+        }
+
+        fn ifNoneMatch(header_value: []const u8, etag: []const u8) bool {
+            var it = std.mem.splitScalar(u8, header_value, ',');
+            while (it.next()) |item| {
+                const candidate = std.mem.trim(u8, item, " \t");
+                if (std.mem.eql(u8, candidate, "*")) return true;
+                if (std.mem.eql(u8, candidate, etag)) return true;
+                if (std.mem.startsWith(u8, candidate, "W/") and std.mem.eql(u8, candidate[2..], etag)) return true;
+            }
+            return false;
+        }
+
+        fn normalizeStaticPath(allocator: std.mem.Allocator, raw: []const u8) ![]u8 {
+            if (raw.len == 0 or raw[0] == '/' or raw[0] == '\\') return error.InvalidStaticPath;
+            var decoded: std.ArrayList(u8) = .empty;
+            defer decoded.deinit(allocator);
+            var i: usize = 0;
+            while (i < raw.len) {
+                const ch = raw[i];
+                if (ch == 0 or ch == '\\') return error.InvalidStaticPath;
+                if (ch == '%') {
+                    if (i + 2 >= raw.len) return error.InvalidStaticPath;
+                    const hi = std.fmt.charToDigit(raw[i + 1], 16) catch return error.InvalidStaticPath;
+                    const lo = std.fmt.charToDigit(raw[i + 2], 16) catch return error.InvalidStaticPath;
+                    const decoded_ch: u8 = @intCast((hi << 4) | lo);
+                    if (decoded_ch == 0 or decoded_ch == '/' or decoded_ch == '\\') return error.InvalidStaticPath;
+                    try decoded.append(allocator, decoded_ch);
+                    i += 3;
+                    continue;
+                }
+                try decoded.append(allocator, ch);
+                i += 1;
+            }
+            var parts = std.mem.splitScalar(u8, decoded.items, '/');
+            while (parts.next()) |part| {
+                if (part.len == 0 or std.mem.eql(u8, part, ".") or std.mem.eql(u8, part, "..")) return error.InvalidStaticPath;
+            }
+            return decoded.toOwnedSlice(allocator);
         }
 
         fn pathMatchedAnyRoute(req_path: []const u8) bool {
@@ -370,7 +527,7 @@ pub fn compile(comptime spec: anytype) type {
             inline for (route.path) |segment| {
                 switch (segment) {
                     .literal => {},
-                    .param => return false,
+                    .param, .catch_all_param => return false,
                 }
             }
             return true;
@@ -482,6 +639,7 @@ pub fn compile(comptime spec: anytype) type {
         fn backendMethod(method: backend.Method) Method {
             return switch (method) {
                 .GET => .GET,
+                .HEAD => .HEAD,
                 .POST => .POST,
                 .PUT => .PUT,
                 .PATCH => .PATCH,
@@ -528,6 +686,12 @@ pub fn compile(comptime spec: anytype) type {
                         }
                         if (!captures.add(name, actual)) return false;
                     },
+                    .catch_all_param => |name| {
+                        const rest = segment_iter.rest();
+                        const value = if (rest.len == 0) actual else request_path[@intFromPtr(actual.ptr) - @intFromPtr(request_path.ptr) ..];
+                        if (!captures.add(name, value)) return false;
+                        return true;
+                    },
                 }
             }
             return segment_iter.next() == null;
@@ -547,6 +711,12 @@ pub fn compile(comptime spec: anytype) type {
                             if (!graph.patterns.match(pattern, actual)) return false;
                         }
                         if (!captures.add(name, actual)) return false;
+                    },
+                    .catch_all_param => |name| {
+                        const rest = segment_iter.rest();
+                        const value = if (rest.len == 0) actual else request_path[@intFromPtr(actual.ptr) - @intFromPtr(request_path.ptr) ..];
+                        if (!captures.add(name, value)) return false;
+                        return true;
                     },
                 }
             }

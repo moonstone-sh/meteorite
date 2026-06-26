@@ -9,7 +9,7 @@ pub const pooled_connections = false;
 pub const configured_workers: u16 = 0;
 pub const queue_limit: usize = 0;
 
-pub const Method = enum { GET, POST, PUT, PATCH, DELETE, OTHER };
+pub const Method = enum { GET, HEAD, POST, PUT, PATCH, DELETE, OTHER };
 
 pub const Counters = struct {
     active_connections: u64 = 0,
@@ -169,6 +169,7 @@ pub fn receiveHead(req: *Request) !void {
 pub fn method(req: *Request) Method {
     return switch (req.inner.head.method) {
         .GET => .GET,
+        .HEAD => .HEAD,
         .POST => .POST,
         .PUT => .PUT,
         .PATCH => .PATCH,
@@ -229,6 +230,26 @@ pub fn respondBytes(req: *Request, status: u16, content_type: []const u8, body: 
         .keep_alive = req.inner.head.keep_alive,
         .extra_headers = &.{ .{ .name = "content-type", .value = content_type } },
     });
+    inc(&counters.requests_served);
+    add(&counters.bytes_written, estimateResponseBytes(content_type, body));
+    req.close_after_response = !req.inner.head.keep_alive;
+}
+
+pub fn respondStatic(req: *Request, status: u16, content_type: []const u8, content_length: u64, cache_control: []const u8, etag: []const u8, content_encoding: ?[]const u8, body: []const u8, head_only: bool) !void {
+    var response_buffer: [16384]u8 = undefined;
+    const encoding = content_encoding orelse "";
+    const reason = reasonFromCode(status);
+    const response = if (status == 304 and content_encoding != null)
+        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 304 Not Modified\r\ncache-control: {s}\r\netag: {s}\r\nvary: Accept-Encoding\r\nconnection: {s}\r\n\r\n", .{ cache_control, etag, if (req.inner.head.keep_alive) "keep-alive" else "close" })
+    else if (status == 304)
+        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 304 Not Modified\r\ncache-control: {s}\r\netag: {s}\r\nconnection: {s}\r\n\r\n", .{ cache_control, etag, if (req.inner.head.keep_alive) "keep-alive" else "close" })
+    else if (content_encoding != null)
+        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\ncache-control: {s}\r\netag: {s}\r\ncontent-encoding: {s}\r\nvary: Accept-Encoding\r\nconnection: {s}\r\n\r\n", .{ reason, content_type, content_length, cache_control, etag, encoding, if (req.inner.head.keep_alive) "keep-alive" else "close" })
+    else
+        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\ncache-control: {s}\r\netag: {s}\r\nconnection: {s}\r\n\r\n", .{ reason, content_type, content_length, cache_control, etag, if (req.inner.head.keep_alive) "keep-alive" else "close" });
+    try req.writer.interface.writeAll(response);
+    if (!head_only and status != 304) try req.writer.interface.writeAll(body);
+    try req.writer.interface.flush();
     inc(&counters.requests_served);
     add(&counters.bytes_written, estimateResponseBytes(content_type, body));
     req.close_after_response = !req.inner.head.keep_alive;

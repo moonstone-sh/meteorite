@@ -95,6 +95,48 @@ Still pending:
 - Lua C-module rebuilds currently rely on package rockspecs and a local `luarocks` executable; packages without source/rockspec payloads fail with package-specific diagnostics.
 - Moonstone runtime/package descriptors should consistently publish source payloads for all production-supported hybrid targets.
 
+## Responsibility-Structure Cleanup Checklist
+
+Meteorite should be organized by compiler/runtime responsibility, not by historical growth. Large mixed-purpose files should be split until each module owns one clear concern.
+
+- [ ] Split `src/meteorite/emitter.lua` into focused compiler modules:
+  - [x] static asset compiler/scanner/manifest builder;
+  - [ ] Zig graph type/table emitter;
+  - [ ] handler binding/stub sync;
+  - [x] partition hash/diff reporting;
+  - [ ] build report/LSP aid generation.
+- [ ] Split `src/meteorite/init.lua` into:
+  - [ ] public DSL/app construction;
+  - [x] route macros such as `m.site`;
+  - [x] handler factories such as `m.file` and `m.dir`;
+  - [ ] schema/validator exports.
+- [x] Split `src/meteorite/ballad.lua` into:
+  - [x] release contract validation;
+  - [x] release manifest generation;
+  - [x] Moonstone runtime/package asset collection;
+  - [x] native task argument construction.
+- [ ] Split `native/src/bridge.zig` into Lua runtime responsibilities:
+  - [ ] Lua state lifecycle;
+  - [ ] cached inline handler refs and HMR epochs;
+  - [ ] Lua context API bindings;
+  - [ ] capability bridge calls;
+  - [ ] debug/dev-only state.
+- [ ] Split `native/src/meteorite.zig` into server responsibilities:
+  - [ ] request dispatch/router integration;
+  - [ ] static file serving;
+  - [ ] request validation/limits;
+  - [ ] diagnostics/meta endpoints.
+- [ ] Replace shell-based static scanning with a portable Lua/Zig filesystem walker.
+- [ ] Replace manually concatenated JSON release manifests with the local JSON encoder.
+- [ ] Add scenario tests for:
+  - [ ] `moon init --template meteorite` local developer flow;
+  - [ ] inline Lua HMR with two or more edits;
+  - [ ] static release export after deleting source `site/dist`;
+  - [ ] hybrid release packaging pure Lua modules;
+  - [ ] hybrid release packaging Lua C modules;
+  - [ ] no host absolute paths or `.moonstone/env` leaks in static release text metadata.
+- [ ] Document the stable v0.1 deploy layout contract and dev workflow.
+
 ## Target Hybrid Build Flow
 
 1. Host Lua evaluates the Meteorite app and produces the normalized graph.

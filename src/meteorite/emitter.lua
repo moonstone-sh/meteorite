@@ -1,5 +1,7 @@
 local zon = require("meteorite.zon")
 local lifter = require("meteorite.lifter")
+local static_compiler = require("meteorite.static")
+local partition_diff = require("meteorite.partitions")
 
 local emitter = {}
 
@@ -155,7 +157,9 @@ local function route_to_zon(route)
     else
       local param_schema = { name = segment.name, type = "string" }
       for _, item in ipairs(route.params) do if item.name == segment.name then param_schema = item end end
-      segments[#segments + 1] = { param = schema_to_zon(param_schema) }
+      local entry = { param = schema_to_zon(param_schema) }
+      if segment.catch_all then entry.catch_all = true end
+      segments[#segments + 1] = entry
     end
   end
   local query = {}
@@ -164,6 +168,8 @@ local function route_to_zon(route)
   if route.handler.kind == "zig" then handler = { zig_symbol = { id = route.handler.symbol, symbol = route.handler.import or route.handler.symbol } }
   elseif route.handler.kind == "zig_file" then handler = { zig_file = { id = route.handler.symbol, path = route.handler.path, decl = route.handler.decl or "handle" } }
   elseif route.handler.kind == "lua" then handler = { lua_file = { id = route.id, path = route.handler.path or route.handler.module } }
+  elseif route.handler.kind == "file" then handler = { file = { artifact_path = route.handler.artifact_path, content_type = route.handler.content_type, content_length = route.handler.content_length, etag = route.handler.etag, cache_control = route.handler.cache_control, only_accept = route.handler.only_accept } }
+  elseif route.handler.kind == "dir" then handler = { dir = { param = route.handler.param, cache_control = route.handler.cache_control, immutable = route.handler.immutable, manifest = route.handler.manifest or {} } }
   else handler = { inline_lua = route.handler.lifted or { id = route.id } } end
   local capabilities = {}
   for _, ref in ipairs(route.capabilities or {}) do capabilities[#capabilities + 1] = { [ref.kind] = ref.name } end
@@ -895,6 +901,7 @@ local function prepare_graph(graph, output, mode)
       end
     end
     route.scope.plugins = plugin_ids
+    static_compiler.prepare_route(route, output, mode)
     if route.handler.kind == "inline_lua" then
       local lifted = lifter.lift(route, { output = output })
       route.handler.lifted = lifted
@@ -1186,6 +1193,12 @@ local function route_handler_zig(route)
   if route.handler.kind == "zig" then handler = ".{ .zig_symbol = .{ .id = ." .. route.handler.symbol .. ", .symbol = " .. zig_string(route.handler.import or route.handler.symbol) .. " } }" end
   if route.handler.kind == "zig_file" then handler = ".{ .zig_file = .{ .id = " .. zig_string(route.handler.symbol) .. ", .path = " .. zig_string(route.handler.path) .. ", .decl = " .. zig_string(route.handler.decl or "handle") .. " } }" end
   if route.handler.kind == "lua" then handler = ".{ .lua_file = .{ .id = " .. zig_string(route.id) .. ", .path = " .. zig_string(route.handler.path or route.handler.module) .. " } }" end
+  if route.handler.kind == "file" then
+    handler = ".{ .file = .{ .artifact_path = " .. zig_string(route.handler.artifact_path or route.handler.path) .. ", .content_type = " .. zig_string(route.handler.content_type or "application/octet-stream") .. ", .content_length = " .. tostring(route.handler.content_length or 0) .. ", .etag = " .. zig_string(route.handler.etag or "") .. ", .cache_control = " .. zig_string(route.handler.cache_control or route.handler.cache or "no-cache") .. ", .only_accept = " .. (route.handler.only_accept and zig_string(route.handler.only_accept) or "null") .. " } }"
+  end
+  if route.handler.kind == "dir" then
+    handler = ".{ .dir = .{ .mount_root = " .. zig_string("") .. ", .param_name = " .. zig_string(route.handler.param) .. ", .manifest = &data.static_assets, .cache_control = " .. zig_string(route.handler.cache_control or route.handler.cache or "no-cache") .. ", .immutable = " .. tostring(route.handler.immutable == true) .. " } }"
+  end
   return handler
 end
 
@@ -1220,6 +1233,22 @@ local function plugin_handler_zig(plugin)
   return ".none"
 end
 
+local function static_asset_zig(asset)
+  return ".{ .request_path = " .. zig_string(asset.request_path or "")
+    .. ", .artifact_path = " .. zig_string(asset.artifact_path or "")
+    .. ", .content_type = " .. zig_string(asset.content_type or "application/octet-stream")
+    .. ", .content_length = " .. tostring(asset.content_length or 0)
+    .. ", .etag = " .. zig_string(asset.etag or "")
+    .. ", .cache_control = " .. zig_string(asset.cache_control or "no-cache")
+    .. ", .compressed_br_path = " .. (asset.compressed_br_path and zig_string(asset.compressed_br_path) or "null")
+    .. ", .compressed_br_length = " .. tostring(asset.compressed_br_length or 0)
+    .. ", .compressed_br_etag = " .. (asset.compressed_br_etag and zig_string(asset.compressed_br_etag) or "null")
+    .. ", .compressed_gzip_path = " .. (asset.compressed_gzip_path and zig_string(asset.compressed_gzip_path) or "null")
+    .. ", .compressed_gzip_length = " .. tostring(asset.compressed_gzip_length or 0)
+    .. ", .compressed_gzip_etag = " .. (asset.compressed_gzip_etag and zig_string(asset.compressed_gzip_etag) or "null")
+    .. " }"
+end
+
 local function route_module_content(route)
   local lines = {
     "pub fn route(comptime graph: type) graph.Route {",
@@ -1228,6 +1257,7 @@ local function route_module_content(route)
   }
   for _, segment in ipairs(route.path.segments) do
     if segment.kind == "literal" then lines[#lines + 1] = "            .{ .literal = " .. zig_string(segment.value) .. " },"
+    elseif segment.catch_all then lines[#lines + 1] = "            .{ .catch_all_param = " .. zig_string(segment.name) .. " },"
     else lines[#lines + 1] = "            .{ .param = " .. zig_string(segment.name) .. " }," end
   end
   lines[#lines + 1] = "        };"
@@ -1246,6 +1276,11 @@ local function route_module_content(route)
   lines[#lines + 1] = "        const capabilities = [_]graph.CapabilityRef{"
   for _, ref in ipairs(route.capabilities or {}) do
     lines[#lines + 1] = "            .{ ." .. ref.kind .. " = " .. zig_string(ref.name) .. " },"
+  end
+  lines[#lines + 1] = "        };"
+  lines[#lines + 1] = "        const static_assets = [_]graph.StaticAsset{"
+  for _, asset in ipairs((route.handler and route.handler.manifest) or {}) do
+    lines[#lines + 1] = "            " .. static_asset_zig(asset) .. ","
   end
   lines[#lines + 1] = "        };"
   local scope = normalized_scope(route.scope)
@@ -1303,13 +1338,16 @@ local function emit_graph_zig(graph, output)
     "pub const max_query_bytes = " .. tostring(max_query) .. ";",
     "pub const max_query_pairs = " .. tostring(max_query_pairs) .. ";",
     "pub const max_path_segments = " .. tostring(max_path_segments) .. ";",
-    "pub const Method = enum { GET, POST, PUT, PATCH, DELETE, OTHER };",
-    "pub const Segment = union(enum) { literal: []const u8, param: []const u8 };",
+    "pub const Method = enum { GET, HEAD, POST, PUT, PATCH, DELETE, OTHER };",
+    "pub const Segment = union(enum) { literal: []const u8, param: []const u8, catch_all_param: []const u8 };",
     "pub const ZigSymbolHandler = struct { id: bindings.HandlerId, symbol: []const u8 };",
     "pub const ZigFileHandler = struct { id: []const u8, path: []const u8, decl: []const u8 = \"handle\" };",
     "pub const LuaFileHandler = struct { id: []const u8, path: []const u8 };",
     "pub const InlineLuaHandler = struct { id: []const u8, chunk_path: []const u8, source_file: []const u8, source_line: u32, source_column: u32 };",
-    "pub const Handler = union(enum) { zig_symbol: ZigSymbolHandler, zig_file: ZigFileHandler, lua_file: LuaFileHandler, inline_lua: InlineLuaHandler };",
+    "pub const FileHandler = struct { artifact_path: []const u8, content_type: []const u8, content_length: u64, etag: []const u8, cache_control: []const u8, only_accept: ?[]const u8 = null };",
+    "pub const StaticAsset = struct { request_path: []const u8, artifact_path: []const u8, content_type: []const u8, content_length: u64, etag: []const u8, cache_control: []const u8, compressed_br_path: ?[]const u8 = null, compressed_br_length: u64 = 0, compressed_br_etag: ?[]const u8 = null, compressed_gzip_path: ?[]const u8 = null, compressed_gzip_length: u64 = 0, compressed_gzip_etag: ?[]const u8 = null };",
+    "pub const DirHandler = struct { mount_root: []const u8, param_name: []const u8, manifest: []const StaticAsset, cache_control: []const u8, immutable: bool = false };",
+    "pub const Handler = union(enum) { zig_symbol: ZigSymbolHandler, zig_file: ZigFileHandler, lua_file: LuaFileHandler, inline_lua: InlineLuaHandler, file: FileHandler, dir: DirHandler };",
     "pub const ExecutionClass = enum { default, lua, blocking_io, cpu };",
     "pub const RouteRuntime = struct { requires_lua: bool = false, requires_http: bool = false, requires_auth: bool = false, requires_zig_capability: bool = false, execution_class: ExecutionClass = .default };",
     "pub const RouteExecution = struct { class: ExecutionClass = .default, may_block: bool = false, requires_lua: bool = false, requires_worker_pool: bool = false };",
@@ -1361,9 +1399,18 @@ local function emit_graph_zig(graph, output)
   end
   lines[#lines + 1] = "};"
   lines[#lines + 1] = ""
-  local method_buckets = { GET = {}, POST = {}, PUT = {}, PATCH = {}, DELETE = {}, OTHER = {} }
+  local method_buckets = { GET = {}, HEAD = {}, POST = {}, PUT = {}, PATCH = {}, DELETE = {}, OTHER = {} }
   for i, route in ipairs(graph.routes) do method_buckets[route.method][#method_buckets[route.method] + 1] = i - 1 end
-  local method_names = { "GET", "POST", "PUT", "PATCH", "DELETE", "OTHER" }
+  local explicit_head = {}
+  for _, route in ipairs(graph.routes) do
+    if route.method == "HEAD" then explicit_head[route.raw_path] = true end
+  end
+  for i, route in ipairs(graph.routes) do
+    if route.method == "GET" and (route.handler.kind == "file" or route.handler.kind == "dir") and not explicit_head[route.raw_path] then
+      method_buckets.HEAD[#method_buckets.HEAD + 1] = i - 1
+    end
+  end
+  local method_names = { "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OTHER" }
   for _, method in ipairs(method_names) do
     lines[#lines + 1] = "pub const " .. method:lower() .. "_routes = [_]Route{"
     for _, route_index in ipairs(method_buckets[method]) do
@@ -1411,6 +1458,10 @@ local function handler_descriptor(route)
   elseif handler.kind == "lua" then
     local path = handler.path or handler.module
     return { kind = "lua", id = route.id, path = path }
+  elseif handler.kind == "file" then
+    return { kind = "file", id = route.id, source_hash = hash_text(read_file(handler.source_path or handler.path) or ""), artifact_path = handler.artifact_path, content_type = handler.content_type, content_length = handler.content_length, etag = handler.etag, cache_control = handler.cache_control, only_accept = handler.only_accept }
+  elseif handler.kind == "dir" then
+    return { kind = "dir", id = route.id, manifest_hash = hash_zon(handler.manifest or {}), param = handler.param, cache_control = handler.cache_control, immutable = handler.immutable, manifest = handler.manifest or {} }
   end
   local lifted = handler.lifted or {}
   local chunk_path = lifted.chunk_path or ""
@@ -1503,72 +1554,6 @@ local function plugin_descriptor(plugin)
     kind = plugin.kind,
     handler = plugin_handler_descriptor(plugin),
   }
-end
-
-local function partition_rows(partitions)
-  local rows = {}
-  local function add(kind, id, hash)
-    rows[#rows + 1] = { key = kind .. "\t" .. id, kind = kind, id = id, hash = hash }
-  end
-  add("route_graph", "all", partitions.route_graph_hash)
-  add("handlers", "all", partitions.handler_hash)
-  add("patterns", "all", partitions.pattern_hash)
-  add("lua_chunks", "all", partitions.lua_chunk_hash)
-  add("plugins", "all", partitions.plugin_hash)
-  add("capabilities", "all", partitions.capability_hash)
-  add("runtime", "all", partitions.runtime_hash)
-  for _, route in ipairs(partitions.routes) do add("route", route.id, route.hash) end
-  for _, handler in ipairs(partitions.handlers) do add("handler", handler.id, handler.hash) end
-  for _, chunk in ipairs(partitions.lua_chunks) do add("lua_chunk", chunk.id, chunk.hash) end
-  for _, plugin in ipairs(partitions.plugins or {}) do add("plugin", plugin.id, plugin.hash) end
-  for _, pattern in ipairs(partitions.patterns) do add("pattern", pattern.id, pattern.hash) end
-  table.sort(rows, function(a, b) return a.key < b.key end)
-  return rows
-end
-
-local function encode_partition_tsv(partitions)
-  local lines = { "kind\tid\thash" }
-  for _, row in ipairs(partition_rows(partitions)) do
-    lines[#lines + 1] = row.kind .. "\t" .. row.id .. "\t" .. row.hash
-  end
-  return table.concat(lines, "\n") .. "\n"
-end
-
-local function parse_partition_tsv(text)
-  local rows = {}
-  if not text then return rows end
-  for line in text:gmatch("[^\n]+") do
-    if line ~= "kind\tid\thash" then
-      local kind, id, hash = line:match("^([^\t]+)\t([^\t]+)\t(.+)$")
-      if kind and id and hash then rows[kind .. "\t" .. id] = { kind = kind, id = id, hash = hash } end
-    end
-  end
-  return rows
-end
-
-local function partition_diagnostics(previous_text, partitions)
-  local previous = parse_partition_tsv(previous_text)
-  local rows = partition_rows(partitions)
-  local changed = {}
-  local current = {}
-  for _, row in ipairs(rows) do
-    current[row.key] = true
-    local old = previous[row.key]
-    if not old then
-      changed[#changed + 1] = { status = "added", kind = row.kind, id = row.id, hash = row.hash }
-    elseif old.hash ~= row.hash then
-      changed[#changed + 1] = { status = "changed", kind = row.kind, id = row.id, old_hash = old.hash, hash = row.hash }
-    end
-  end
-  for key, row in pairs(previous) do
-    if not current[key] then changed[#changed + 1] = { status = "removed", kind = row.kind, id = row.id, old_hash = row.hash } end
-  end
-  table.sort(changed, function(a, b)
-    local ak = a.kind .. "\t" .. a.id .. "\t" .. a.status
-    local bk = b.kind .. "\t" .. b.id .. "\t" .. b.status
-    return ak < bk
-  end)
-  return changed
 end
 
 local function build_partitions(graph, routes_text, graph_hash, mode)
@@ -1665,11 +1650,11 @@ function emitter.emit(app, opts)
   local graph_hash = hash_text(routes_text)
   local partitions = build_partitions(graph, routes_text, graph_hash, mode)
   local previous_partitions = read_file(output .. "/partition-hashes.tsv")
-  local partition_changes = partition_diagnostics(previous_partitions, partitions)
+  local partition_changes = partition_diff.diagnostics(previous_partitions, partitions)
   write_file(output .. "/routes.zon", routes_text)
   write_file(output .. "/manifest.zon", zon.encode({ format = "meteorite.graph.v0", meteorite_version = "0.1.0", graph_hash = graph_hash, mode = mode_enum(mode), partitions = { route_graph = partitions.route_graph_hash, handlers = partitions.handler_hash, patterns = partitions.pattern_hash, lua_chunks = partitions.lua_chunk_hash, capabilities = partitions.capability_hash, runtime = partitions.runtime_hash } }))
   write_file(output .. "/partitions.zon", zon.encode(partitions))
-  write_file(output .. "/partition-hashes.tsv", encode_partition_tsv(partitions))
+  write_file(output .. "/partition-hashes.tsv", partition_diff.encode_tsv(partitions))
   emit_partition_json(partition_changes, output)
   write_file(output .. "/runtime.zon", zon.encode({ mode = mode_enum(mode), lua_runtime = mode ~= "release-static", backend = { __meteorite_enum = true, value = "fast_http" }, workers = { strategy = { __meteorite_enum = true, value = "auto" }, lua_state = { __meteorite_enum = true, value = "single_locked" } }, memory = graph.memory_report }))
   write_file(output .. "/capabilities.zon", zon.encode({ backend = "fast_http", methods = { "GET", "POST", "PUT", "PATCH", "DELETE" }, declared = graph.capabilities or {} }))

@@ -114,6 +114,31 @@ end)
 
 Static and hybrid are release compiler validation modes over the same normalized graph. Lua may build the graph in either mode; static fails if the graph retains Lua runtime execution nodes. Hybrid may retain Lua handlers/plugins, records the retained-node contract in `meteorite-release.json`, and materializes target Lua plus target Lua modules for cross-target releases when Moonstone provides runtime/package source payloads. Same-host hybrid exports include the server binary, lifted inline chunks, external Lua handlers, and Moonstone Lua module/C-module trees so `require(...)` works from inline isolates in the exported layout.
 
+Static sites are declared with handler factories and graph-visible route macros, not app-level fallback methods:
+
+```lua
+local m = require("meteorite")
+local app = m.app()
+
+m.site(app, {
+  root = "./site/dist",
+  html = {
+    ["/"] = "index.html",
+    ["/docs/:route*"] = "index.html",
+  },
+  files = {
+    ["/benchmarks.json"] = { file = "benchmarks.json", content_type = "application/json; charset=utf-8" },
+  },
+  assets = {
+    ["/assets/:path*"] = { dir = "assets", param = "path", immutable = true, compressed = { gzip = true, br = true } },
+  },
+})
+
+return app
+```
+
+`meteorite.release({ mode = "static" })` exports a deployable directory with `bin/server`, `static/`, and `meteorite-release.json`. Static assets are frozen into the release asset graph, listed in the manifest with content type, content length, ETag, cache policy, and precompressed variants, and are served without runtime Lua. Symlinks in static roots are rejected during graph generation; path traversal and malformed percent-encoding return `404` at runtime.
+
 v0.1 intentionally generates graph data and bindings only; route matching and server behavior live in Zig.
 
 ## Demo Surface

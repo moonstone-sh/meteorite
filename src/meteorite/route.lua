@@ -18,9 +18,15 @@ local function parse_path(path)
     assert(segment ~= "", "empty route segment in " .. path)
     assert(segment ~= "*", "wildcard routes are not supported in Meteorite v0.1")
     if segment:sub(1, 1) == ":" then
+      local catch_all = false
       local name = segment:sub(2)
+      if name:sub(-1) == "*" then
+        catch_all = true
+        name = name:sub(1, -2)
+        assert(segment == path:match("[^/]+$"), "catch-all path param must be the final route segment: " .. path)
+      end
       assert(name:match("^[%a_][%w_]*$"), "invalid path param name: " .. name)
-      segments[#segments + 1] = { kind = "param", name = name }
+      segments[#segments + 1] = { kind = "param", name = name, catch_all = catch_all }
     else
       segments[#segments + 1] = { kind = "literal", value = segment }
     end
@@ -37,6 +43,8 @@ local function handler_shape(handler)
   if kind == "table" and handler.kind == "lua" then return { kind = "lua", module = handler.module, path = handler.path } end
   if kind == "table" and handler.kind == "zig" then return { kind = "zig", symbol = handler.symbol } end
   if kind == "table" and handler.kind == "zig_file" then return { kind = "zig_file", path = handler.path, decl = handler.decl or "handle" } end
+  if kind == "table" and handler.kind == "file" then return handler end
+  if kind == "table" and handler.kind == "dir" then return handler end
   error("unsupported handler shape: " .. kind)
 end
 
@@ -107,6 +115,8 @@ local function normalize_handler(handler)
   if handler.kind == "zig" then return { kind = "zig", symbol = symbol_id(handler.symbol), import = handler.symbol } end
   if handler.kind == "zig_file" then return { kind = "zig_file", symbol = symbol_id(handler.path), path = handler.path, decl = handler.decl or "handle" } end
   if handler.kind == "lua" then return { kind = "lua", module = handler.module, path = handler.path } end
+  if handler.kind == "file" then return handler end
+  if handler.kind == "dir" then return handler end
   return { kind = "inline_lua", value = handler.value }
 end
 
@@ -238,8 +248,27 @@ function route.normalize_app(app, opts)
     end
 
     local handler = normalize_handler(declaration.handler)
-    if mode == "release-static" and handler.kind ~= "zig" and handler.kind ~= "zig_file" then
+    if mode == "release-static" and handler.kind ~= "zig" and handler.kind ~= "zig_file" and handler.kind ~= "file" and handler.kind ~= "dir" then
       static_lua_error(key, declaration)
+    end
+
+    if handler.kind == "dir" then
+      local found = false
+      for _, segment in ipairs(declaration.path.segments) do
+        if segment.kind == "param" and segment.name == handler.param and segment.catch_all then found = true end
+      end
+      assert(found, table.concat({
+        "m.dir route requires a catch-all path param",
+        "",
+        "Route:",
+        "  " .. declaration.raw_path,
+        "",
+        "Expected:",
+        "  /.../:" .. tostring(handler.param) .. "*",
+        "",
+        "Handler:",
+        "  m.dir(" .. tostring(handler.root) .. ", { param = \"" .. tostring(handler.param) .. "\" })",
+      }, "\n"))
     end
 
     local memory = profiles.route_memory(resolved_profile, declaration.method, declaration.memory)

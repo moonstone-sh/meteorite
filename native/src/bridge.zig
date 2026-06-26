@@ -434,22 +434,24 @@ pub const HybridLuaRuntime = struct {
             c.lua_pop(L, 1);
 
             _ = c.lua_getfield(L, -1, "content_type");
+            _ = c.lua_getfield(L, -2, "body");
             var content_type_len: usize = 0;
-            const content_type_ptr = c.lua_tolstring(L, -1, &content_type_len);
-            const is_json = content_type_ptr != null and std.mem.eql(u8, content_type_ptr[0..content_type_len], "application/json");
-            c.lua_pop(L, 1);
-
-            _ = c.lua_getfield(L, -1, "body");
+            const content_type_ptr = c.lua_tolstring(L, -2, &content_type_len);
             var body_len: usize = 0;
             const body_ptr = c.lua_tolstring(L, -1, &body_len);
             const body = body_ptr[0..body_len];
 
-            if (is_json) {
-                try current_vtable.?.json(current_ctx.?, status, body);
+            if (content_type_ptr != null) {
+                const ct = content_type_ptr[0..content_type_len];
+                if (std.mem.eql(u8, ct, "application/json")) {
+                    try current_vtable.?.json(current_ctx.?, status, body);
+                } else {
+                    try current_vtable.?.bytes(current_ctx.?, status, ct, body);
+                }
             } else {
                 try current_vtable.?.text(current_ctx.?, status, body);
             }
-            c.lua_pop(L, 2);
+            c.lua_pop(L, 3);
         } else if (c.lua_isstring(L, -1) != 0) {
             var len: usize = 0;
             const ptr = c.lua_tolstring(L, -1, &len);
@@ -560,20 +562,24 @@ pub const HybridLuaRuntime = struct {
             const status: u16 = if (c.lua_isinteger(L, -1) != 0) @intCast(c.lua_tointegerx(L, -1, @as([*c]c_int, null))) else 200;
             c.lua_pop(L, 1);
             _ = c.lua_getfield(L, -1, "content_type");
+            _ = c.lua_getfield(L, -2, "body");
             var content_type_len: usize = 0;
-            const content_type_ptr = c.lua_tolstring(L, -1, &content_type_len);
-            const is_json = content_type_ptr != null and std.mem.eql(u8, content_type_ptr[0..content_type_len], "application/json");
-            c.lua_pop(L, 1);
-            _ = c.lua_getfield(L, -1, "body");
+            const content_type_ptr = c.lua_tolstring(L, -2, &content_type_len);
             var body_len: usize = 0;
             const body_ptr = c.lua_tolstring(L, -1, &body_len);
             const body = body_ptr[0..body_len];
-            if (is_json) {
-                try current_vtable.?.json(current_ctx.?, status, body);
+
+            if (content_type_ptr != null) {
+                const ct = content_type_ptr[0..content_type_len];
+                if (std.mem.eql(u8, ct, "application/json")) {
+                    try current_vtable.?.json(current_ctx.?, status, body);
+                } else {
+                    try current_vtable.?.bytes(current_ctx.?, status, ct, body);
+                }
             } else {
                 try current_vtable.?.text(current_ctx.?, status, body);
             }
-            c.lua_pop(L, 2);
+            c.lua_pop(L, 3);
             return true;
         } else if (c.lua_isstring(L, -1) != 0) {
             var len: usize = 0;
@@ -1144,6 +1150,8 @@ pub const CachedHybridRuntime = struct {
     threadlocal var L: ?*c.lua_State = null;
     threadlocal var refs: [inlineLuaRouteCount()]c_int = undefined;
     threadlocal var initialized: bool = false;
+    threadlocal var loaded_reload_epoch: u64 = 0;
+    var reload_epoch = AtomicCounter.init(0);
 
     fn init() !void {
         if (initialized) {
@@ -1169,7 +1177,25 @@ pub const CachedHybridRuntime = struct {
                 idx += 1;
             }
         }
+        loaded_reload_epoch = reload_epoch.load(.acquire);
         initialized = true;
+    }
+
+    fn reloadRefs() !void {
+        comptime var idx: usize = 0;
+        inline for (graph_cached.routes) |route| {
+            if (route.handler == .inline_lua) {
+                try loadHandlerRef(idx, route.handler.inline_lua, true);
+                idx += 1;
+            }
+        }
+    }
+
+    fn refreshIfStale() !void {
+        const current_epoch = reload_epoch.load(.acquire);
+        if (loaded_reload_epoch == current_epoch) return;
+        try reloadRefs();
+        loaded_reload_epoch = current_epoch;
     }
 
     fn loadHandlerRef(comptime idx: usize, comptime handler: graph_cached.InlineLuaHandler, comptime replace: bool) !void {
@@ -1195,19 +1221,15 @@ pub const CachedHybridRuntime = struct {
 
     pub fn reloadAll() !void {
         try init();
-        comptime var idx: usize = 0;
-        inline for (graph_cached.routes) |route| {
-            if (route.handler == .inline_lua) {
-                try loadHandlerRef(idx, route.handler.inline_lua, true);
-                idx += 1;
-            }
-        }
+        try reloadRefs();
+        loaded_reload_epoch = reload_epoch.fetchAdd(1, .acq_rel) + 1;
     }
 
     pub fn call(comptime handler: anytype, ctx: anytype) !void {
         incLua(&lua_stats.lua_handler_calls);
         const vtable = globalVtable(@TypeOf(ctx.*));
         try init();
+        try refreshIfStale();
         const L2 = L.?;
 
         const idx = comptime routeIndexCached(handler.id);
@@ -1284,22 +1306,24 @@ pub const CachedHybridRuntime = struct {
             c.lua_pop(L2, 1);
 
             _ = c.lua_getfield(L2, -1, "content_type");
+            _ = c.lua_getfield(L2, -2, "body");
             var content_type_len: usize = 0;
-            const content_type_ptr = c.lua_tolstring(L2, -1, &content_type_len);
-            const is_json = content_type_ptr != null and std.mem.eql(u8, content_type_ptr[0..content_type_len], "application/json");
-            c.lua_pop(L2, 1);
-
-            _ = c.lua_getfield(L2, -1, "body");
+            const content_type_ptr = c.lua_tolstring(L2, -2, &content_type_len);
             var body_len: usize = 0;
             const body_ptr = c.lua_tolstring(L2, -1, &body_len);
             const body = body_ptr[0..body_len];
 
-            if (is_json) {
-                try current_vtable.?.json(current_ctx.?, status, body);
+            if (content_type_ptr != null) {
+                const ct = content_type_ptr[0..content_type_len];
+                if (std.mem.eql(u8, ct, "application/json")) {
+                    try current_vtable.?.json(current_ctx.?, status, body);
+                } else {
+                    try current_vtable.?.bytes(current_ctx.?, status, ct, body);
+                }
             } else {
                 try current_vtable.?.text(current_ctx.?, status, body);
             }
-            c.lua_pop(L2, 2);
+            c.lua_pop(L2, 3);
         } else if (c.lua_isstring(L2, -1) != 0) {
             var len: usize = 0;
             const ptr = c.lua_tolstring(L2, -1, &len);
@@ -1403,20 +1427,24 @@ pub const CachedHybridRuntime = struct {
             const status: u16 = if (c.lua_isinteger(L2, -1) != 0) @intCast(c.lua_tointegerx(L2, -1, @as([*c]c_int, null))) else 200;
             c.lua_pop(L2, 1);
             _ = c.lua_getfield(L2, -1, "content_type");
+            _ = c.lua_getfield(L2, -2, "body");
             var content_type_len: usize = 0;
-            const content_type_ptr = c.lua_tolstring(L2, -1, &content_type_len);
-            const is_json = content_type_ptr != null and std.mem.eql(u8, content_type_ptr[0..content_type_len], "application/json");
-            c.lua_pop(L2, 1);
-            _ = c.lua_getfield(L2, -1, "body");
+            const content_type_ptr = c.lua_tolstring(L2, -2, &content_type_len);
             var body_len: usize = 0;
             const body_ptr = c.lua_tolstring(L2, -1, &body_len);
             const body = body_ptr[0..body_len];
-            if (is_json) {
-                try current_vtable.?.json(current_ctx.?, status, body);
+
+            if (content_type_ptr != null) {
+                const ct = content_type_ptr[0..content_type_len];
+                if (std.mem.eql(u8, ct, "application/json")) {
+                    try current_vtable.?.json(current_ctx.?, status, body);
+                } else {
+                    try current_vtable.?.bytes(current_ctx.?, status, ct, body);
+                }
             } else {
                 try current_vtable.?.text(current_ctx.?, status, body);
             }
-            c.lua_pop(L2, 2);
+            c.lua_pop(L2, 3);
             return true;
         } else if (c.lua_isstring(L2, -1) != 0) {
             var len: usize = 0;

@@ -2,6 +2,8 @@ local route = require("meteorite.route")
 local schema = require("meteorite.schema")
 local patterns = require("meteorite.patterns")
 local profile_mod = require("meteorite.profile")
+local handler_factories = require("meteorite.handler_factories")
+local site_macro = require("meteorite.site")
 
 ---@class MeteoriteAppOptions
 ---@field name? string
@@ -88,10 +90,6 @@ local function scope_id(prefix)
   return value:gsub("%W", "_")
 end
 
-local function lua_handler_path(module_ref)
-  if tostring(module_ref):find("/", 1, true) or tostring(module_ref):match("%.lua$") then return module_ref end
-  return "src/" .. tostring(module_ref):gsub("%.", "/") .. ".lua"
-end
 
 local function source_info(level)
   local info = debug.getinfo(level or 3, "Sl") or {}
@@ -110,6 +108,8 @@ end
 ---@field profile string|table|nil
 ---@field get fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table
 ---@field get fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table
+---@field head fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table
+---@field head fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table
 ---@field post fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table
 ---@field post fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table
 ---@field put fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table
@@ -132,6 +132,14 @@ local AppDoc = {}
 ---@return table
 function App:get(path, options, handler)
   return add_route(self, "GET", path, options, handler)
+end
+
+---@param path string
+---@param options? MeteoriteRouteOptions
+---@param handler MeteoriteHandler
+---@return table
+function App:head(path, options, handler)
+  return add_route(self, "HEAD", path, options, handler)
 end
 
 ---@param path string
@@ -270,6 +278,9 @@ end
 ---@field pattern fun(name_or_source: string, source_or_opts?: string|table, opts?: table): MeteoritePattern
 ---@field zig fun(path_or_symbol: string, opts?: {decl?: string}): table
 ---@field lua fun(module_ref: string): table
+---@field file fun(path: string, opts?: table): table
+---@field dir fun(root: string, opts?: table): table
+---@field site fun(app: MeteoriteApp, opts: table): MeteoriteApp
 local MDoc = {}
 
 ---@param opts? MeteoriteAppOptions
@@ -368,31 +379,32 @@ end
 ---@param path_or_symbol string
 ---@param opts? {decl?: string}
 ---@return {kind: "zig"|"zig_file", symbol: string, path?: string, decl?: string}
-function M.zig(path_or_symbol, opts)
-  opts = opts or {}
-  if tostring(path_or_symbol):match("%.zig$") or tostring(path_or_symbol):find("/") then
-    return { kind = "zig_file", path = path_or_symbol, decl = opts.decl or "handle" }
-  end
-  return { kind = "zig", symbol = path_or_symbol }
-end
+function M.zig(path_or_symbol, opts) return handler_factories.zig(path_or_symbol, opts) end
 
 ---@param module_ref string
 ---@return {kind: "lua", module: string, path: string}
-function M.lua(module_ref)
-  return { kind = "lua", module = module_ref, path = lua_handler_path(module_ref) }
-end
+function M.lua(module_ref) return handler_factories.lua(module_ref) end
+
+---@param path string
+---@param opts? {content_type?: string, cache?: string, only?: table, name?: string}
+---@return table
+function M.file(path, opts) return handler_factories.file(path, opts) end
+
+---@param root string
+---@param opts table
+---@return table
+function M.dir(root, opts) return handler_factories.dir(root, opts) end
+
+---@param app MeteoriteApp
+---@param opts table
+---@return MeteoriteApp
+function M.site(app, opts) return site_macro.apply(app, opts, handler_factories) end
 
 ---@param kind "zig"|"zig_file"|"lua"
 ---@param ref string
 ---@param opts? {decl?: string, path?: string}
 ---@return {kind: string, symbol?: string, path?: string, module?: string, decl?: string}
-function M.handler(kind, ref, opts)
-  opts = opts or {}
-  if kind == "zig" then return { kind = "zig", symbol = ref } end
-  if kind == "zig_file" then return { kind = "zig_file", path = ref, decl = opts.decl or "handle" } end
-  if kind == "lua" then return { kind = "lua", module = ref, path = opts.path or lua_handler_path(ref) } end
-  error("unsupported handler kind: " .. tostring(kind))
-end
+function M.handler(kind, ref, opts) return handler_factories.handler(kind, ref, opts) end
 
 M.patterns = patterns
 M.profiles = profile_mod.profiles
