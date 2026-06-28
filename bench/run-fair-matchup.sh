@@ -198,11 +198,11 @@ import json
 try:
   d=json.load(open('$out_file'))
   lp=d.get('latencyPercentiles',{})
-  print(f\"{lp.get('p99',0):.3f}\")
+  print(f\"{lp.get('p99',0)*1000:.3f}\")
 except: print('0')
 " 2>/dev/null || echo "0")
 
-  printf "  %-28s c=%-4s  RPS=%-10s  p99=%-8s ms\n" "$name" "$c" "$rps" "$p99"
+  printf "  %-28s c=%-4s  RPS=%-10s  p99=%.3fms\n" "$name" "$c" "$rps" "$p99"
 }
 
 run_warmup() {
