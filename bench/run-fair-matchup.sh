@@ -254,6 +254,7 @@ run_all_scenarios() {
 # ============================================================
 
 build_meteorite() {
+  check_interrupted
   local mode="$1"
   local label="$2"
   echo ""

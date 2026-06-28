@@ -4,6 +4,17 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BENCH_DIR="$ROOT/bench"
 source "$BENCH_DIR/../fixtures/tests/cleanup.sh"
+
+# Ctrl+C should stop the entire benchmark, not just the current oha process
+_INTERRUPTED=0
+check_interrupted() {
+  if [[ $_INTERRUPTED -eq 1 ]]; then
+    echo ""
+    echo "Benchmark interrupted, stopping..." >&2
+    exit 130
+  fi
+}
+trap '_INTERRUPTED=1' INT
 TARGET="meteorite"
 MODE="release-static"
 BACKEND="std_http"
@@ -297,6 +308,7 @@ capture_post_runtime_artifacts() {
 }
 
 sample_inline_route() {
+  check_interrupted
   if [[ -z "${SERVER_PID:-}" ]]; then
     return 0
   fi
@@ -315,6 +327,7 @@ strict_fail() {
 }
 
 probe_keepalive() {
+  check_interrupted
   echo "Probing keep-alive behavior..."
   curl -v "http://$HOST:$PORT/health" > "$OUT/curl-health.txt" 2>&1 || warn "health probe curl failed"
   env -u NO_COLOR oha --no-tui -z 10s -c 128 --output-format json -o "$OUT/keepalive-on-smoke.json" "http://$HOST:$PORT/health" > "$OUT/keepalive-on-smoke.log" 2>&1 || warn "keepalive-on smoke failed"
@@ -322,6 +335,7 @@ probe_keepalive() {
 }
 
 run_oha_get() {
+  check_interrupted
   local name="$1" path="$2" c="$3"
   echo "oha GET $path c=$c"
   local ka_arg=()
@@ -340,6 +354,7 @@ run_oha_get() {
 }
 
 run_oha_post() {
+  check_interrupted
   local name="$1" path="$2" body="$3" c="$4"
   echo "oha POST $path c=$c"
   local ka_arg=()
@@ -361,6 +376,7 @@ run_oha_post() {
 }
 
 run_oha_fixed() {
+  check_interrupted
   local name="$1" path="$2" c="$3" qps="$4"
   echo "oha GET $path c=$c (fixed QPS=$qps)"
   local ka_arg=()
@@ -380,6 +396,7 @@ run_oha_fixed() {
 }
 
 run_oha_matrix() {
+  check_interrupted
   printf 'hello meteorite' > "$OUT/body-small.txt"
   dd if=/dev/zero bs=8192 count=1 2>/dev/null | tr '\0' 'x' > "$OUT/body-8k.txt"
 
