@@ -256,7 +256,60 @@ moon run bench:lua-stability # Lua state stability benchmark
 
 ---
 
-## 6. Development Workflow
+## 6. Route Declaration Contract
+
+Meteorite routes can be declared in two forms:
+
+### Legacy form (sugar)
+
+```lua
+app:get("/health", function(ctx) return "ok" end)
+app:get("/users/:id", { params = { id = m.u64() } }, "handlers.get_user")
+```
+
+Internally, every handler lowers to a single-stage pipeline:
+```
+pipeline: [ { kind = "handle", strat = "inline_lua" | "zig" | "lua" } ]
+```
+
+### Canonical form
+
+```lua
+app:get({
+  route = "/orders/:id",
+  params = { id = m.u64() },
+  pipeline = function(ctx)
+    ctx:transform({ id = "auth", strat = "lua", path = "transforms/auth.lua" })
+    ctx:transform("zig", "transforms/load_order.zig")
+    ctx:transform(function(ctx) ctx.state.foo = "bar" end)
+    ctx:handle({ id = "show", strat = "lua", path = "handlers/show.lua" })
+    ctx:hook("post_handler", { strat = "lua", path = "hooks/log.lua" })
+  end,
+})
+```
+
+The pipeline function runs at **graph build time**, not request time. It records
+stages in order. Each stage has a `kind` (transform|handle|hook), a `strat`
+(inline_lua|lua|zig), and optional path/symbol/fn_ref.
+
+### Graph inspection
+
+```bash
+meteorite routes src/main.lua          # human-readable
+meteorite routes --graph src/main.lua  # JSON
+```
+
+### Contract module
+
+`src/core/contract.lua` defines:
+- `RouteContract` — the canonical internal representation
+- `PipelineBuilder` — the `ctx` object passed to `pipeline = function(ctx) ... end`
+- `StageContract` — kind, phase, strat, path, symbol, fn_ref, reads, writes
+- `HookContract` — phase (pre_tree|post_match|pre_handler|post_handler|observe|error)
+- `contract.build(method, decl, scope)` — single entry point that lowers all forms
+- `contract.serialize(route_contract)` — produces inspectable table
+
+## 7. Development Workflow
 
 ### Quick Start (from meteorite repo root)
 

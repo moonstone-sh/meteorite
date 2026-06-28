@@ -397,6 +397,88 @@ if command == "init" then init_project(); return end
 if command == "build" then build_project(); return end
 if command == "dev" then dev_project(); return end
 if command == "doctor" then doctor_project(); return end
+if command == "routes" then
+  -- meteorite routes --graph: inspect route declarations and pipelines
+  local json = require("utils.json")
+  local contract = require("core.contract")
+  local show_graph = false
+  local input = "src/main.lua"
+  for i = 2, #arg do
+    local a = arg[i]
+    if a == "--graph" or a == "--json" then
+      show_graph = true
+    elseif a:sub(1, 1) ~= "-" and a ~= command then
+      input = a
+    end
+  end
+  _G.METEORITE_BUILD_MODE = "dev"
+  local input_dir = input:match("^(.*[/\\])") or ""
+  if input_dir ~= "" then
+    package.path = input_dir .. "?.lua;" .. input_dir .. "?/init.lua;" .. package.path
+  end
+  local chunk, err = loadfile(input)
+  if not chunk then error(err) end
+  local app = chunk()
+  if type(app) ~= "table" or not app.__meteorite_app then
+    error(input .. " must return a Meteorite app")
+  end
+  local route_mod = require("core.route")
+  local normalized = route_mod.normalize_app(app, { mode = "dev" })
+  if show_graph then
+    print(json.encode({
+      routes = (function()
+        local out = {}
+        for _, r in ipairs(normalized.routes) do
+          out[#out + 1] = {
+            id = r.id,
+            method = r.method,
+            path = r.raw_path,
+            handler_kind = r.handler.kind,
+            source_form = r.source_form or "legacy",
+            has_pipeline = r.pipeline ~= nil,
+            pipeline = r.pipeline and (function()
+              local stages = {}
+              for _, st in ipairs(r.pipeline) do
+                stages[#stages + 1] = {
+                  id = st.id,
+                  kind = st.kind,
+                  strat = st.strat,
+                  path = st.path,
+                  symbol = st.symbol,
+                  inline = st.strat == "inline_lua",
+                  phase = st.phase,
+                  owner = st.owner,
+                  may_short_circuit = st.may_short_circuit,
+                }
+              end
+              return stages
+            end)() or nil,
+          }
+        end
+        return out
+      end)(),
+    }))
+  else
+    -- Human-readable output
+    for _, r in ipairs(normalized.routes) do
+      local src = r.source_form or "legacy"
+      io.write(string.format("  %-6s %-30s  handler=%-12s  source=%s\n",
+        r.method, r.raw_path, r.handler.kind, src))
+      if r.pipeline then
+        for _, st in ipairs(r.pipeline) do
+          local detail = st.strat
+          if st.path then detail = detail .. " " .. st.path
+          elseif st.symbol then detail = detail .. " " .. st.symbol
+          elseif st.strat == "inline_lua" then detail = detail .. " <inline>"
+          end
+          io.write(string.format("    %-10s %-8s  %s\n", st.kind, st.strat, detail))
+        end
+      end
+    end
+  end
+  return
+end
+
 if command ~= "graph" and command ~= "invoke" then
   error("unknown meteorite command: " .. tostring(command) .. "\n\nRun:\n  meteorite help")
 end
@@ -413,6 +495,8 @@ local app = chunk()
 if type(app) ~= "table" or not app.__meteorite_app then
   error(input .. " must return a Meteorite app")
 end
+
+
 if command == "graph" then
   local emitter = require("codegen.emitter")
   local output = arg[3] or ".meteorite/graph/current"

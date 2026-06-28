@@ -1,4 +1,5 @@
 local route = require("core.route")
+local contract = require("core.contract")
 local schema = require("core.schema")
 local patterns = require("core.patterns")
 local profile_mod = require("core.profile")
@@ -39,12 +40,71 @@ local function normalize_args(path, options, handler)
   return path, options or {}, handler
 end
 
-local function add_route(self, method, path, options, handler)
-  path, options, handler = normalize_args(path, options, handler)
+local function add_route(self, method, path_or_table, options_or_handler, maybe_handler)
+  -- Detect canonical table form: app:get({ route = "/path", pipeline = ... })
+  if type(path_or_table) == "table" and path_or_table.route ~= nil then
+    local scope = self.__meteorite_scope
+    local rc = contract.build(method, path_or_table, scope)
+    -- Lower RouteContract to the existing declaration format
+    local declaration
+    if rc.pipeline and #rc.pipeline > 0 then
+      -- Pipeline form: use the last handle stage (or first stage) as the handler
+      -- for backward compat with the existing graph system
+      local handler_stage = nil
+      for _, stage in ipairs(rc.pipeline) do
+        if stage.kind == "handle" then handler_stage = stage end
+      end
+      if not handler_stage then
+        handler_stage = rc.pipeline[#rc.pipeline]
+      end
+      -- Lower the handler stage to the existing handler_shape format
+      if handler_stage.strat == "inline_lua" then
+        declaration = route.declare(method, rc.route, {
+          params = rc.params, query = rc.query, body = rc.body,
+          memory = rc.memory, capabilities = rc.capabilities, scope = scope,
+        }, handler_stage.fn_ref)
+        declaration.handler = { kind = "inline_lua", value = handler_stage.fn_ref }
+      elseif handler_stage.strat == "lua" then
+        declaration = route.declare(method, rc.route, {
+          params = rc.params, query = rc.query, body = rc.body,
+          memory = rc.memory, capabilities = rc.capabilities, scope = scope,
+        }, { kind = "lua", path = handler_stage.path, module = handler_stage.module })
+      elseif handler_stage.strat == "zig" then
+        declaration = route.declare(method, rc.route, {
+          params = rc.params, query = rc.query, body = rc.body,
+          memory = rc.memory, capabilities = rc.capabilities, scope = scope,
+        }, handler_stage.symbol and handler_stage.symbol or handler_stage.path)
+        if handler_stage.path then
+          declaration.handler = { kind = "zig_file", path = handler_stage.path, decl = handler_stage.decl or "handle" }
+        end
+      end
+      -- Store the pipeline on the declaration for graph inspection
+      declaration.pipeline = rc.pipeline
+      declaration.source_form = rc._source_form
+    elseif rc.handler then
+      -- Special file/dir handler
+      declaration = route.declare(method, rc.route, {
+        params = rc.params, query = rc.query, body = rc.body,
+        memory = rc.memory, capabilities = rc.capabilities, scope = scope,
+      }, rc.handler)
+    else
+      -- No handler or pipeline — shouldn't happen after validation
+      declaration = route.declare(method, rc.route, {
+        params = rc.params, query = rc.query, body = rc.body,
+        memory = rc.memory, capabilities = rc.capabilities, scope = scope,
+      }, "handlers.unreachable")
+    end
+    self.routes[#self.routes + 1] = declaration
+    return declaration
+  end
+
+  -- Legacy positional form: app:get(path, opts?, handler)
+  local path, options, handler = normalize_args(path_or_table, options_or_handler, maybe_handler)
   if self.__meteorite_scope then
     options.scope = self.__meteorite_scope
   end
   local declaration = route.declare(method, path, options, handler)
+  declaration.source_form = "legacy_signature"
   self.routes[#self.routes + 1] = declaration
   return declaration
 end

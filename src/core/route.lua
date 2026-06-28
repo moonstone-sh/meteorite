@@ -304,6 +304,20 @@ function route.normalize_app(app, opts)
       scope = declaration.scope or root_scope(),
       memory = memory,
       source = declaration.source,
+      source_form = declaration.source_form or "legacy_signature",
+      _migration_hint = (declaration.source_form == nil or declaration.source_form == "legacy_signature") and {
+        "legacy route signature detected",
+        "",
+        "current:",
+        "  app:" .. string.lower(declaration.method) .. "(\"" .. declaration.raw_path .. "\", handler)",
+        "",
+        "canonical:",
+        "  app:" .. string.lower(declaration.method) .. "({",
+        "    route = \"" .. declaration.raw_path .. "\",",
+        "    handler = handler,",
+        "  })",
+      } or nil,
+      pipeline = declaration.pipeline,
     }
     for _, param in ipairs(normalized.params) do
       local pattern = nil

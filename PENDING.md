@@ -202,3 +202,41 @@ Missing:
 
 Hint: pass runtime = { source_payload_path = ... } from the Moonstone/Ballad plugin, set lua_source/runtime_source, or build static after replacing Lua runtime handlers/plugins.
 ```
+
+## Contract Standardization
+
+The route declaration system is being standardized around a single
+graph-readable contract. See `src/core/contract.lua` for the implementation.
+
+### Completed
+
+- [x] Define canonical `RouteContract` with method, route, id, name, policy, pipeline, hooks, meta
+- [x] Implement `PipelineBuilder` with `ctx:transform()`, `ctx:handle()`, `ctx:hook()`
+- [x] Define `StageContract` with kind (transform|handle|hook), strat (inline_lua|lua|zig|rust)
+- [x] Lower legacy `opts.handler` to pipeline stage (sugar)
+- [x] Add strict route declaration validation (missing route, conflicting fields, duplicate ids)
+- [x] Add Rust strategy rejection with clear message
+- [x] Add hook phase model (pre_tree, post_match, pre_handler, post_handler, observe, error)
+- [x] Add graph serialization for inspection (`contract.serialize()`)
+- [x] Wire `contract.build()` into `meteorite.lua` `add_route`
+- [x] Canonical table form works in static and hybrid modes
+- [x] Legacy form compatibility preserved
+- [x] Add `meteorite routes` command for graph inspection
+- [x] Add `meteorite routes --graph` JSON output
+- [x] Add migration hints for legacy route signatures
+- [x] Tests: contract parser (23 tests, 73 assertions)
+
+### Still pending
+
+- [ ] Transformer semantics: runtime execution model for pipeline stages
+- [ ] Handler semantics: pipeline with no explicit handler, transform-only pipeline
+- [ ] Hook phase enforcement: phase permissions at graph validation time
+- [ ] Plugin model: `PluginContract`, graph mutation API, first-party plugins
+- [ ] First-party plugin: cache (`meteorite.plugins.cache`)
+- [ ] First-party plugin: idempotency (`meteorite.plugins.idempotency`)
+- [ ] Pipeline stage representation in Zig graph types
+- [ ] Native stage compilation contract for Zig stages
+- [ ] Diagnostics: pipeline failure with route id, stage id, kind, strat, path, owner
+- [ ] Dev endpoint `/__meteorite/graph` for runtime graph inspection
+- [ ] Graph JSON snapshot tests
+- [ ] Documentation: canonical route contract, pipeline declaration, transform notation
