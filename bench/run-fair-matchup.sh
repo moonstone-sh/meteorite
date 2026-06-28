@@ -166,16 +166,15 @@ run_scenario() {
   local out_file="$OUT/${label}-${name}-c${c}.json"
   local log_file="$OUT/${label}-${name}-c${c}.log"
 
-  local timeout=$((duration + 10))
   if [[ "$method" == "POST" ]]; then
     local body_path="$OUT/$body_file"
-    timeout "$timeout" env -u NO_COLOR oha --no-tui --output-format json \
+    env -u NO_COLOR oha --no-tui --output-format json \
       -z "${duration}s" -c "$c" $KA_FLAG \
       -d "$body_path" \
       -o "$out_file" \
       "$url" > "$log_file" 2>&1 || true
   else
-    timeout "$timeout" env -u NO_COLOR oha --no-tui --output-format json \
+    env -u NO_COLOR oha --no-tui --output-format json \
       -z "${duration}s" -c "$c" $KA_FLAG \
       -o "$out_file" \
       "$url" > "$log_file" 2>&1 || true
