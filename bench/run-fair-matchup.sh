@@ -15,7 +15,8 @@ set -euo pipefail
 #   - Bun.serve uses the native HTTP server (no Node compat layer)
 #
 # Meteorite is built in ReleaseFast with:
-#   - fast_http backend, threaded_probe strategy
+#   - fast_http backend (default) with threaded_probe strategy
+#   - use --backend std_http to compare with Zig's std.http.Server
 #   - param_matchers router dispatch
 #   - optimized hybrid profile (for hybrid mode)
 #
@@ -31,6 +32,8 @@ set -euo pipefail
 #   --hybrid-only        skip static Meteorite runs
 #   --no-hono            skip Hono/Bun runs
 #   --keepalive VAL      on or off (default: on)
+  --backend NAME       fast_http or std_http (default: fast_http)
+  --fast-http-strategy S  threaded_probe or pool (default: threaded_probe)
 # ============================================================
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -43,6 +46,8 @@ WARMUP="3"
 CONCURRENCY="1,4,16,64,256,512"
 OUT=""
 KEEPALIVE="on"
+BACKEND="fast_http"
+FAST_HTTP_STRATEGY="threaded_probe"
 RUN_STATIC=1
 RUN_HYBRID=1
 RUN_HONO=1
@@ -54,6 +59,8 @@ while [[ $# -gt 0 ]]; do
     --warmup) WARMUP="${2:?}"; shift 2 ;;
     --out) OUT="${2:?}"; shift 2 ;;
     --keepalive) KEEPALIVE="${2:?}"; shift 2 ;;
+    --backend) BACKEND="${2:?}"; shift 2 ;;
+    --fast-http-strategy) FAST_HTTP_STRATEGY="${2:?}"; shift 2 ;;
     --static-only) RUN_HYBRID=0; shift ;;
     --hybrid-only) RUN_STATIC=0; shift ;;
     --no-hono) RUN_HONO=0; shift ;;
@@ -230,11 +237,17 @@ build_meteorite() {
     extra_flags="-Dhybrid-profile=optimized"
   fi
 
+  # std_http ignores fast-http-strategy; pass it only for fast_http
+  local strategy_flags=""
+  if [[ "$BACKEND" == "fast_http" ]]; then
+    strategy_flags="-Dfast-http-strategy=$FAST_HTTP_STRATEGY"
+  fi
+
   ZIG_GLOBAL_CACHE_DIR="$zig_cache" \
     zig build install-server \
       -Dmode="$mode" \
-      -Dbackend=fast_http \
-      -Dfast-http-strategy=threaded_probe \
+      -Dbackend="$BACKEND" \
+      $strategy_flags \
       -Drouter-dispatch=param_matchers \
       $extra_flags \
       -- dist/server 2>&1 | tail -5
@@ -295,8 +308,10 @@ capture_env() {
     echo ""
     echo "=== Meteorite Build ==="
     echo "Mode: $1"
-    echo "Backend: fast_http"
-    echo "Strategy: threaded_probe"
+    echo "Backend: $BACKEND"
+    if [[ "$BACKEND" == "fast_http" ]]; then
+      echo "Strategy: $FAST_HTTP_STRATEGY"
+    fi
     echo "Router: param_matchers"
     if [[ "$1" == "release-hybrid" ]]; then
       echo "Hybrid profile: optimized"
