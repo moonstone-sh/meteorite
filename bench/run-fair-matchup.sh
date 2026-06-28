@@ -277,21 +277,14 @@ start_meteorite() {
   ZIG_GLOBAL_CACHE_DIR="/tmp/zig-cache-fair-matchup" \
     ./dist/server > "$OUT/meteorite-server.log" 2>&1 &
   SERVER_PID=$!
-  wait_for_server "$PORT_METEORITE" "Meteorite"
 }
 
 start_hono_bun() {
   cd "$BENCH_DIR/competitors/hono"
-  # Bun tuned for maximum performance:
-  # - NODE_ENV=production: disables dev-mode checks
-  # - BUN_GARBAGE_COLLECTOR_LEVEL=0: less frequent GC, higher throughput
-  # - No --smol: we want full speed, not memory savings
-  # - No --hot: no file watcher overhead
   NODE_ENV=production \
   BUN_GARBAGE_COLLECTOR_LEVEL=0 \
     bun server.ts --port="$PORT_HONO" > "$OUT/hono-server.log" 2>&1 &
   SERVER_PID=$!
-  wait_for_server "$PORT_HONO" "Hono/Bun"
 }
 
 # ============================================================
@@ -353,10 +346,14 @@ capture_env "multiple"
 if [[ "$RUN_STATIC" == "1" ]]; then
   build_meteorite "release-static" "static"
   start_meteorite
-  trap kill_server EXIT INT TERM
-  run_warmup "$PORT_METEORITE" "meteorite-static"
-  run_all_scenarios "$PORT_METEORITE" "meteorite-static" "$DURATION"
-  curl -fsS "http://$HOST:$PORT_METEORITE/__bench/counters" > "$OUT/meteorite-static-counters.json" 2>/dev/null || true
+  if wait_for_server "$PORT_METEORITE" "Meteorite"; then
+    trap kill_server EXIT INT TERM
+    run_warmup "$PORT_METEORITE" "meteorite-static"
+    run_all_scenarios "$PORT_METEORITE" "meteorite-static" "$DURATION"
+    curl -fsS "http://$HOST:$PORT_METEORITE/__bench/counters" > "$OUT/meteorite-static-counters.json" 2>/dev/null || true
+  else
+    echo "WARNING: Meteorite static failed to start" >&2
+  fi
   kill_server
   sleep 0.5
 fi
@@ -365,27 +362,34 @@ fi
 if [[ "$RUN_HYBRID" == "1" ]]; then
   build_meteorite "release-hybrid" "hybrid"
   start_meteorite
-  trap kill_server EXIT INT TERM
-  run_warmup "$PORT_METEORITE" "meteorite-hybrid"
-  run_all_scenarios "$PORT_METEORITE" "meteorite-hybrid" "$DURATION"
-  curl -fsS "http://$HOST:$PORT_METEORITE/__bench/counters" > "$OUT/meteorite-hybrid-counters.json" 2>/dev/null || true
+  if wait_for_server "$PORT_METEORITE" "Meteorite"; then
+    trap kill_server EXIT INT TERM
+    run_warmup "$PORT_METEORITE" "meteorite-hybrid"
+    run_all_scenarios "$PORT_METEORITE" "meteorite-hybrid" "$DURATION"
+    curl -fsS "http://$HOST:$PORT_METEORITE/__bench/counters" > "$OUT/meteorite-hybrid-counters.json" 2>/dev/null || true
+  else
+    echo "WARNING: Meteorite hybrid failed to start" >&2
+  fi
   kill_server
   sleep 0.5
 fi
 
 # --- Hono/Bun ---
 if [[ "$RUN_HONO" == "1" ]]; then
-  if ! command -v bun >/dev/null 2>&1; then
-    echo "WARNING: bun not found, skipping Hono/Bun" >&2
-  elif ! start_hono_bun; then
-    echo "WARNING: Hono/Bun failed to start, skipping" >&2
-    kill_server
+  if command -v bun >/dev/null 2>&1; then
+    start_hono_bun
+    if wait_for_server "$PORT_HONO" "Hono/Bun"; then
+      trap kill_server EXIT INT TERM
+      run_warmup "$PORT_HONO" "hono-bun"
+      run_all_scenarios "$PORT_HONO" "hono-bun" "$DURATION"
+      kill_server
+      sleep 0.5
+    else
+      echo "WARNING: Hono/Bun failed to start, skipping" >&2
+      kill_server
+    fi
   else
-    trap kill_server EXIT INT TERM
-    run_warmup "$PORT_HONO" "hono-bun"
-    run_all_scenarios "$PORT_HONO" "hono-bun" "$DURATION"
-    kill_server
-    sleep 0.5
+    echo "WARNING: bun not found, skipping Hono/Bun" >&2
   fi
 fi
 
