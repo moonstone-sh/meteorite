@@ -32,8 +32,8 @@ set -euo pipefail
 #   --hybrid-only        skip static Meteorite runs
 #   --no-hono            skip Hono/Bun runs
 #   --keepalive VAL      on or off (default: on)
-  --backend NAME       fast_http or std_http (default: fast_http)
-  --fast-http-strategy S  threaded_probe or pool (default: threaded_probe)
+#   --backend NAME       fast_http or std_http (default: fast_http)
+#   --fast-http-strategy S  threaded_probe or pool (default: threaded_probe)
 # ============================================================
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
