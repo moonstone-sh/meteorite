@@ -123,6 +123,17 @@ ALL_SCENARIOS=("${SCENARIOS[@]}" "${POST_SCENARIOS[@]}")
 
 source "$BENCH_DIR/../fixtures/tests/cleanup.sh"
 
+# Ctrl+C should stop the entire benchmark, not just the current oha process
+_INTERRUPTED=0
+check_interrupted() {
+  if [[ $_INTERRUPTED -eq 1 ]]; then
+    echo ""
+    echo "Benchmark interrupted, stopping..." >&2
+    exit 130
+  fi
+}
+trap '_INTERRUPTED=1' INT
+
 kill_server() {
   if [[ -n "${SERVER_PID:-}" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
     kill -- "-$SERVER_PID" 2>/dev/null || kill "$SERVER_PID" 2>/dev/null || true
@@ -164,6 +175,7 @@ start_or_skip() {
 # ============================================================
 
 run_scenario() {
+  check_interrupted
   local name="$1" method="$2" path="$3" body_file="$4" port="$5" label="$6" duration="$7" c="$8"
   local url="http://$HOST:$port$path"
   local out_file="$OUT/${label}-${name}-c${c}.json"
@@ -202,10 +214,11 @@ try:
 except: print('0')
 " 2>/dev/null || echo "0")
 
-  printf "  %-28s c=%-4s  RPS=%-10s  p99=%.3fms\n" "$name" "$c" "$rps" "$p99"
+  printf "  %-28s c=%-4s  RPS=%-10.1f  p99=%.3fms\n" "$name" "$c" "$rps" "$p99"
 }
 
 run_warmup() {
+  check_interrupted
   local port="$1" label="$2"
   echo "  warming up $label..."
   for _ in $(seq 1 3); do
@@ -218,6 +231,7 @@ run_warmup() {
 }
 
 run_all_scenarios() {
+  check_interrupted
   local port="$1" label="$2" duration="$3"
 
   for C in "${CONCURRENCY_VALUES[@]}"; do
