@@ -9,13 +9,7 @@ FAST_HTTP_QUEUE="${FAST_HTTP_QUEUE:-1024}"
 BIN="${BIN:-dist/server}"
 SERVER_PID=""
 
-cleanup() {
-  if [[ -n "${SERVER_PID:-}" ]]; then
-    kill "$SERVER_PID" 2>/dev/null || true
-    wait "$SERVER_PID" 2>/dev/null || true
-  fi
-}
-trap cleanup EXIT
+source "$ROOT/fixtures/tests/cleanup.sh"
 
 cd "$ROOT"
 zig build install-server \
