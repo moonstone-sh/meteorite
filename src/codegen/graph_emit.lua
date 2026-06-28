@@ -1,6 +1,14 @@
 --- Graph preparation, Zig bindings, route modules, and graph.zig emission.
 --- Extracted from emitter.lua.
+---
+--- @class GraphEmitModule
+--- @field prepare_graph fun(graph: table, output: string, mode: string): table  Prepare and clean graph data
+--- @field emit_bindings fun(graph: table, output: string): void  Emit graph_bindings.zig
+--- @field emit_pattern_modules fun(graph: table, output: string): void  Emit pattern/*.zig modules
+--- @field emit_route_modules fun(graph: table, output: string): void  Emit routes/*.zig modules
+--- @field emit_graph_zig fun(graph: table, output: string): void  Emit main graph.zig
 
+---@type GraphEmitModule
 local helpers = require("codegen.helpers")
 local zon = require("codegen.zon")
 local lifter = require("codegen.lifter")
@@ -42,6 +50,11 @@ function graph_emit.validate_capability_refs(graph, route, refs)
   end
 end
 
+--- Prepare and clean graph data before emission.
+---@param graph table  Normalized route graph
+---@param output string  Output directory
+---@param mode string  Build mode
+---@return table  Prepared graph
 function graph_emit.prepare_graph(graph, output, mode)
   for _, plugin in ipairs(graph.plugins or {}) do
     if type(plugin.execute) ~= "function" then
@@ -152,6 +165,9 @@ function graph_emit.relative_path(from_dir, to_path)
   return table.concat(out, "/")
 end
 
+--- Emit graph_bindings.zig with handler bindings.
+---@param graph table  Normalized route graph
+---@param output string  Output directory
 function graph_emit.emit_bindings(graph, output)
   local infos = graph_emit.sorted_handler_infos(graph.routes)
   local route_infos = graph_emit.sorted_route_handler_infos(graph.routes)
@@ -268,6 +284,9 @@ function graph_emit.pattern_module_content(pattern)
   return table.concat(lines, "\n") .. "\n"
 end
 
+--- Emit pattern/*.zig DFA modules.
+---@param graph table  Normalized route graph
+---@param output string  Output directory
 function graph_emit.emit_pattern_modules(graph, output)
   local dir = output .. "/patterns"
   fs.mkdir_p(dir)
@@ -512,6 +531,9 @@ function graph_emit.route_module_content(route)
   return table.concat(lines, "\n") .. "\n"
 end
 
+--- Emit individual route/*.zig modules.
+---@param graph table  Normalized route graph
+---@param output string  Output directory
 function graph_emit.emit_route_modules(graph, output)
   local dir = output .. "/routes"
   fs.mkdir_p(dir)
@@ -520,6 +542,9 @@ function graph_emit.emit_route_modules(graph, output)
   end
 end
 
+--- Emit the main graph.zig file.
+---@param graph table  Normalized route graph
+---@param output string  Output directory
 function graph_emit.emit_graph_zig(graph, output)
   local max_arena = 0
   local max_uri, max_path, max_query, max_query_pairs, max_path_segments = 0, 0, 0, 0, 0

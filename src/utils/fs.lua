@@ -26,6 +26,8 @@ local lfs_ok, lfs = pcall(require, "lfs")
 local has_lfs = lfs_ok and lfs
 
 --- Create directory path (like mkdir -p).
+--- Create directory path (like mkdir -p).
+---@param path string
 function fs.mkdir_p(path)
   if path == "" or path == "." then return end
   -- Try shell mkdir -p first (fast, ubiquitous)
@@ -33,11 +35,17 @@ function fs.mkdir_p(path)
 end
 
 --- Quote a path for shell usage.
+--- Quote a path for shell usage.
+---@param path string
+---@return string
 function fs.shell_quote(path)
   return "'" .. tostring(path):gsub("'", "'\\''") .. "'"
 end
 
 --- Check if a path is a directory.
+--- Check if a path is a directory.
+---@param path string
+---@return boolean
 function fs.is_dir(path)
   if has_lfs then
     return lfs.attributes(path, "mode") == "directory"
@@ -55,6 +63,9 @@ function fs.is_dir(path)
 end
 
 --- List all files (not directories) under root, returning relative paths.
+--- List all files (not directories) under root, returning relative paths.
+---@param root string
+---@return string[]
 function fs.list_files(root)
   if has_lfs then
     local result = {}
@@ -90,6 +101,9 @@ function fs.list_files(root)
 end
 
 --- List all symlinks under root, returning relative paths.
+--- List all symlinks under root, returning relative paths.
+---@param root string
+---@return string[]
 function fs.list_symlinks(root)
   if has_lfs then
     local result = {}
@@ -122,6 +136,9 @@ function fs.list_symlinks(root)
 end
 
 --- Read a file's contents.
+--- Read a file's contents.
+---@param path string
+---@return string|nil
 function fs.read_file(path)
   local file = io.open(path, "rb")
   if not file then return nil end
@@ -131,6 +148,9 @@ function fs.read_file(path)
 end
 
 --- Write content to a file, creating parent directories.
+--- Write content to a file, creating parent directories.
+---@param path string
+---@param content string
 function fs.write_file(path, content)
   fs.mkdir_p(path:match("^(.*)/[^/]*$") or ".")
   local file, err = io.open(path, "wb")
@@ -140,6 +160,9 @@ function fs.write_file(path, content)
 end
 
 --- Get file size in bytes.
+--- Get file size in bytes.
+---@param path string
+---@return integer
 function fs.file_size(path)
   local file = io.open(path, "rb")
   if not file then return 0 end
@@ -149,6 +172,9 @@ function fs.file_size(path)
 end
 
 --- Read the target of a symlink.
+--- Read the target of a symlink.
+---@param path string
+---@return string|nil
 function fs.readlink(path)
   if has_lfs then
     return lfs.symlinkattributes(path, "target")
@@ -161,6 +187,9 @@ function fs.readlink(path)
 end
 
 --- Compute a BLAKE3 hash of text, falling back to FNV-32.
+--- Compute a BLAKE3 hash of text, falling back to FNV-32.
+---@param text string
+---@return string
 function fs.hash_text(text)
   local tmp = os.tmpname()
   fs.write_file(tmp, text)
@@ -176,11 +205,18 @@ function fs.hash_text(text)
 end
 
 --- Compute an ETag from text.
+--- Compute an ETag from text.
+---@param text string
+---@return string
 function fs.etag_for_text(text)
   return '"' .. fs.hash_text(text) .. '"'
 end
 
 --- Get relative path from a full path and a base directory.
+--- Get relative path from a full path and a base directory.
+---@param full string
+---@param base string
+---@return string
 function fs.relative(full, base)
   if #full <= #base then return full end
   if full:sub(1, #base) ~= base then return full end
@@ -190,6 +226,10 @@ function fs.relative(full, base)
 end
 
 --- Join two path components.
+--- Join two path components.
+---@param a string
+---@param b string
+---@return string
 function fs.join(a, b)
   if a == "" or a == "." then return b end
   if b == "" or b == "." then return a end
@@ -197,6 +237,9 @@ function fs.join(a, b)
 end
 
 --- Get directory name of a path.
+--- Get directory name of a path.
+---@param path string
+---@return string
 function fs.dirname(path)
   return tostring(path):match("^(.*)/[^/]*$") or "."
 end

@@ -1,6 +1,12 @@
 --- Context Zig emission, handler stub generation, and file sync.
 --- Extracted from emitter.lua.
+---
+--- @class HandlerSyncModule
+--- @field emit_ctx_zig fun(graph: table, output: string): void  Emit ctx.zig with route context types
+--- @field sync_handler_files fun(graph: table, output: string, mode: string): void  Sync handler stub files
+--- @field sync_luarc fun(output: string): void  Sync .luarc.json for LuaLS
 
+---@type HandlerSyncModule
 local helpers = require("codegen.helpers")
 local project_root_from_output = helpers.project_root_from_output
 local detect_lua_version = helpers.detect_lua_version
@@ -60,6 +66,9 @@ function handler_sync.zig_query_conversion(param)
   return handler_sync.zig_value_conversion(param, "raw.query")
 end
 
+--- Emit ctx.zig with route context types.
+---@param graph table  Normalized route graph
+---@param output string  Output directory
 function handler_sync.emit_ctx_zig(graph, output)
   local lines = {
     "const std = @import(\"std\");",
@@ -252,6 +261,10 @@ function handler_sync.handler_warnings_path(output)
   return output .. "/../../aids/handler-sync.warnings.txt"
 end
 
+--- Sync handler stub files for missing Zig handlers.
+---@param graph table  Normalized route graph
+---@param output string  Output directory
+---@param mode string  Build mode
 function handler_sync.sync_handler_files(graph, output, mode)
   local root = project_root_from_output(output)
   local warnings = {}

@@ -3,8 +3,26 @@
 --- (legacy signatures, canonical tables, pipeline functions) into a
 --- single internal RouteContract with a pipeline of stages.
 ---
+--- @class ContractModule
+--- @field phases table<string,string>  Valid hook phases
+--- @field kinds table<string,string>  Valid stage kinds
+--- @field strategies table<string,string>  Valid strategies
+--- @field valid_phases table<string,boolean>  Phase validation lookup
+--- @field PipelineBuilder fun(route_id: string): PipelineBuilder  Create a pipeline builder
+--- @field lower_handler_to_stage fun(handler: any): StageContract|nil, table|nil  Lower legacy handler to stage
+--- @field validate_route_declaration fun(decl: table): string  Validate and return form ("canonical"|"legacy")
+--- @field build fun(method: string, decl: table, scope: table?): RouteContract  Build a RouteContract from any form
+--- @field serialize fun(route_contract: RouteContract): table  Serialize for graph inspection
+
+---@type ContractModule
+--- Route contract and pipeline builder.
+--- Defines the canonical route declaration shape and lowers all forms
+--- (legacy signatures, canonical tables, pipeline functions) into a
+--- single internal RouteContract with a pipeline of stages.
+---
 --- @class RouteContract
 --- @field method string  HTTP method
+--- @field route string  Raw path pattern  HTTP method
 --- @field route string  Raw path pattern
 --- @field id? string  Optional route identifier
 --- @field name? string  Optional human-readable name
@@ -100,6 +118,10 @@ end
 
 --- Create a new pipeline builder.
 --- Passed as `ctx` to the `pipeline = function(ctx) ... end` callback.
+--- Create a new pipeline builder.
+--- Passed as `ctx` to the `pipeline = function(ctx) ... end` callback.
+---@param route_id string  Route id for diagnostics
+---@return PipelineBuilder
 local function PipelineBuilder(route_id)
   local builder = {
     stages = {},
@@ -193,6 +215,9 @@ local function PipelineBuilder(route_id)
   end
 
   --- Record a transform stage.
+  --- Record a transform stage.
+  ---@param ... any  Stage spec (table, function, or positional)
+  ---@return PipelineBuilder
   function builder:transform(...)
     if not self._building then
       error("ctx:transform() called outside pipeline declaration — pipeline functions run at build time, not request time")
@@ -203,6 +228,9 @@ local function PipelineBuilder(route_id)
   end
 
   --- Record a handle stage (primary response-producing stage).
+  --- Record a handle stage (primary response-producing stage).
+  ---@param ... any  Stage spec (table, function, or positional)
+  ---@return PipelineBuilder
   function builder:handle(...)
     if not self._building then
       error("ctx:handle() called outside pipeline declaration — pipeline functions run at build time, not request time")
@@ -213,6 +241,10 @@ local function PipelineBuilder(route_id)
   end
 
   --- Record a hook stage.
+  --- Record a hook stage.
+  ---@param phase string  Hook phase (pre_tree, post_match, etc.)
+  ---@param stage_or_fn table|function  Stage spec or inline function
+  ---@return PipelineBuilder
   function builder:hook(phase, stage_or_fn)
     if not self._building then
       error("ctx:hook() called outside pipeline declaration")
@@ -246,6 +278,9 @@ local function PipelineBuilder(route_id)
   end
 
   --- Alias for transform (some users prefer use/pipe naming).
+  --- Alias for transform (some users prefer use/pipe naming).
+  ---@param ... any  Stage spec
+  ---@return PipelineBuilder
   function builder:use(...)
     return self:transform(...)
   end
@@ -261,6 +296,10 @@ contract.PipelineBuilder = PipelineBuilder
 
 --- Lower a legacy handler (string, function, or table) into a pipeline stage.
 --- This is the "sugar" — internally, every handler is a pipeline stage.
+--- Lower a legacy handler (string, function, or table) into a pipeline stage.
+--- This is the "sugar" — internally, every handler is a pipeline stage.
+---@param handler any  Legacy handler (string, function, or table)
+---@return StageContract|nil, table|nil  Stage contract, or nil + special handler (file/dir)
 local function lower_handler_to_stage(handler)
   local kind = type(handler)
 
@@ -339,6 +378,9 @@ contract.lower_handler_to_stage = lower_handler_to_stage
 -- Route declaration validation
 -- ============================================================
 
+--- Validate a route declaration and return its form.
+---@param decl table  Route declaration
+---@return string  "canonical" or "legacy"
 local function validate_route_declaration(decl)
   if type(decl) ~= "table" then
     error("route declaration must be a table")
@@ -399,6 +441,12 @@ contract.validate_route_declaration = validate_route_declaration
 
 --- Build a complete RouteContract from any declaration form.
 --- This is the single entry point that all route methods call.
+--- Build a complete RouteContract from any declaration form.
+--- This is the single entry point that all route methods call.
+---@param method string  HTTP method (GET, POST, etc.)
+---@param decl table  Declaration (canonical table or legacy positional)
+---@param scope? table  Mount scope chain
+---@return RouteContract
 function contract.build(method, decl, scope)
   local source = validate_route_declaration(decl)
   local route_contract
@@ -541,6 +589,9 @@ end
 -- ============================================================
 
 --- Serialize a RouteContract to a plain table for graph inspection.
+--- Serialize a RouteContract to a plain table for graph inspection.
+---@param route_contract RouteContract
+---@return table  Inspectable table with pipeline stages, hooks, policy
 function contract.serialize(route_contract)
   local out = {
     method = route_contract.method,

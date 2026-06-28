@@ -1,3 +1,12 @@
+--- Route declaration and graph normalization.
+--- Parses route paths, normalizes handlers, and builds the application graph.
+---
+--- @class RouteModule
+--- @field parse_path fun(path: string): table[]  Parse a route path into segments
+--- @field declare fun(method: string, path: string, options: table, handler: any): table  Declare a route
+--- @field normalize_app fun(app: table, opts: table): table  Normalize app into graph
+
+---@type RouteModule
 local profiles = require("core.profile")
 
 local route = {}
@@ -9,6 +18,9 @@ local function source_info(level)
   return { file = file, line = info.currentline or 0, column = 1 }
 end
 
+--- Parse a route path into segments.
+---@param path string  Route path (e.g. "/users/:id")
+---@return table[]  Array of segments (literal or param)
 local function parse_path(path)
   assert(type(path) == "string" and path ~= "", "route path must be a non-empty string")
   assert(path:sub(1, 1) == "/", "route path must start with /")
@@ -52,6 +64,12 @@ local function root_scope()
   return { id = "root", parent = "", path_prefix = "", chain = {}, plugins = {}, context = {} }
 end
 
+--- Declare a route.
+---@param method string  HTTP method
+---@param path string  Route path pattern
+---@param options table  Route options (params, query, body, memory, capabilities)
+---@param handler any  Handler (string, function, or table)
+---@return table  Route declaration
 function route.declare(method, path, options, handler)
   local memory = options.memory or {}
   if options.body and options.body.max ~= nil and memory.max_body == nil then
@@ -233,6 +251,10 @@ local function validate_pattern_budget(patterns_list, memory)
   end
 end
 
+--- Normalize an app's routes into a graph.
+---@param app table  Meteorite app
+---@param opts table  Options (mode, etc.)
+---@return table  Normalized graph
 function route.normalize_app(app, opts)
   opts = opts or {}
   local mode = opts.mode or "dev"

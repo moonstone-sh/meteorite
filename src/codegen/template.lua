@@ -13,6 +13,10 @@ local template = {}
 --- @param tpl string  Template text with {{key}} placeholders
 --- @param vars table  Key-value table of substitutions
 --- @return string  Rendered text
+--- Render a template string by replacing {{key}} placeholders.
+---@param tpl string  Template text with {{key}} placeholders
+---@param vars table  Key-value table of substitutions
+---@return string  Rendered text
 function template.render(tpl, vars)
   return (tpl:gsub("{{(%w+)}}", function(key)
     local value = vars[key]
@@ -26,6 +30,11 @@ end
 --- @param vars table  Key-value table of substitutions
 --- @return string|nil  Rendered text, or nil if file not found
 --- @return string|nil  Error message on failure
+--- Render a template file by reading it and substituting placeholders.
+---@param path string  Path to the .tpl file
+---@param vars table  Key-value table of substitutions
+---@return string|nil  Rendered text, or nil if file not found
+---@return string|nil  Error message on failure
 function template.render_file(path, vars)
   local file = io.open(path, "rb")
   if not file then return nil, "template file not found: " .. path end

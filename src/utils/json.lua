@@ -22,6 +22,9 @@ local function is_array(value)
 end
 
 local encode
+--- Encode a Lua value as JSON.
+---@param value any  Value to encode
+---@return string  JSON text
 encode = function(value)
   local kind = type(value)
   if kind == "nil" then return "null" end

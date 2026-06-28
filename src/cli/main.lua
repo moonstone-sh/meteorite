@@ -398,6 +398,8 @@ if command == "build" then build_project(); return end
 if command == "dev" then dev_project(); return end
 if command == "doctor" then doctor_project(); return end
 if command == "routes" then
+  --- Inspect route declarations and pipelines.
+  --- Usage: meteorite routes [--graph] [input]
   -- meteorite routes --graph: inspect route declarations and pipelines
   local json = require("utils.json")
   local contract = require("core.contract")
