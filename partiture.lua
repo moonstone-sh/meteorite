@@ -44,6 +44,7 @@ return ballad.partiture(function(p)
 				lua_modules = {
 					{ name = "meteorite.lua", path = "src/meteorite.lua" },
 					{ name = "meteorite/core/route.lua", path = "src/core/route.lua" },
+				{ name = "meteorite/core/contract.lua", path = "src/core/contract.lua" },
 					{ name = "meteorite/core/schema.lua", path = "src/core/schema.lua" },
 					{ name = "meteorite/core/profile.lua", path = "src/core/profile.lua" },
 					{ name = "meteorite/core/patterns.lua", path = "src/core/patterns.lua" },
