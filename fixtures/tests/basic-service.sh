@@ -41,7 +41,9 @@ grep -q 'memory = .{' fixtures/apps/basic-service/.meteorite/graph/current/runti
 
 fixtures/apps/basic-service/dist/server >/tmp/meteorite-basic-service.log 2>&1 &
 server_pid=$!
-trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+source "$(dirname "${BASH_SOURCE[0]}")/cleanup.sh"
+register_pid "$server_pid"
+# cleanup.sh handles EXIT/INT/TERM/HUP automatically
 sleep 0.5
 
 expect_body() {

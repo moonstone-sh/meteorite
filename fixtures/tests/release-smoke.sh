@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LUA_PROJECT_PATH="${ROOT}/src/?.lua;${ROOT}/src/?/init.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?/init.lua;${ROOT}/../ballad/src/?.lua;${ROOT}/../ballad/src/?/init.lua;;"
 
 cd "$ROOT"
+source "$(dirname "${BASH_SOURCE[0]}")/cleanup.sh"
 export MOONSTONE_HOME="$ROOT/.moonstone-home"
 
 cleanup_port() {
@@ -32,7 +33,9 @@ rm -rf "$source_copy/site/dist"
 
 "$deploy_root/bin/server" >/tmp/meteorite-release-smoke-server.log 2>&1 &
 server_pid=$!
-trap 'kill "$server_pid" 2>/dev/null || true; cleanup_port' EXIT
+register_pid "$server_pid"
+# cleanup.sh handles EXIT/INT/TERM/HUP automatically
+# cleanup_port is still called explicitly below
 sleep 0.5
 
 expect_body() {
@@ -62,9 +65,9 @@ expect_status 200 http://127.0.0.1:8080/
 expect_status 200 http://127.0.0.1:8080/benchmarks.json
 expect_status 404 http://127.0.0.1:8080/../../moonstone.toml
 
+unregister_pid "$server_pid"
 kill "$server_pid" 2>/dev/null || true
 wait "$server_pid" 2>/dev/null || true
-trap - EXIT
 cleanup_port
 
 LUA_PATH="$LUA_PROJECT_PATH" luajit <<'LUA'

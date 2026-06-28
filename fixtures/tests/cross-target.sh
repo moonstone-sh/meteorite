@@ -7,6 +7,7 @@ TARGET="${METEORITE_CROSS_TARGET:-aarch64-linux-gnu}"
 ZIG_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-/tmp/zig-cache-meteorite-cross}"
 
 cd "$ROOT"
+source "$(dirname "${BASH_SOURCE[0]}")/cleanup.sh"
 export MOONSTONE_HOME="$ROOT/.moonstone-home"
 
 # Locate the Lua source archive for cross-compilation.

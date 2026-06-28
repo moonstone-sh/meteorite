@@ -2,7 +2,7 @@
 name = "moonstone/meteorite"
 version = "0.1.0"
 kind = "bin"
-description = "Moonstone-native service compiler prototype"
+description = "Moonstone-zig service compiler prototype"
 
 [runtime]
 name = "lua"
@@ -10,9 +10,13 @@ version = "5.4"
 abi = "5.4"
 
 [scripts]
-"graph" = "lua src/meteorite/cli.lua graph src/main.lua .meteorite/graph/current release-static"
-"dev" = "lua src/meteorite/cli.lua graph fixtures/demo/src/main.lua fixtures/demo/.meteorite/graph/current dev && lua src/meteorite/cli.lua invoke fixtures/demo/src/main.lua GET / && lua src/meteorite/cli.lua invoke fixtures/demo/src/main.lua GET /health"
+"graph" = "lua src/cli/main.lua graph fixtures/apps/showcase-service/src/main.lua .meteorite/graph/current release-static"
+"dev" = "sh -c 'METEORITE_GUARD_EXCLUDE_PID=$$ scripts/guard.sh handoff; trap \"scripts/guard.sh cleanup >/dev/null 2>&1 || true\" EXIT INT TERM; lua src/cli/dev.lua fixtures/apps/showcase-service/src/main.lua .meteorite/graph/current hybrid_dev'"
 "build" = "zig build install-server"
 "run" = "zig build run"
-"test-fixture" = "LUA_PATH='../ballad/.moonstone/env/share/lua/5.1/?.lua;../ballad/.moonstone/env/share/lua/5.1/?/init.lua;../ballad/src/?.lua;../ballad/src/?/init.lua;;' luajit ../ballad/src/main.lua play partiture-test.lua"
+"test-fixture" = "LUA_PATH='src/?.lua;src/?/init.lua;../ballad/.moonstone/env/share/lua/5.1/?.lua;../ballad/.moonstone/env/share/lua/5.1/?/init.lua;../ballad/src/?.lua;../ballad/src/?/init.lua;;' luajit ../ballad/src/main.lua play fixtures/apps/basic-service/partiture.lua"
 "test-acceptance" = "bash fixtures/tests/basic-service.sh"
+"bench" = "bash bench/run.sh --duration 10s --concurrency 1,16,64"
+"bench:matrix" = "bash bench/run-fast-http-matrix.sh"
+"bench:hybrid" = "bash bench/run-hybrid-ladder.sh"
+"bench:lua-stability" = "bash bench/run-lua-stability.sh"

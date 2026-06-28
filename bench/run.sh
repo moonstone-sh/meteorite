@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BENCH_DIR="$ROOT/bench"
+source "$BENCH_DIR/../fixtures/tests/cleanup.sh"
 TARGET="meteorite"
 MODE="release-static"
 BACKEND="std_http"
@@ -167,12 +168,15 @@ stop_server() {
   stop_macos_sampler
   stop_memory_sampler
   if [[ -n "${SERVER_PID:-}" ]]; then
-    kill "$SERVER_PID" 2>/dev/null || true
+    kill -- "-$SERVER_PID" 2>/dev/null || kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
+    unregister_pid "$SERVER_PID"
     SERVER_PID=""
   fi
 }
-trap stop_server EXIT
+# cleanup.sh handles EXIT/INT/TERM/HUP
+# stop_server still called for graceful shutdown
+trap stop_server EXIT INT TERM HUP
 
 build_server() {
   cd "$ROOT"
@@ -242,14 +246,17 @@ start_server() {
   if [[ "$TARGET" == meteorite ]]; then
     "$BIN" >"$OUT/server.log" 2>&1 &
     SERVER_PID=$!
+    register_pid "$SERVER_PID"
   elif [[ "$TARGET" == hono-bun ]]; then
     cd "$BENCH_DIR/competitors/hono"
     bun server.ts --port="$PORT" >"$OUT/server.log" 2>&1 &
     SERVER_PID=$!
+    register_pid "$SERVER_PID"
   elif [[ "$TARGET" == hono-node ]]; then
     cd "$BENCH_DIR/competitors/hono"
     node server-node.mjs --port="$PORT" >"$OUT/server.log" 2>&1 &
     SERVER_PID=$!
+    register_pid "$SERVER_PID"
   fi
 
   for _ in $(seq 1 100); do

@@ -121,11 +121,14 @@ ALL_SCENARIOS=("${SCENARIOS[@]}" "${POST_SCENARIOS[@]}")
 # Server lifecycle
 # ============================================================
 
+source "$BENCH_DIR/../fixtures/tests/cleanup.sh"
+
 kill_server() {
   if [[ -n "${SERVER_PID:-}" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
-    kill "$SERVER_PID" 2>/dev/null || true
+    kill -- "-$SERVER_PID" 2>/dev/null || kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
   fi
+  SERVER_PID=""
 }
 
 wait_for_server() {
@@ -277,6 +280,7 @@ start_meteorite() {
   ZIG_GLOBAL_CACHE_DIR="/tmp/zig-cache-fair-matchup" \
     ./dist/server > "$OUT/meteorite-server.log" 2>&1 &
   SERVER_PID=$!
+  register_pid "$SERVER_PID"
 }
 
 start_hono_bun() {
@@ -285,6 +289,7 @@ start_hono_bun() {
   BUN_GARBAGE_COLLECTOR_LEVEL=0 \
     bun server.ts --port="$PORT_HONO" > "$OUT/hono-server.log" 2>&1 &
   SERVER_PID=$!
+  register_pid "$SERVER_PID"
 }
 
 # ============================================================
@@ -347,15 +352,13 @@ if [[ "$RUN_STATIC" == "1" ]]; then
   build_meteorite "release-static" "static"
   start_meteorite
   if wait_for_server "$PORT_METEORITE" "Meteorite"; then
-    trap kill_server EXIT INT TERM
-    run_warmup "$PORT_METEORITE" "meteorite-static"
+      run_warmup "$PORT_METEORITE" "meteorite-static"
     run_all_scenarios "$PORT_METEORITE" "meteorite-static" "$DURATION"
     curl -fsS "http://$HOST:$PORT_METEORITE/__bench/counters" > "$OUT/meteorite-static-counters.json" 2>/dev/null || true
   else
     echo "WARNING: Meteorite static failed to start" >&2
   fi
   kill_server
-  sleep 0.5
 fi
 
 # --- Meteorite Hybrid ---
@@ -363,15 +366,13 @@ if [[ "$RUN_HYBRID" == "1" ]]; then
   build_meteorite "release-hybrid" "hybrid"
   start_meteorite
   if wait_for_server "$PORT_METEORITE" "Meteorite"; then
-    trap kill_server EXIT INT TERM
-    run_warmup "$PORT_METEORITE" "meteorite-hybrid"
+      run_warmup "$PORT_METEORITE" "meteorite-hybrid"
     run_all_scenarios "$PORT_METEORITE" "meteorite-hybrid" "$DURATION"
     curl -fsS "http://$HOST:$PORT_METEORITE/__bench/counters" > "$OUT/meteorite-hybrid-counters.json" 2>/dev/null || true
   else
     echo "WARNING: Meteorite hybrid failed to start" >&2
   fi
   kill_server
-  sleep 0.5
 fi
 
 # --- Hono/Bun ---
@@ -379,8 +380,7 @@ if [[ "$RUN_HONO" == "1" ]]; then
   if command -v bun >/dev/null 2>&1; then
     start_hono_bun
     if wait_for_server "$PORT_HONO" "Hono/Bun"; then
-      trap kill_server EXIT INT TERM
-      run_warmup "$PORT_HONO" "hono-bun"
+          run_warmup "$PORT_HONO" "hono-bun"
       run_all_scenarios "$PORT_HONO" "hono-bun" "$DURATION"
       kill_server
       sleep 0.5
