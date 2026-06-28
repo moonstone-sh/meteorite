@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-BALLAD_PATH="${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?/init.lua;${ROOT}/../ballad/src/?.lua;${ROOT}/../ballad/src/?/init.lua;;"
+LUA_PROJECT_PATH="${ROOT}/src/?.lua;${ROOT}/src/?/init.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?/init.lua;${ROOT}/../ballad/src/?.lua;${ROOT}/../ballad/src/?/init.lua;;"
 
 cd "$ROOT"
 export MOONSTONE_HOME="$ROOT/.moonstone-home"
@@ -10,7 +10,7 @@ while read -r pid; do
   if [[ -n "${pid:-}" ]]; then kill "$pid" 2>/dev/null || true; fi
 done < <(lsof -tiTCP:8080 -sTCP:LISTEN 2>/dev/null || true)
 sleep 0.2
-LUA_PATH="$BALLAD_PATH" luajit ../ballad/src/main.lua play fixtures/partitures/basic-service.lua >/tmp/meteorite-partiture-test.log
+LUA_PATH="$LUA_PROJECT_PATH" luajit ../ballad/src/main.lua play fixtures/apps/basic-service/partiture.lua >/tmp/meteorite-partiture-test.log
 
 test -f fixtures/apps/basic-service/.meteorite/graph/current/graph.zig
 test -f fixtures/apps/basic-service/.meteorite/graph/current/patterns.graph.json
@@ -18,7 +18,7 @@ test -f fixtures/apps/basic-service/.meteorite/graph/current/capabilities.zon
 test -x fixtures/apps/basic-service/dist/server
 
 grep -q 'base_url = "http://localhost:8888"' fixtures/apps/basic-service/.meteorite/graph/current/capabilities.zon
-grep -q 'data_cruncher = "native/src/helpers/data_cruncher.zig"' fixtures/apps/basic-service/.meteorite/graph/current/capabilities.zon
+grep -q 'data_cruncher = "zig/helpers/data_cruncher.zig"' fixtures/apps/basic-service/.meteorite/graph/current/capabilities.zon
 grep -q '"strategy": "class_dfa"' fixtures/apps/basic-service/.meteorite/graph/current/patterns.graph.json
 grep -q '"alphabet_classes": 10' fixtures/apps/basic-service/.meteorite/graph/current/patterns.graph.json
 grep -q '"backtracking": false' fixtures/apps/basic-service/.meteorite/graph/current/patterns.graph.json
@@ -28,6 +28,9 @@ grep -q 'DELETE' fixtures/apps/basic-service/.meteorite/graph/current/capabiliti
 grep -q 'field put fun(self: MeteoriteApp' fixtures/apps/basic-service/.meteorite/aids/lua/meteorite.meta.lua
 grep -q 'field patch fun(self: MeteoriteApp' fixtures/apps/basic-service/.meteorite/aids/lua/meteorite.meta.lua
 grep -q 'field delete fun(self: MeteoriteApp' fixtures/apps/basic-service/.meteorite/aids/lua/meteorite.meta.lua
+test -f fixtures/apps/basic-service/.meteorite/aids/lua/meteorite.lua
+grep -q 'return meteorite' fixtures/apps/basic-service/.meteorite/aids/lua/meteorite.lua
+grep -q 'autoRequire' fixtures/apps/basic-service/.luarc.json
 grep -q 'memory profile: default' fixtures/apps/basic-service/.meteorite/graph/current/build-report.txt
 grep -q 'peak route memory:' fixtures/apps/basic-service/.meteorite/graph/current/build-report.txt
 grep -q 'max URI: 8kb' fixtures/apps/basic-service/.meteorite/graph/current/build-report.txt
@@ -113,9 +116,9 @@ p = pathlib.Path(sys.argv[1])
 root = sys.argv[2]
 s = p.read_text()
 s = s.replace('"../../../src/cli/main.lua"', f'"{root}/src/cli/main.lua"')
-s = s.replace('b.path("../../../native/src/pattern.zig")', f'.{{ .cwd_relative = "{root}/native/src/pattern.zig" }}')
-s = s.replace('b.path("../../../native/src/meteorite.zig")', f'.{{ .cwd_relative = "{root}/native/src/meteorite.zig" }}')
-s = s.replace('b.path("../../../native/src/bridge.zig")', f'.{{ .cwd_relative = "{root}/native/src/bridge.zig" }}')
+s = s.replace('b.path("../../../zig/pattern.zig")', f'.{{ .cwd_relative = "{root}/zig/pattern.zig" }}')
+s = s.replace('b.path("../../../zig/meteorite.zig")', f'.{{ .cwd_relative = "{root}/zig/meteorite.zig" }}')
+s = s.replace('b.path("../../../zig/bridge.zig")', f'.{{ .cwd_relative = "{root}/zig/bridge.zig" }}')
 p.write_text(s)
 PY
 (cd "$tmp_missing" && ! zig build install-server >/tmp/meteorite-missing-build.log 2>&1)
@@ -175,6 +178,7 @@ grep -q 'data_cruncher' "$demo_root/.meteorite/graph/current/capabilities.zon"
 grep -q 'inline Lua handlers: 5' "$demo_root/.meteorite/graph/current/build-report.txt"
 grep -q 'Lua state: single_locked' "$demo_root/.meteorite/graph/current/build-report.txt"
 grep -q 'MeteoriteContext_route_3' "$demo_root/.meteorite/aids/lua/meteorite.meta.lua"
+test -f "$demo_root/.meteorite/aids/lua/meteorite.lua"
 test -f "$demo_root/.meteorite/lua/inline/route_1.lua"
 
 demo_invoke() {
@@ -182,7 +186,7 @@ demo_invoke() {
 }
 [[ "$(demo_invoke GET /)" == $'200\ttext/plain; charset=utf-8\thello from meteorite' ]]
 [[ "$(demo_invoke GET /health)" == $'200\tapplication/json\t{"ok":true,"runtime":"lua"}' ]]
-[[ "$(demo_invoke GET /users/456)" == $'200\tapplication/json\t{"id":"456","message":"typed params from native graph","user":{"capability":"db","echo":{"id":"456"},"headers":{"authorization":"Bearer demo-token-for-db"},"ok":true,"path":"/get-user-from-db"}}' ]]
+[[ "$(demo_invoke GET /users/456)" == $'200\tapplication/json\t{"id":"456","message":"typed params from zig graph","user":{"capability":"db","echo":{"id":"456"},"headers":{"authorization":"Bearer demo-token-for-db"},"ok":true,"path":"/get-user-from-db"}}' ]]
 [[ "$(demo_invoke POST /echo 'hello body')" == $'200\ttext/plain; charset=utf-8\thello body' ]]
 [[ "$(demo_invoke GET /devices/router_01)" == $'200\tapplication/json\t{"device":"device:router_01"}' ]]
 [[ "$(demo_invoke GET /devices/INVALID)" == $'404\ttext/plain\tnot found' ]]
@@ -228,7 +232,7 @@ LUA
 grep -q 'captures outer local `message`' /tmp/meteorite-upvalue.log
 
 tmp_stubs="$(mktemp -d /tmp/meteorite-stubs.XXXXXX)"
-mkdir -p "$tmp_stubs/src" "$tmp_stubs/native/src"
+mkdir -p "$tmp_stubs/src" "$tmp_stubs/zig"
 cat > "$tmp_stubs/src/main.lua" <<'LUA'
 local m = require("meteorite")
 local app = m.app({ name = "stub-demo" })
@@ -236,17 +240,17 @@ app:get("/users/:id", { params = { id = m.u64() } }, "handlers.get_user")
 return app
 LUA
 luajit src/cli/main.lua graph "$tmp_stubs/src/main.lua" "$tmp_stubs/.meteorite/graph/current" dev >/tmp/meteorite-stubs.log
-test -f "$tmp_stubs/native/src/handlers.zig"
-grep -q '<meteorite:generated-stub>' "$tmp_stubs/native/src/handlers.zig"
-grep -q 'created .*native/src/handlers.zig' "$tmp_stubs/.meteorite/aids/handler-sync.warnings.txt"
+test -f "$tmp_stubs/zig/handlers.zig"
+grep -q '<meteorite:generated-stub>' "$tmp_stubs/zig/handlers.zig"
+grep -q 'created .*zig/handlers.zig' "$tmp_stubs/.meteorite/aids/handler-sync.warnings.txt"
 grep -q 'pub fn get_user(c: mt.ctx.get_user)' "$tmp_stubs/.meteorite/aids/handlers.stub.zig"
-grep -q 'pub fn get_user(c: mt.ctx.get_user)' "$tmp_stubs/native/src/handlers.zig"
+grep -q 'pub fn get_user(c: mt.ctx.get_user)' "$tmp_stubs/zig/handlers.zig"
 ! luajit src/cli/main.lua graph "$tmp_stubs/src/main.lua" "$tmp_stubs/.meteorite/graph/current" release-static >/tmp/meteorite-stubs-release.log 2>&1
 grep -q 'release build contains generated handler stub `get_user`' /tmp/meteorite-stubs-release.log
 
 tmp_typed="$(mktemp -d /tmp/meteorite-typed.XXXXXX)"
 cp -R fixtures/apps/basic-service/. "$tmp_typed/"
-cat > "$tmp_typed/native/src/handlers.zig" <<'ZIG'
+cat > "$tmp_typed/zig/handlers.zig" <<'ZIG'
 const mt = @import("meteorite_graph");
 
 pub fn health(c: mt.ctx.health) !void {
@@ -310,9 +314,9 @@ p = pathlib.Path(sys.argv[1])
 root = sys.argv[2]
 s = p.read_text()
 s = s.replace('"../../../src/cli/main.lua"', f'"{root}/src/cli/main.lua"')
-s = s.replace('b.path("../../../native/src/pattern.zig")', f'.{{ .cwd_relative = "{root}/native/src/pattern.zig" }}')
-s = s.replace('b.path("../../../native/src/meteorite.zig")', f'.{{ .cwd_relative = "{root}/native/src/meteorite.zig" }}')
-s = s.replace('b.path("../../../native/src/bridge.zig")', f'.{{ .cwd_relative = "{root}/native/src/bridge.zig" }}')
+s = s.replace('b.path("../../../zig/pattern.zig")', f'.{{ .cwd_relative = "{root}/zig/pattern.zig" }}')
+s = s.replace('b.path("../../../zig/meteorite.zig")', f'.{{ .cwd_relative = "{root}/zig/meteorite.zig" }}')
+s = s.replace('b.path("../../../zig/bridge.zig")', f'.{{ .cwd_relative = "{root}/zig/bridge.zig" }}')
 p.write_text(s)
 PY
 (cd "$tmp_typed" && zig build install-server >/tmp/meteorite-typed-build.log 2>&1)

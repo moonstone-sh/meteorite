@@ -6,8 +6,10 @@ local server = arg[5] or "dist/server"
 local state_dir = ".meteorite/dev"
 local pid_file = state_dir .. "/server.pid"
 local log_file = state_dir .. "/server.log"
-local guard_script = "scripts/guard.sh"
+local guard_script = os.getenv("METEORITE_GUARD_SCRIPT") or "scripts/guard.sh"
 local dev_port = os.getenv("METEORITE_DEV_PORT") or "8080"
+local meteorite_cli = os.getenv("METEORITE_CLI") or "src/cli/main.lua"
+local build_command_override = os.getenv("METEORITE_BUILD_COMMAND")
 
 local function path_exists(path)
   local file = io.open(path, "rb")
@@ -106,7 +108,7 @@ end
 
 local function source_fingerprint()
   local command = table.concat({
-    "{ find src native -type f 2>/dev/null; test -f build.zig && echo build.zig; test -f moonstone.toml && echo moonstone.toml; }",
+    "{ find src zig -type f 2>/dev/null; test -f build.zig && echo build.zig; test -f moonstone.toml && echo moonstone.toml; }",
     "| sort",
     "| while IFS= read -r f; do stat -f '%m %z %N' \"$f\" 2>/dev/null || stat -c '%Y %s %n' \"$f\" 2>/dev/null; done"
   }, " ")
@@ -145,7 +147,7 @@ local function summarize_changes(changes)
 end
 
 local function classify_changes(changes, force_build)
-  if force_build then return "rebuild", "native/build input changed" end
+  if force_build then return "rebuild", "zig/build input changed" end
   if #changes == 0 then return "none", "no graph partition changes" end
   local only_lua_chunks = true
   for _, change in ipairs(changes) do
@@ -155,7 +157,7 @@ local function classify_changes(changes, force_build)
     end
   end
   if only_lua_chunks then return "reload", "Lua chunk changes only" end
-  return "rebuild", "graph/native-affecting partitions changed"
+  return "rebuild", "graph/zig-affecting partitions changed"
 end
 
 local function reload_lua()
@@ -163,12 +165,12 @@ local function reload_lua()
 end
 
 local function graph()
-  local graph_command = table.concat({ shell_quote(lua_bin), "src/cli/main.lua", "graph", shell_quote(input), shell_quote(output), shell_quote(mode) }, " ")
+  local graph_command = table.concat({ shell_quote(lua_bin), shell_quote(meteorite_cli), "graph", shell_quote(input), shell_quote(output), shell_quote(mode) }, " ")
   return run(graph_command)
 end
 
 local function build()
-  local build_command = "zig build install-server " .. build_args .. " -- " .. shell_quote(server)
+  local build_command = build_command_override or ("zig build install-server " .. build_args .. " -- " .. shell_quote(server))
   return run(build_command)
 end
 
@@ -178,12 +180,12 @@ local function file_exists(path)
   return false
 end
 
-local function changed_native_or_build(previous, current)
+local function changed_zig_or_build(previous, current)
   if not previous then return true end
   local function filter(text)
     local out = {}
     for line in tostring(text):gmatch("[^\n]+") do
-      if line:match(" native/") or line:match(" build%.zig$") or line:match(" moonstone%.toml$") then out[#out + 1] = line end
+      if line:match(" zig/") or line:match(" build%.zig$") or line:match(" moonstone%.toml$") then out[#out + 1] = line end
     end
     return table.concat(out, "\n")
   end
@@ -198,7 +200,7 @@ local function handle_signal()
   os.exit(0)
 end
 
-io.stderr:write("Meteorite dev: watching src/, native/, build.zig, moonstone.toml\n")
+io.stderr:write("Meteorite dev: watching src/, zig/, build.zig, moonstone.toml\n")
 io.stderr:write("Meteorite dev: mode=" .. mode .. " build_args=" .. build_args .. "\n")
 io.stderr:write("Press Ctrl-C to stop.\n")
 
@@ -206,7 +208,7 @@ local last = nil
 while running do
   local current = source_fingerprint()
   if current ~= last then
-    local force_build = changed_native_or_build(last, current) or not file_exists(server)
+    local force_build = changed_zig_or_build(last, current) or not file_exists(server)
     last = current
     io.stderr:write("\nMeteorite dev: change detected; regenerating graph...\n")
     if graph() then

@@ -53,6 +53,11 @@ pub fn compile(comptime spec: anytype) type {
         const graph = spec.graph;
         const backend = spec.backend;
         const build_info = @import("build_options");
+const signals = @import("server/signals.zig");
+const http_date = @import("server/http_date.zig");
+const server_validators = @import("server/validators.zig");
+const server_static = @import("server/static_files.zig");
+const server_limits = @import("server/request_limits.zig");
         const lua_runtime = if (@hasField(@TypeOf(spec), "lua_runtime")) spec.lua_runtime else LuaRuntimeUnavailable;
         const dev_reload_enabled = std.mem.eql(u8, build_info.meteorite_mode, "dev") or std.mem.eql(u8, build_info.meteorite_mode, "hybrid_dev");
         const graph_requires_lua = graphRequiresLua();
@@ -68,6 +73,8 @@ pub fn compile(comptime spec: anytype) type {
             var server = try backend.listen(.{ .host = config.host, .port = config.port, .io = io });
             defer server.deinit();
 
+            signals.installHandlers();
+
             std.debug.print("Meteorite build\n  mode: {s}\n  backend: {s}\n  Lua runtime: {s}\n  Lua state: single_locked\n  workers: auto\n  inline Lua handlers: {d}\n  Zig handlers: {d}\n  routes: {d}\n  artifact: dist/server\nListening: http://{s}:{d}\n", .{
                 if (graph_requires_lua) "hybrid" else "static",
                 backend.name,
@@ -79,12 +86,27 @@ pub fn compile(comptime spec: anytype) type {
                 config.port,
             });
 
+            var accept_failures: u32 = 0;
             while (true) {
+                if (signals.isShutdownRequested()) {
+                    std.debug.print("Shutting down...\n", .{});
+                    Pool.shutdown(io);
+                    break;
+                }
                 var request: backend.Request = undefined;
                 backend.accept(&server, &request) catch |err| {
+                    accept_failures += 1;
                     std.debug.print("accept failed: {s}\n", .{@errorName(err)});
+                    // Exponential backoff on persistent accept errors (capped at 1s)
+                    if (accept_failures <= 10) {
+                        const backoff_ms: u64 = @min(@as(u64, accept_failures) * 10, 1000);
+                        io.sleep(.{ .nanoseconds = @intCast(backoff_ms * std.time.ns_per_ms) }, .real) catch {};
+                    } else {
+                        io.sleep(.{ .nanoseconds = std.time.ns_per_s }, .real) catch {};
+                    }
                     continue;
                 };
+                accept_failures = 0;
                 if (comptime backend.pooled_connections) {
                     try Pool.start(io);
                     if (!Pool.enqueue(io, request)) {
@@ -129,6 +151,14 @@ pub fn compile(comptime spec: anytype) type {
             var tail: usize = 0;
             var depth: usize = 0;
             var started = std.atomic.Value(bool).init(false);
+            var shutting_down = std.atomic.Value(bool).init(false);
+
+            pub fn shutdown(io: Io) void {
+                shutting_down.store(true, .release);
+                mutex.lockUncancelable(io);
+                available.broadcast(io);
+                mutex.unlock(io);
+            }
 
             fn workerCount() usize {
                 if (backend.configured_workers > 0) return @intCast(backend.configured_workers);
@@ -163,7 +193,13 @@ pub fn compile(comptime spec: anytype) type {
             fn dequeue(io: Io) backend.Request {
                 mutex.lockUncancelable(io);
                 defer mutex.unlock(io);
-                while (depth == 0) available.waitUncancelable(io, &mutex);
+                while (depth == 0 and !shutting_down.load(.acquire)) {
+                    available.waitUncancelable(io, &mutex);
+                }
+                if (depth == 0) {
+                    // Shutdown signaled with empty queue — return a dummy that will be closed
+                    return backend.Request{ .stream = undefined };
+                }
                 const request = queue[head];
                 head = (head + 1) % queue_limit;
                 depth -= 1;
@@ -173,7 +209,12 @@ pub fn compile(comptime spec: anytype) type {
 
             fn poolWorker(io: Io) void {
                 while (true) {
+                    if (shutting_down.load(.acquire)) return;
                     var request = dequeue(io);
+                    if (shutting_down.load(.acquire)) {
+                        request.close(io);
+                        return;
+                    }
                     backend.rebind(&request, io);
                     serveConnection(io, &request) catch |err| {
                         std.debug.print("pooled connection failed: {s}\n", .{@errorName(err)});
@@ -199,10 +240,17 @@ pub fn compile(comptime spec: anytype) type {
                 const arena = arena_state.allocator();
                 request.body_cache = null;
                 request.close_after_response = true;
+                // Cache current time for Date header in responses
+                if (@hasField(@TypeOf(request.*), "date_seconds")) {
+                    request.date_seconds = Io.Timestamp.now(io, .real).toSeconds();
+                }
                 serveRequest(arena, io, request) catch |err| {
                     std.debug.print("request failed for {s}: {s}\n", .{ backend.path(request), @errorName(err) });
                     request.close_after_response = true;
                 };
+                // Drain unread body before next keep-alive request.
+                // If the handler didn't call body(), unread bytes would corrupt the next request.
+                if (@hasDecl(backend, "drainBody")) backend.drainBody(request);
                 if (request.close_after_response) break;
             }
             request.close(io);
@@ -342,8 +390,7 @@ pub fn compile(comptime spec: anytype) type {
             var ctx = Context{ .allocator = allocator, .io = io, .request = request, .captures = captures, .route = route };
             if (try executeScopePlugins(route, &ctx)) return true;
             switch (route.handler) {
-                .zig_symbol => try graph.bindings.callRoute(route.id, &ctx),
-                .zig_file => |handler| try ctx.text(501, handler.path),
+                .zig_symbol, .zig_file => try graph.bindings.callRoute(route.id, &ctx),
                 .inline_lua => |handler| try callLuaHandler(handler, &ctx),
                 .lua_file => |handler| try callLuaHandler(handler, &ctx),
                 .file => |handler| try serveFileHandler(handler, allocator, io, request),
@@ -358,14 +405,14 @@ pub fn compile(comptime spec: anytype) type {
         }
 
         fn mediaListAccepts(header_value: []const u8, expected: []const u8) bool {
-            const slash = std.mem.indexOfScalar(u8, expected, '/') orelse return tokenListContains(header_value, expected);
+            const slash = std.mem.indexOfScalar(u8, expected, '/') orelse return server_static.tokenListContains(header_value, expected);
             const expected_type = expected[0..slash];
             const expected_subtype_end = std.mem.indexOfScalarPos(u8, expected, slash + 1, ';') orelse expected.len;
             const expected_subtype = std.mem.trim(u8, expected[slash + 1 .. expected_subtype_end], " \t");
             var it = std.mem.splitScalar(u8, header_value, ',');
             while (it.next()) |raw_item| {
                 const media_range = std.mem.trim(u8, raw_item, " \t");
-                if (media_range.len == 0 or qualityIsZero(media_range)) continue;
+                if (media_range.len == 0 or server_static.qualityIsZero(media_range)) continue;
                 const token_end = std.mem.indexOfScalar(u8, media_range, ';') orelse media_range.len;
                 const token = std.mem.trim(u8, media_range[0..token_end], " \t");
                 if (std.mem.eql(u8, token, "*/*")) return true;
@@ -379,29 +426,6 @@ pub fn compile(comptime spec: anytype) type {
             return false;
         }
 
-        fn tokenListContains(header_value: []const u8, expected: []const u8) bool {
-            var it = std.mem.splitScalar(u8, header_value, ',');
-            while (it.next()) |raw_item| {
-                const item = std.mem.trim(u8, raw_item, " \t");
-                const token_end = std.mem.indexOfScalar(u8, item, ';') orelse item.len;
-                if (!qualityIsZero(item) and std.ascii.eqlIgnoreCase(std.mem.trim(u8, item[0..token_end], " \t"), expected)) return true;
-            }
-            return false;
-        }
-
-        fn qualityIsZero(item: []const u8) bool {
-            var params = std.mem.splitScalar(u8, item, ';');
-            _ = params.next();
-            while (params.next()) |raw_param| {
-                const param = std.mem.trim(u8, raw_param, " \t");
-                if (std.mem.startsWith(u8, param, "q=")) {
-                    const value = std.mem.trim(u8, param[2..], " \t");
-                    if (std.mem.eql(u8, value, "0") or std.mem.eql(u8, value, "0.0") or std.mem.eql(u8, value, "0.00") or std.mem.eql(u8, value, "0.000")) return true;
-                }
-            }
-            return false;
-        }
-
         fn serveFileHandler(comptime handler: graph.FileHandler, allocator: std.mem.Allocator, io: Io, request: *backend.Request) !void {
             if (handler.only_accept) |expected| {
                 if (!accepts(request, expected)) return backend.respondText(request, 404, "not found");
@@ -411,7 +435,7 @@ pub fn compile(comptime spec: anytype) type {
 
         fn serveDirHandler(comptime handler: graph.DirHandler, allocator: std.mem.Allocator, io: Io, request: *backend.Request, captures: Captures) !void {
             const raw_path = captures.get(handler.param_name) orelse return backend.respondText(request, 404, "not found");
-            const normalized = normalizeStaticPath(allocator, raw_path) catch return backend.respondText(request, 404, "not found");
+            const normalized = server_static.normalizeStaticPath(allocator, raw_path) catch return backend.respondText(request, 404, "not found");
             defer allocator.free(normalized);
             inline for (handler.manifest) |asset| {
                 if (std.mem.eql(u8, asset.request_path, normalized)) {
@@ -429,10 +453,10 @@ pub fn compile(comptime spec: anytype) type {
         fn selectCompressedAsset(request: *backend.Request, comptime asset: graph.StaticAsset) ?SelectedAsset {
             const accept_encoding = backend.header(request, "accept-encoding") orelse return null;
             if (asset.compressed_br_path) |path| {
-                if (tokenListContains(accept_encoding, "br")) return .{ .path = path, .length = asset.compressed_br_length, .etag = asset.compressed_br_etag orelse asset.etag, .encoding = "br" };
+                if (server_static.tokenListContains(accept_encoding, "br")) return .{ .path = path, .length = asset.compressed_br_length, .etag = asset.compressed_br_etag orelse asset.etag, .encoding = "br" };
             }
             if (asset.compressed_gzip_path) |path| {
-                if (tokenListContains(accept_encoding, "gzip")) return .{ .path = path, .length = asset.compressed_gzip_length, .etag = asset.compressed_gzip_etag orelse asset.etag, .encoding = "gzip" };
+                if (server_static.tokenListContains(accept_encoding, "gzip")) return .{ .path = path, .length = asset.compressed_gzip_length, .etag = asset.compressed_gzip_etag orelse asset.etag, .encoding = "gzip" };
             }
             return null;
         }
@@ -440,70 +464,14 @@ pub fn compile(comptime spec: anytype) type {
         fn respondStaticFile(allocator: std.mem.Allocator, io: Io, request: *backend.Request, artifact_path: []const u8, content_type: []const u8, content_length: u64, cache_control: []const u8, etag: []const u8, content_encoding: ?[]const u8) !void {
             const head_only = backend.method(request) == .HEAD;
             if (backend.header(request, "if-none-match")) |value| {
-                if (ifNoneMatch(value, etag)) {
+                if (server_static.ifNoneMatch(value, etag)) {
                     return backend.respondStatic(request, 304, content_type, 0, cache_control, etag, content_encoding, "", head_only);
                 }
             }
             if (head_only) return backend.respondStatic(request, 200, content_type, content_length, cache_control, etag, content_encoding, "", true);
-            const body = try readArtifactFile(allocator, io, artifact_path, content_length);
+            const body = try server_static.readArtifactFile(allocator, io, artifact_path, content_length);
             defer allocator.free(body);
             return backend.respondStatic(request, 200, content_type, content_length, cache_control, etag, content_encoding, body, head_only);
-        }
-
-        fn readArtifactFile(allocator: std.mem.Allocator, io: Io, artifact_path: []const u8, content_length: u64) ![]u8 {
-            const limit = Io.Limit.limited64(content_length + 1);
-            if (std.fs.path.isAbsolute(artifact_path)) return std.Io.Dir.cwd().readFileAlloc(io, artifact_path, allocator, limit);
-            const exe_dir = try std.process.executableDirPathAlloc(io, allocator);
-            defer allocator.free(exe_dir);
-            const full_path = try std.fs.path.join(allocator, &.{ exe_dir, artifact_path });
-            defer allocator.free(full_path);
-            return std.Io.Dir.cwd().readFileAlloc(io, full_path, allocator, limit) catch |err| switch (err) {
-                error.FileNotFound => {
-                    const release_root_path = try std.fs.path.join(allocator, &.{ exe_dir, "..", artifact_path });
-                    defer allocator.free(release_root_path);
-                    return std.Io.Dir.cwd().readFileAlloc(io, release_root_path, allocator, limit);
-                },
-                else => return err,
-            };
-        }
-
-        fn ifNoneMatch(header_value: []const u8, etag: []const u8) bool {
-            var it = std.mem.splitScalar(u8, header_value, ',');
-            while (it.next()) |item| {
-                const candidate = std.mem.trim(u8, item, " \t");
-                if (std.mem.eql(u8, candidate, "*")) return true;
-                if (std.mem.eql(u8, candidate, etag)) return true;
-                if (std.mem.startsWith(u8, candidate, "W/") and std.mem.eql(u8, candidate[2..], etag)) return true;
-            }
-            return false;
-        }
-
-        fn normalizeStaticPath(allocator: std.mem.Allocator, raw: []const u8) ![]u8 {
-            if (raw.len == 0 or raw[0] == '/' or raw[0] == '\\') return error.InvalidStaticPath;
-            var decoded: std.ArrayList(u8) = .empty;
-            defer decoded.deinit(allocator);
-            var i: usize = 0;
-            while (i < raw.len) {
-                const ch = raw[i];
-                if (ch == 0 or ch == '\\') return error.InvalidStaticPath;
-                if (ch == '%') {
-                    if (i + 2 >= raw.len) return error.InvalidStaticPath;
-                    const hi = std.fmt.charToDigit(raw[i + 1], 16) catch return error.InvalidStaticPath;
-                    const lo = std.fmt.charToDigit(raw[i + 2], 16) catch return error.InvalidStaticPath;
-                    const decoded_ch: u8 = @intCast((hi << 4) | lo);
-                    if (decoded_ch == 0 or decoded_ch == '/' or decoded_ch == '\\') return error.InvalidStaticPath;
-                    try decoded.append(allocator, decoded_ch);
-                    i += 3;
-                    continue;
-                }
-                try decoded.append(allocator, ch);
-                i += 1;
-            }
-            var parts = std.mem.splitScalar(u8, decoded.items, '/');
-            while (parts.next()) |part| {
-                if (part.len == 0 or std.mem.eql(u8, part, ".") or std.mem.eql(u8, part, "..")) return error.InvalidStaticPath;
-            }
-            return decoded.toOwnedSlice(allocator);
         }
 
         fn pathMatchedAnyRoute(req_path: []const u8) bool {
@@ -545,7 +513,7 @@ pub fn compile(comptime spec: anytype) type {
                 try backend.respondText(request, 414, "uri too long");
                 return false;
             }
-            if (countQueryPairs(query_value) > graph.max_query_pairs or countPathSegments(req_path) > graph.max_path_segments) {
+            if (server_limits.countQueryPairs(query_value) > graph.max_query_pairs or server_limits.countPathSegments(req_path) > graph.max_path_segments) {
                 try backend.respondText(request, 414, "uri too long");
                 return false;
             }
@@ -559,31 +527,14 @@ pub fn compile(comptime spec: anytype) type {
                 try backend.respondText(request, 414, "uri too long");
                 return false;
             }
-            if (countQueryPairs(query_value) > route.memory.max_query_pairs or countPathSegments(req_path) > route.memory.max_path_segments) {
+            if (server_limits.countQueryPairs(query_value) > route.memory.max_query_pairs or server_limits.countPathSegments(req_path) > route.memory.max_path_segments) {
                 try backend.respondText(request, 414, "uri too long");
                 return false;
             }
             return true;
         }
 
-        fn countQueryPairs(query_value: []const u8) usize {
-            if (query_value.len == 0) return 0;
-            var count: usize = 1;
-            for (query_value) |byte| {
-                if (byte == '&') count += 1;
-            }
-            return count;
-        }
 
-        fn countPathSegments(path_value: []const u8) usize {
-            if (std.mem.eql(u8, path_value, "/")) return 0;
-            var count: usize = 0;
-            var it = std.mem.splitScalar(u8, path_value, '/');
-            while (it.next()) |segment| {
-                if (segment.len > 0) count += 1;
-            }
-            return count;
-        }
 
         fn enforceBodyLimit(allocator: std.mem.Allocator, request: *backend.Request, route: graph.Route) !bool {
             _ = backend.readBody(request, allocator, route.max_body_bytes) catch |err| switch (err) {
@@ -736,13 +687,13 @@ pub fn compile(comptime spec: anytype) type {
             return switch (param.kind) {
                 .string => true,
                 .pattern => true,
-                .slug => isSlug(value),
-                .u64 => isUnsigned(value),
-                .i32 => isI32(value),
-                .uuid => isUuid(value),
-                .hex => isHex(value),
-                .email => isEmail(value),
-                .token => isToken(value),
+                .slug => server_validators.isSlug(value),
+                .u64 => server_validators.isUnsigned(value),
+                .i32 => server_validators.isI32(value),
+                .uuid => server_validators.isUuid(value),
+                .hex => server_validators.isHex(value),
+                .email => server_validators.isEmail(value),
+                .token => server_validators.isToken(value),
                 .bool => std.mem.eql(u8, value, "true") or std.mem.eql(u8, value, "false") or std.mem.eql(u8, value, "1") or std.mem.eql(u8, value, "0"),
             };
         }
@@ -773,97 +724,6 @@ pub fn compile(comptime spec: anytype) type {
                 }
             }
             return null;
-        }
-
-        fn isUnsigned(value: []const u8) bool {
-            if (value.len == 0) return false;
-            for (value) |c| if (c < '0' or c > '9') return false;
-            return true;
-        }
-
-        fn isI32(value: []const u8) bool {
-            if (value.len == 0) return false;
-            const start: usize = if (value[0] == '-') 1 else 0;
-            if (start == value.len) return false;
-            return isUnsigned(value[start..]);
-        }
-
-        fn isSlug(value: []const u8) bool {
-            if (value.len == 0) return false;
-            for (value) |c| {
-                const ok = (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or (c >= '0' and c <= '9') or c == '_' or c == '-';
-                if (!ok) return false;
-            }
-            return true;
-        }
-
-        fn isHex(value: []const u8) bool {
-            if (value.len == 0) return false;
-            for (value) |c| {
-                const ok = (c >= '0' and c <= '9') or (c >= 'a' and c <= 'f') or (c >= 'A' and c <= 'F');
-                if (!ok) return false;
-            }
-            return true;
-        }
-
-        fn isUuid(value: []const u8) bool {
-            if (value.len != 36) return false;
-            for (value, 0..) |c, i| {
-                if (i == 8 or i == 13 or i == 18 or i == 23) {
-                    if (c != '-') return false;
-                } else {
-                    const ok = (c >= '0' and c <= '9') or (c >= 'a' and c <= 'f') or (c >= 'A' and c <= 'F');
-                    if (!ok) return false;
-                }
-            }
-            return true;
-        }
-
-        fn isEmail(value: []const u8) bool {
-            if (value.len == 0 or value.len > 254) return false;
-            const at = std.mem.indexOfScalar(u8, value, '@') orelse return false;
-            if (std.mem.indexOfScalarPos(u8, value, at + 1, '@') != null) return false;
-            const local = value[0..at];
-            const domain = value[at + 1 ..];
-            if (local.len == 0 or local.len > 64) return false;
-            if (domain.len == 0 or domain.len > 189) return false;
-            // local part: no leading/trailing dot, no consecutive dots
-            if (local[0] == '.' or local[local.len - 1] == '.') return false;
-            var i: usize = 1;
-            while (i < local.len) : (i += 1) {
-                if (local[i] == '.' and local[i - 1] == '.') return false;
-            }
-            // local allowed chars
-            for (local) |c| {
-                const ok = (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or (c >= '0' and c <= '9') or
-                    c == '!' or c == '#' or c == '$' or c == '%' or c == '&' or c == 39 or c == '*' or
-                    c == '+' or c == '/' or c == '=' or c == '?' or c == '^' or c == '_' or c == '`' or
-                    c == '{' or c == '|' or c == '}' or c == '~' or c == '.' or c == '-';
-                if (!ok) return false;
-            }
-            // domain labels
-            var label_iter = std.mem.splitScalar(u8, domain, '.');
-            var labels: usize = 0;
-            while (label_iter.next()) |label| {
-                labels += 1;
-                if (label.len == 0 or label.len > 63) return false;
-                if (label[0] == '-' or label[label.len - 1] == '-') return false;
-                for (label) |c| {
-                    const ok = (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or (c >= '0' and c <= '9') or c == '-';
-                    if (!ok) return false;
-                }
-            }
-            return labels >= 2;
-        }
-
-        fn isToken(value: []const u8) bool {
-            if (value.len == 0) return false;
-            for (value) |c| {
-                const ok = (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or (c >= '0' and c <= '9') or
-                    c == '_' or c == '-';
-                if (!ok) return false;
-            }
-            return true;
         }
 
         pub const Context = struct {

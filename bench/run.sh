@@ -377,8 +377,8 @@ run_oha_matrix() {
   dd if=/dev/zero bs=8192 count=1 2>/dev/null | tr '\0' 'x' > "$OUT/body-8k.txt"
 
   for C in "${CONCURRENCY_VALUES[@]}"; do
-    run_oha_get "plain-native" "/__bench/plain" "$C"
-    run_oha_get "raw-native" "/__bench/raw" "$C"
+    run_oha_get "plain-zig" "/__bench/plain" "$C"
+    run_oha_get "raw-zig" "/__bench/raw" "$C"
     run_oha_get "plain-static" "/__bench/plain-static" "$C"
     run_oha_get "hybrid-zig" "/__bench/hybrid-zig" "$C"
     run_oha_get "hybrid-inline-bench" "/__bench/hybrid-inline" "$C"

@@ -1,6 +1,3 @@
--- TODO: check if sensible
-package.path = package.path .. ";src/?.lua;src/?/init.lua"
-
 local ballad = require("ballad")
 local meteorite = require("meteorite.ballad")
 
@@ -17,9 +14,9 @@ return ballad.partiture(function(p)
 	local server = m.zig({
 		root = fixture_root,
 		graph = ".meteorite/graph/current",
-		native = "native",
+		zig = "zig",
 		output = "dist/server",
-		target = "native",
+		target = "zig",
 	})
 
 	p.sink.artifact(graph, { out = fixture_root .. "/.meteorite/graph/current" })

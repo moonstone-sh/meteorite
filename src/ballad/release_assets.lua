@@ -64,11 +64,13 @@ function assets_mod.package_is_lua_module(package)
   return kind == "lua_module" or kind == "lib" or fs.is_dir(path.join(package.artifact_path or "", "files/share/lua"))
 end
 
+local function is_cross_target(target)
+  return target and target ~= "" and target ~= "native"
+end
+
 function assets_mod.add_hybrid_lua_assets(ctx, assets, root, graph)
   copy_tree_assets(ctx, assets, root, ".meteorite/lua/inline", ".meteorite/lua/inline", "meteorite_lua_chunk")
   copy_tree_assets(ctx, assets, root, "src", "src", "meteorite_lua_source")
-  copy_tree_assets(ctx, assets, root, ".moonstone/env/share/lua", ".moonstone/env/share/lua", "lua_module")
-  copy_tree_assets(ctx, assets, root, ".moonstone/env/lib/lua", ".moonstone/env/lib/lua", "lua_cmodule")
   for _, route in ipairs(graph.routes or {}) do
     if route.handler and route.handler.kind == "lua" then
       local route_path = lua_file_path(route.handler)
@@ -83,6 +85,18 @@ function assets_mod.add_hybrid_lua_assets(ctx, assets, root, graph)
   end
 end
 
+function assets_mod.add_runtime_tree_assets(ctx, assets, root, runtime_dir, target)
+  -- The built Lua runtime is a directory (bin/, lib/, include/); add individual
+  -- files so the Ballad sink can copy them (fs.copy_file handles files, not dirs).
+  copy_tree_assets(ctx, assets, root, runtime_dir, "runtime/lua", "lua_runtime")
+  for _, asset in ipairs(assets.assets or {}) do
+    if asset.kind == "lua_runtime" then
+      asset.metadata = asset.metadata or {}
+      asset.metadata.target = target
+    end
+  end
+end
+
 function assets_mod.add_runtime_source_asset(ctx, assets, root, target_lua)
   if not target_lua or not target_lua.source_payload_path then return end
   local source_path = target_lua.source_payload_path
@@ -90,16 +104,28 @@ function assets_mod.add_runtime_source_asset(ctx, assets, root, target_lua)
   add_file_asset(ctx, assets, root, source_path, path.join("runtime/source", name), "lua_runtime_source", { target = target_lua.target or "host" })
 end
 
-function assets_mod.add_package_assets(ctx, assets, packages)
+function assets_mod.add_package_assets(ctx, assets, packages, opts)
+  opts = opts or {}
   for _, package in ipairs(packages or {}) do
     local artifact_path = package.artifact_path
     if artifact_path and artifact_path ~= "" then
       if assets_mod.package_is_lua_module(package) then
-        copy_tree_assets(ctx, assets, artifact_path, "files/share/lua", path.join("lua/share", package.name or "package"), "lua_module")
+        copy_tree_assets(ctx, assets, artifact_path, "files/share/lua", "lua", "lua_module")
       end
-      if package.target and package.target ~= "native" and assets_mod.package_is_lua_cmodule(package) then
-        copy_tree_assets(ctx, assets, artifact_path, "files/lib/lua", path.join("lua/lib", package.name or "package"), "lua_cmodule")
+      if not is_cross_target(opts.target) and assets_mod.package_is_lua_cmodule(package) then
+        copy_tree_assets(ctx, assets, artifact_path, "files/lib/lua", "lib", "lua_cmodule")
       end
+    end
+  end
+end
+
+function assets_mod.add_target_cmodule_assets(ctx, assets, root, output_dir, target)
+  if not output_dir or output_dir == "" then return end
+  copy_tree_assets(ctx, assets, root or ".", path.join(output_dir, "lib/lua"), "lib", "lua_cmodule")
+  for _, asset in ipairs(assets.assets or {}) do
+    if asset.kind == "lua_cmodule" then
+      asset.metadata = asset.metadata or {}
+      asset.metadata.target = target
     end
   end
 end
@@ -118,6 +144,10 @@ function assets_mod.add_static_assets(ctx, assets, static_root)
     count = count + 1
   end
   return count
+end
+
+function assets_mod.add_graph_assets(ctx, assets, root, source_dir, dest_dir)
+  copy_tree_assets(ctx, assets, root or ".", source_dir, dest_dir or source_dir, "meteorite_graph")
 end
 
 function assets_mod.new_set()

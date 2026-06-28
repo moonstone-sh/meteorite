@@ -9,7 +9,27 @@ local release_tasks = require("ballad.release_tasks")
 local function plugin_root()
   local source = debug.getinfo(1, "S").source or ""
   source = source:gsub("^@", "")
-  return path.dirname(path.dirname(path.dirname(source)))
+  local root = path.dirname(path.dirname(path.dirname(source)))
+  -- Ensure absolute path so native tasks with different cwd can locate scripts
+  if root == "" or root == "." then
+    local pipe = io.popen("pwd", "r")
+    root = (pipe:read("*l") or ""):gsub("/+$", "")
+    pipe:close()
+  elseif root:sub(1, 1) ~= "/" then
+    local pipe = io.popen("pwd", "r")
+    local cwd = (pipe:read("*l") or ""):gsub("/+$", "")
+    pipe:close()
+    root = cwd .. "/" .. root
+  end
+  return root
+end
+
+local function plugin_build_file()
+  return path.join(plugin_root(), "build.zig")
+end
+
+local function plugin_cli_file()
+  return path.join(plugin_root(), "src/cli/main.lua")
 end
 
 local function join(root, value)
@@ -97,7 +117,7 @@ return {
     local root = opts.root or "."
     local input = join(root, opts.input or "src/main.lua")
     local graph_output = join(root, opts.graph_output or ".meteorite/graph/current")
-    local output = opts.output or opts.out or "dist/server"
+    local output = opts.output or opts.out or ".meteorite/release/server"
     local output_path = join(root, output)
     local mode, release_mode = release_contract.normalize_mode(opts.mode)
     local app = load_app(root, input, mode)
@@ -115,7 +135,7 @@ return {
     local result = emitter.emit(app, { output = graph_output, mode = mode })
     local task_assets = ctx:native_task({
       tool = opts.tool or "zig",
-      args = release_tasks.build_args_for(mode, { output = output, graph_input = opts.input or "src/main.lua", graph_output = opts.graph_output or ".meteorite/graph/current", backend = opts.backend, hybrid_profile = opts.hybrid_profile, ["hybrid-profile"] = opts["hybrid-profile"], router_dispatch = opts.router_dispatch, ["router-dispatch"] = opts["router-dispatch"], optimize = opts.optimize, target = opts.target, lua_root = lua_root }),
+      args = release_tasks.build_args_for(mode, { output = output, build_file = plugin_build_file(), project_root = ".", meteorite_cli = plugin_cli_file(), graph_input = opts.input or "src/main.lua", graph_output = opts.graph_output or ".meteorite/graph/current", backend = opts.backend, hybrid_profile = opts.hybrid_profile, ["hybrid-profile"] = opts["hybrid-profile"], router_dispatch = opts.router_dispatch, ["router-dispatch"] = opts["router-dispatch"], optimize = opts.optimize, target = opts.target, lua_root = lua_root }),
       cwd = root,
       outputs = { output_path },
       cacheable = false,
@@ -125,19 +145,13 @@ return {
 
     local assets = release_assets.new_set()
     if lua_task_assets then
-      for _, asset in ipairs(lua_task_assets.assets or {}) do
-        asset.virtual_path = "runtime/lua"
-        asset.kind = "lua_runtime"
-        asset.metadata = asset.metadata or {}
-        asset.metadata.target = target_lua.target
-        assets:add(asset)
-      end
+      -- The built Lua runtime is a directory (bin/, lib/, include/).
+      -- Add individual files so the Ballad sink can copy them.
+      release_assets.add_runtime_tree_assets(ctx, assets, root, lua_root or path.join(".meteorite/release", target_lua and target_lua.target or "unknown", "lua"), target_lua and target_lua.target or "host")
     end
     for _, task_set in ipairs(cmodule_task_sets) do
       for _, asset in ipairs(task_set.assets or {}) do
-        asset.virtual_path = path.join("runtime/lua-cmodules", path.basename and path.basename(asset.output_path or asset.virtual_path or "module") or "module")
-        asset.kind = "lua_cmodule"
-        assets:add(asset)
+        release_assets.add_target_cmodule_assets(ctx, assets, root, asset.output_path, target_lua and target_lua.target or release_contract.target_from_opts(opts))
       end
     end
     for _, asset in ipairs(task_assets.assets or {}) do
@@ -154,10 +168,11 @@ return {
       generated = true,
       metadata = { mode = release_mode, graph_hash = result.graph_hash, contract = contract.format },
     }))
+    release_assets.add_graph_assets(ctx, assets, root, opts.graph_output or ".meteorite/graph/current", opts.graph_output or ".meteorite/graph/current")
     release_assets.add_static_assets(ctx, assets, path.join(graph_output, "static"))
     if release_mode == "hybrid" then
       release_assets.add_hybrid_lua_assets(ctx, assets, root, result.graph)
-      release_assets.add_package_assets(ctx, assets, opts.packages)
+      release_assets.add_package_assets(ctx, assets, opts.packages, { target = target_lua and target_lua.target or release_contract.target_from_opts(opts) })
       release_assets.add_runtime_source_asset(ctx, assets, root, target_lua)
     end
     return assets

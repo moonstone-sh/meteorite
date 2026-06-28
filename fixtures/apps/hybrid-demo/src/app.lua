@@ -19,7 +19,7 @@ app:capability("auth", {
 })
 
 app:capability("zig", {
-  data_cruncher = "native/src/helpers/data_cruncher.zig",
+  data_cruncher = "zig/helpers/data_cruncher.zig",
 })
 
 app:get("/", function(c)
@@ -48,7 +48,7 @@ app:get("/users/:id", {
   return c:json({
     id = c.params.id,
     user = user.body,
-    message = "typed params from native graph",
+    message = "typed params from Zig graph",
   })
 end)
 

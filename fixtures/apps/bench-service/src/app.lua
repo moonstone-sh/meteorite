@@ -11,7 +11,7 @@ app:capability("http", {
 })
 
 app:capability("zig", {
-  data_cruncher = "native/src/helpers/data_cruncher.zig",
+  data_cruncher = "zig/helpers/data_cruncher.zig",
 })
 
 -- Benchmark routes (always static Zig handlers)

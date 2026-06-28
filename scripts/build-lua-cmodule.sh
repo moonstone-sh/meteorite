@@ -25,6 +25,7 @@ mkdir -p "$work" "$out"
 case "$src" in
   *.src.rock|*.zip) unzip -q "$src" -d "$work" ;;
   *.tar.gz|*.tgz) tar -xzf "$src" -C "$work" ;;
+  *.tar.zst|*.tzst) tar --zstd -xf "$src" -C "$work" ;;
   *.tar.xz) tar -xJf "$src" -C "$work" ;;
   *.tar.bz2) tar -xjf "$src" -C "$work" ;;
   *) echo "unsupported Lua C-module source payload archive for $pkg: $src" >&2; exit 1 ;;

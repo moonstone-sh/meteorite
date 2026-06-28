@@ -51,7 +51,6 @@ local release = meteorite.release({
   mode = "hybrid", -- or "static"
   target = "aarch64-linux-gnu", -- e.g. Raspberry Pi 5
   optimize = "ReleaseFast",
-  output = "dist/server",
   runtime = {
     id = "lua@5.4.7",
     abi = "lua54",
@@ -89,11 +88,20 @@ Implemented now:
 - Cross-target hybrid release invokes `scripts/build-target-lua.sh` to build PUC Lua from `runtime.source_payload_path` with `zig cc` and passes the result to Zig via `-Dlua-root`.
 - Cross-target hybrid release schedules per-package Lua C-module rebuilds through `scripts/build-lua-cmodule.sh` when C-module packages expose `source_payload_path` and `rockspec_payload_path`.
 
+Cross-target PUC Lua compilation is now verified:
+
+- `scripts/build-target-lua.sh` successfully cross-compiles PUC Lua 5.4.7 for `aarch64-linux-gnu` using `zig cc` from the upstream source archive.
+- Static release cross-compilation (e.g. `zig build install-server -Dmode=release-static -Dtarget=aarch64-linux-gnu`) produces a statically linked ELF binary.
+- Hybrid release cross-compilation with a target-built `liblua.a` produces a binary with the target Lua runtime linked in.
+- The full chain works: Moonstone store source provenance (`source_kind = "puc_lua_source"`, `source_payload_path`) → Ballad `hydrate_runtime()` → Meteorite `release_contract.validate_target_lua()` → `build-target-lua.sh` → `zig build -Dlua-root=...`.
+- Fixed `build-target-lua.sh` find depth: `-maxdepth 2` → `-maxdepth 3` so `lua-<ver>/src/lua.c` is discovered in standard upstream source archives.
+
 Still pending:
 
 - LuaJIT support needs a separate target matrix and host `buildvm` stage.
 - Lua C-module rebuilds currently rely on package rockspecs and a local `luarocks` executable; packages without source/rockspec payloads fail with package-specific diagnostics.
 - Moonstone runtime/package descriptors should consistently publish source payloads for all production-supported hybrid targets.
+- `build.zig` `join()` does not handle absolute `-Dlua-root` paths; the Ballad release flow always uses relative paths so this is not a blocker for production releases.
 
 ## Responsibility-Structure Cleanup Checklist
 
@@ -115,14 +123,24 @@ Meteorite should be organized by compiler/runtime responsibility, not by histori
   - [x] release contract validation;
   - [x] release manifest generation;
   - [x] Moonstone runtime/package asset collection;
-  - [x] native task argument construction.
-- [ ] Split `native/src/bridge.zig` into Lua runtime responsibilities:
+  - [x] zig task argument construction.
+- [x] Move user-facing Zig project layout from `native/` to `zig/` and keep `native_task` wording only where Ballad/Moonstone APIs require it.
+- [x] Keep Meteorite init templates execution-mode focused:
+  - [x] minimal Lua-first hybrid app;
+  - [x] static Zig-handler app;
+  - [x] hybrid Lua + Zig app;
+  - [x] CRUD moved to `EXAMPLES.md` instead of `meteorite init`.
+- [x] Remove the Meteorite template from Moonstone; Meteorite owns Meteorite project scaffolding.
+- [x] Add CLI discovery/readiness commands:
+  - [x] `meteorite help` / `--help` and command-specific help;
+  - [x] `meteorite doctor` readiness checks.
+- [ ] Split `zig/bridge.zig` into Lua runtime responsibilities:
   - [ ] Lua state lifecycle;
-  - [ ] cached inline handler refs and HMR epochs;
+  - [ ] cached inline handler refs and live reload epochs;
   - [ ] Lua context API bindings;
   - [ ] capability bridge calls;
   - [ ] debug/dev-only state.
-- [ ] Split `native/src/meteorite.zig` into server responsibilities:
+- [ ] Split `zig/meteorite.zig` into server responsibilities:
   - [ ] request dispatch/router integration;
   - [ ] static file serving;
   - [ ] request validation/limits;
@@ -130,19 +148,24 @@ Meteorite should be organized by compiler/runtime responsibility, not by histori
 - [ ] Replace shell-based static scanning with a portable Lua/Zig filesystem walker.
 - [ ] Replace manually concatenated JSON release manifests with the local JSON encoder.
 - [ ] Add scenario tests for:
-  - [ ] `moon init --template meteorite` local developer flow;
-  - [ ] inline Lua HMR with two or more edits;
+  - [x] `meteorite init` minimal/static/hybrid local developer flow;
+  - [x] `meteorite help` and `meteorite doctor` smoke coverage;
+  - [ ] inline Lua live reload with two or more edits;
   - [ ] static release export after deleting source `site/dist`;
-  - [ ] hybrid release packaging pure Lua modules;
-  - [ ] hybrid release packaging Lua C modules;
+  - [x] native hybrid release packaging pure Lua modules;
+  - [x] native hybrid release packaging Lua C modules;
+  - [x] cross-target hybrid release with target Lua source provenance (`fixtures/tests/cross-target.sh`);
+  - [ ] cross-target hybrid release with rebuilt Lua C modules;
   - [ ] no host absolute paths or `.moonstone/env` leaks in static release text metadata.
-- [ ] Document the stable v0.1 deploy layout contract and dev workflow.
+- [x] Ensure Moonstone Lua runtime packages expose upstream source provenance, not prebuilt runtime blobs, so Meteorite can cross-build transportable hybrid releases such as `aarch64-linux-musl`.
+- [x] Document the dev workflow and release ownership boundary (`meteorite dev`, Ballad-owned release via `meteorite.ballad`).
+- [ ] Document the stable v0.1 deploy layout contract as a concise contract section.
 
 ## Fixture Publication Checklist
 
 Fixtures should be shaped like small public examples, not incidental local scratch projects. Each fixture needs a distinct goal, a stable command surface, and no committed generated artifacts.
 
-- [x] Move app fixtures under `fixtures/apps/<name>` and partitures under `fixtures/partitures`.
+- [x] Move app fixtures under `fixtures/apps/<name>` with fixture-local `partiture.lua` files.
 - [x] Add `fixtures/README.md` with fixture goals, standards, and publication rules.
 - [x] Add fixture-local READMEs documenting purpose, coverage, and ownership.
 - [x] Split benchmark routes into `fixtures/apps/bench-service` so showcase stays demo-focused.

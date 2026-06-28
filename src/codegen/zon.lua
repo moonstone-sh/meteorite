@@ -1,12 +1,25 @@
+--- ZON (Zig Object Notation) encoder.
+--- Encodes Lua values into Zig-compatible anonymous struct literals.
+---
+--- @class ZonModule
+--- @field encode fun(value: any): string  Encode a Lua value as ZON text
+
+---@type ZonModule
 local zon = {}
 
+--- Preferred key ordering for ZON output (semantic-first, then alphabetical).
+---@type string[]
 local preferred = {
   "format", "meteorite_version", "graph_hash", "mode", "app", "name", "routes", "id", "method", "raw_path", "path", "segments",
   "kind", "value", "params", "query", "type", "max_len", "optional", "decode", "handler", "symbol", "module", "import", "source", "file", "line", "column",
 }
+---@type table<string, integer>
 local rank = {}
 for i, key in ipairs(preferred) do rank[key] = i end
 
+--- Get sorted keys of a table, using preferred ordering then alphabetical.
+---@param value table  The table to get keys from
+---@return string[]  Sorted keys
 local function keys_of(value)
   local keys = {}
   for key, _ in pairs(value) do keys[#keys + 1] = key end
@@ -19,6 +32,9 @@ local function keys_of(value)
   return keys
 end
 
+--- Check if a table is a sequential array (1..n with no gaps).
+---@param value table  The table to check
+---@return boolean
 local function is_array(value)
   local max = 0
   local count = 0
@@ -30,10 +46,17 @@ local function is_array(value)
   return count == max
 end
 
+--- Quote a string as a Zig string literal.
+---@param value string  The string to quote
+---@return string  Quoted string
 local function quote(value)
   return '"' .. tostring(value):gsub('\\', '\\\\'):gsub('"', '\\"'):gsub('\n', '\\n') .. '"'
 end
 
+--- Core recursive emitter function.
+---@param value any  The value to encode
+---@param indent string  Current indentation level
+---@return string  ZON-encoded text
 local emit
 local function emit_array(value, indent)
   if #value == 0 then return ".{}" end
@@ -75,6 +98,9 @@ emit = function(value, indent)
   error("cannot serialize " .. kind .. " to ZON")
 end
 
+--- Encode a Lua value as ZON text with trailing newline.
+---@param value any  The value to encode
+---@return string  ZON-encoded text
 function zon.encode(value)
   return emit(value, "") .. "\n"
 end

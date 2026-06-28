@@ -48,7 +48,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     graph_module.addImport("meteorite_pattern", b.createModule(.{
-        .root_source_file = b.path("../../../native/src/pattern.zig"),
+        .root_source_file = b.path("../../../zig/pattern.zig"),
         .target = target,
         .optimize = optimize,
     }));
@@ -59,12 +59,12 @@ pub fn build(b: *std.Build) void {
     });
     graph_module.addImport("meteorite_ctx", ctx_module);
     const handlers_module = b.createModule(.{
-        .root_source_file = b.path("native/src/handlers.zig"),
+        .root_source_file = b.path("zig/handlers.zig"),
         .target = target,
         .optimize = optimize,
     });
     const validators_module = b.createModule(.{
-        .root_source_file = b.path("native/src/validators.zig"),
+        .root_source_file = b.path("zig/validators.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -74,7 +74,7 @@ pub fn build(b: *std.Build) void {
     graph_module.addImport("meteorite_validators", validators_module);
 
     const meteorite_module = b.createModule(.{
-        .root_source_file = b.path("../../../native/src/meteorite.zig"),
+        .root_source_file = b.path("../../../zig/meteorite.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -84,7 +84,7 @@ pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
         .name = "server",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("native/src/main.zig"),
+            .root_source_file = b.path("zig/main.zig"),
             .target = target,
             .optimize = optimize,
             .imports = &.{

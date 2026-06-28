@@ -102,12 +102,18 @@ end
 
 local function runtime_source_from_opts(opts)
   local runtime = opts.runtime or {}
-  return opts.lua_source
-    or opts.runtime_source
-    or runtime.source_payload_path
-    or runtime.source_payload
-    or runtime.source
-    or os.getenv("METEORITE_LUA_SOURCE")
+  if opts.lua_source then return opts.lua_source, opts.lua_source_kind end
+  if opts.runtime_source then return opts.runtime_source, opts.runtime_source_kind end
+  if runtime.source_payload_path then return runtime.source_payload_path, runtime.source_kind end
+  if runtime.source_payload then return runtime.source_payload, runtime.source_kind end
+  if runtime.source then return runtime.source, runtime.source_kind end
+  return os.getenv("METEORITE_LUA_SOURCE"), os.getenv("METEORITE_LUA_SOURCE_KIND")
+end
+
+local function runtime_source_is_rebuildable(source, kind)
+  if not source or source == "" then return false end
+  if not kind or kind == "" then return true end
+  return kind == "source" or kind == "upstream_archive" or kind == "lua_source" or kind == "puc_lua_source"
 end
 
 function contract_mod.target_from_opts(opts)
@@ -128,7 +134,7 @@ function contract_mod.validate_target_lua(ctx, root, contract, opts)
     return { status = "not_required", target = target }
   end
 
-  local source = runtime_source_from_opts(opts)
+  local source, source_kind = runtime_source_from_opts(opts)
   if contract_mod.is_cross_target(target) and (not source or source == "") then
     local lines = {
       "meteorite.release({ mode = 'hybrid', target = '" .. tostring(target) .. "' }) failed the release compiler contract.",
@@ -149,12 +155,28 @@ function contract_mod.validate_target_lua(ctx, root, contract, opts)
     ctx.fail(table.concat(lines, "\n"))
   end
 
+  if contract_mod.is_cross_target(target) and not runtime_source_is_rebuildable(source, source_kind) then
+    ctx.fail(table.concat({
+      "meteorite.release({ mode = 'hybrid', target = '" .. tostring(target) .. "' }) cannot build a transportable Lua runtime.",
+      "",
+      "Runtime payload:",
+      "  source_payload_path: " .. tostring(source),
+      "  source_kind: " .. tostring(source_kind),
+      "",
+      "Expected:",
+      "  an upstream PUC Lua source archive, not a prebuilt Moonstone runtime artifact.",
+      "",
+      "Fix:",
+      "  pass meteorite.release({ runtime_source = <lua-source.tar.gz>, target = '" .. tostring(target) .. "' }) or publish Moonstone Lua runtime packages with source provenance.",
+    }, "\n"))
+  end
+
   if source and source ~= "" then
     local full = join(root, source)
     if not file_exists(full) then
       ctx.fail("meteorite.release({ mode = 'hybrid' }) runtime source_payload_path does not exist: " .. tostring(source))
     end
-    return { status = contract_mod.is_cross_target(target) and "target_build_required" or "source_payload_available", target = target, source_payload_path = source }
+    return { status = contract_mod.is_cross_target(target) and "target_build_required" or "source_payload_available", target = target, source_payload_path = source, source_kind = source_kind }
   end
 
   return { status = "host_env", target = target }

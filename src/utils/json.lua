@@ -1,3 +1,10 @@
+--- Minimal JSON encoder for Lua.
+--- Handles nil, boolean, number, string, array, and object types.
+---
+--- @class JsonModule
+--- @field encode fun(value: any): string  Encode a Lua value as JSON
+
+---@type JsonModule
 local json = {}
 
 local function escape(value)

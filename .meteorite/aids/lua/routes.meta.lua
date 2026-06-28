@@ -2,18 +2,6 @@
 
 ---@diagnostic disable: missing-return, lowercase-global
 
----@class MeteoriteContext_plain : MeteoriteContext
-
----@class MeteoriteContext_plain_static : MeteoriteContext
-
----@class MeteoriteContext_hybrid_zig : MeteoriteContext
-
----@class MeteoriteContext_bench_meta : MeteoriteContext
-
----@class MeteoriteContext_bench_raw : MeteoriteContext
-
----@class MeteoriteContext_bench_counters : MeteoriteContext
-
 ---@class MeteoriteContext_health : MeteoriteContext
 
 ---@class MeteoriteParams_get_user
@@ -93,28 +81,4 @@
 ---@field query MeteoriteQuery_search
 
 ---@class MeteoriteContext_hybrid_inline : MeteoriteContext
-
----@class MeteoriteContext_bench_hybrid_inline : MeteoriteContext
-
----@class MeteoriteContext_bench_hybrid_inline_text_literal : MeteoriteContext
-
----@class MeteoriteParams_hybrid_inline_params
----@field id integer
-
----@class MeteoriteContext_hybrid_inline_params : MeteoriteContext
----@field params MeteoriteParams_hybrid_inline_params
-
----@class MeteoriteContext_hybrid_inline_echo : MeteoriteContext
-
----@class MeteoriteContext_bench_unavailable_state : MeteoriteContext
-
----@class MeteoriteContext_bench_unavailable_global : MeteoriteContext
-
----@class MeteoriteContext_bench_unavailable_leak : MeteoriteContext
-
----@class MeteoriteContext_bench_unavailable_shared : MeteoriteContext
-
----@class MeteoriteContext_bench_unavailable_worker : MeteoriteContext
-
----@class MeteoriteContext_bench_unavailable_require : MeteoriteContext
 

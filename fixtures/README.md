@@ -5,10 +5,10 @@ Fixtures are small, purpose-built Meteorite apps used for demos, acceptance test
 ## Layout Standard
 
 - App fixtures live under `fixtures/apps/<name>/`.
-- Test/release partitures live under `fixtures/partitures/`.
+- App-specific partitures live beside the fixture as `partiture.lua`.
 - Test runners live under `fixtures/tests/`.
 - Every app fixture must have `src/main.lua` and usually `src/app.lua`.
-- Add `native/` only when the fixture intentionally exercises Zig handlers or native helpers.
+- Add `zig/` only when the fixture intentionally exercises Zig handlers or zig helpers.
 - Add fixture-local `README.md` explaining goal, what it touches, and the main command.
 - Do not commit generated `.meteorite/`, `.zig-cache/`, `.moonstone/`, `.moonstone-home/`, `dist/`, logs, or benchmark output.
 

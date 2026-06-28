@@ -1,7 +1,8 @@
 const std = @import("std");
 const Io = std.Io;
-
 const build_options = @import("build_options");
+const proto = @import("protocol.zig");
+const http_date = @import("../server/http_date.zig");
 
 pub const name = "fast_http";
 pub const connection_strategy = "fast_http_" ++ build_options.fast_http_strategy;
@@ -11,111 +12,23 @@ pub const pooled_connections = std.mem.eql(u8, build_options.fast_http_strategy,
 pub const configured_workers: u16 = build_options.fast_http_workers;
 pub const queue_limit: usize = build_options.fast_http_queue;
 
-pub const Method = enum { GET, HEAD, POST, PUT, PATCH, DELETE, OTHER };
+pub const Method = proto.Method;
+pub const Header = proto.Header;
+pub const Counters = proto.Counters;
 
-pub const Counters = struct {
-    active_connections: u64 = 0,
-    total_connections: u64 = 0,
-    accepted_connections: u64 = 0,
-    threads_spawned: u64 = 0,
-    requests_served: u64 = 0,
-    requests_per_connection: u64 = 0,
-    keepalive_reuse_count: u64 = 0,
-    connection_close_count: u64 = 0,
-    bytes_read: u64 = 0,
-    bytes_written: u64 = 0,
-    connection_errors: u64 = 0,
-    max_active_connections: u64 = 0,
-    queue_depth: u64 = 0,
-    max_queue_depth: u64 = 0,
-    dropped_connections: u64 = 0,
-};
-
-const AtomicCounter = std.atomic.Value(u64);
-const AtomicCounters = struct {
-    active_connections: AtomicCounter = AtomicCounter.init(0),
-    total_connections: AtomicCounter = AtomicCounter.init(0),
-    threads_spawned: AtomicCounter = AtomicCounter.init(0),
-    requests_served: AtomicCounter = AtomicCounter.init(0),
-    keepalive_reuse_count: AtomicCounter = AtomicCounter.init(0),
-    connection_close_count: AtomicCounter = AtomicCounter.init(0),
-    bytes_read: AtomicCounter = AtomicCounter.init(0),
-    bytes_written: AtomicCounter = AtomicCounter.init(0),
-    connection_errors: AtomicCounter = AtomicCounter.init(0),
-    max_active_connections: AtomicCounter = AtomicCounter.init(0),
-    queue_depth: AtomicCounter = AtomicCounter.init(0),
-    max_queue_depth: AtomicCounter = AtomicCounter.init(0),
-    dropped_connections: AtomicCounter = AtomicCounter.init(0),
-};
-
+const AtomicCounters = proto.AtomicCounters;
 var counters = AtomicCounters{};
 
 pub fn snapshotCounters() Counters {
-    const total = counters.total_connections.load(.monotonic);
-    const served = counters.requests_served.load(.monotonic);
-    return .{
-        .active_connections = counters.active_connections.load(.monotonic),
-        .total_connections = total,
-        .accepted_connections = total,
-        .threads_spawned = counters.threads_spawned.load(.monotonic),
-        .requests_served = served,
-        .requests_per_connection = if (total == 0) 0 else served / total,
-        .keepalive_reuse_count = counters.keepalive_reuse_count.load(.monotonic),
-        .connection_close_count = counters.connection_close_count.load(.monotonic),
-        .bytes_read = counters.bytes_read.load(.monotonic),
-        .bytes_written = counters.bytes_written.load(.monotonic),
-        .connection_errors = counters.connection_errors.load(.monotonic),
-        .max_active_connections = counters.max_active_connections.load(.monotonic),
-        .queue_depth = counters.queue_depth.load(.monotonic),
-        .max_queue_depth = counters.max_queue_depth.load(.monotonic),
-        .dropped_connections = counters.dropped_connections.load(.monotonic),
-    };
+    return proto.snapshotCounters(&counters);
 }
 
-fn inc(counter: *AtomicCounter) void {
-    _ = counter.fetchAdd(1, .monotonic);
-}
-
-fn dec(counter: *AtomicCounter) void {
-    _ = counter.fetchSub(1, .monotonic);
-}
-
-fn add(counter: *AtomicCounter, value: u64) void {
-    _ = counter.fetchAdd(value, .monotonic);
-}
-
-fn maxCounter(counter: *AtomicCounter, value: u64) void {
-    var current = counter.load(.monotonic);
-    while (value > current) {
-        current = counter.cmpxchgWeak(current, value, .monotonic, .monotonic) orelse return;
-    }
-}
-
-pub fn connectionStarted() void {
-    const active = counters.active_connections.fetchAdd(1, .monotonic) + 1;
-    maxCounter(&counters.max_active_connections, active);
-}
-
-pub fn connectionEnded() void {
-    dec(&counters.active_connections);
-}
-
-pub fn threadSpawned() void {
-    inc(&counters.threads_spawned);
-}
-
-pub fn connectionError() void {
-    inc(&counters.connection_errors);
-}
-
-pub fn droppedConnection() void {
-    inc(&counters.dropped_connections);
-}
-
-pub fn setQueueDepth(value: u64) void {
-    counters.queue_depth.store(value, .monotonic);
-    maxCounter(&counters.max_queue_depth, value);
-}
+pub fn connectionStarted() void { proto.connectionStarted(&counters); }
+pub fn connectionEnded() void { proto.connectionEnded(&counters); }
+pub fn threadSpawned() void { proto.threadSpawned(&counters); }
+pub fn connectionError() void { proto.connectionError(&counters); }
+pub fn droppedConnection() void { proto.droppedConnection(&counters); }
+pub fn setQueueDepth(value: u64) void { proto.setQueueDepth(&counters, value); }
 
 pub const ListenConfig = struct {
     host: []const u8 = "127.0.0.1",
@@ -132,11 +45,6 @@ pub const Server = struct {
     }
 };
 
-pub const Header = struct {
-    name: []const u8,
-    value: []const u8,
-};
-
 pub const Request = struct {
     stream: Io.net.Stream,
     recv_buffer: [16384]u8 = undefined,
@@ -146,20 +54,23 @@ pub const Request = struct {
     closed: bool = false,
     close_after_response: bool = true,
     body_cache: ?[]const u8 = null,
+    body_read: bool = false,
     method_value: Method = .OTHER,
     target_value: []const u8 = "",
     path_value: []const u8 = "",
     query_value: []const u8 = "",
     keep_alive: bool = true,
     content_length: usize = 0,
+    has_chunked_encoding: bool = false,
     headers: [32]Header = undefined,
     header_count: usize = 0,
     request_count: u64 = 0,
+    date_seconds: i64 = 0,
 
     pub fn close(self: *Request, io: Io) void {
         if (!self.closed) {
             self.closed = true;
-            inc(&counters.connection_close_count);
+            proto.inc(&counters.connection_close_count);
             self.stream.close(io);
         }
     }
@@ -175,7 +86,7 @@ pub fn listen(config: ListenConfig) !Server {
 
 pub fn accept(server: *Server, req: *Request) !void {
     req.* = Request{ .stream = try server.inner.accept(server.io) };
-    inc(&counters.total_connections);
+    proto.inc(&counters.total_connections);
     req.reader = req.stream.reader(server.io, &req.recv_buffer);
     req.writer = req.stream.writer(server.io, &req.send_buffer);
 }
@@ -187,13 +98,15 @@ pub fn rebind(req: *Request, io: Io) void {
 
 pub fn receiveHead(req: *Request) !void {
     req.body_cache = null;
+    req.body_read = false;
     req.header_count = 0;
     req.content_length = 0;
+    req.has_chunked_encoding = false;
     req.keep_alive = true;
 
     const request_line = (try req.reader.interface.takeDelimiter('\n')) orelse return error.HttpConnectionClosing;
-    add(&counters.bytes_read, request_line.len + 1);
-    const clean_line = trimCr(request_line);
+    proto.add(&counters.bytes_read, request_line.len + 1);
+    const clean_line = proto.trimCr(request_line);
     if (clean_line.len == 0) return error.HttpConnectionClosing;
 
     var parts = std.mem.splitScalar(u8, clean_line, ' ');
@@ -201,7 +114,7 @@ pub fn receiveHead(req: *Request) !void {
     const target_text = parts.next() orelse return error.BadRequest;
     const version_text = parts.next() orelse "HTTP/1.1";
 
-    req.method_value = parseMethod(method_text);
+    req.method_value = proto.parseMethod(method_text);
     req.target_value = target_text;
     if (std.mem.indexOfScalar(u8, target_text, '?')) |idx| {
         req.path_value = target_text[0..idx];
@@ -212,14 +125,27 @@ pub fn receiveHead(req: *Request) !void {
     }
     req.keep_alive = !std.mem.eql(u8, version_text, "HTTP/1.0");
 
+    // Read headers with a total header size limit to prevent unbounded reads.
+    var total_header_bytes: usize = 0;
+    const max_header_bytes: usize = 16384; // recv buffer size
+
     while (true) {
         const line = (try req.reader.interface.takeDelimiter('\n')) orelse return error.BadRequest;
-        add(&counters.bytes_read, line.len + 1);
-        const clean = trimCr(line);
+        proto.add(&counters.bytes_read, line.len + 1);
+        total_header_bytes += line.len + 1;
+        if (total_header_bytes > max_header_bytes) return error.HeaderTooLarge;
+
+        const clean = proto.trimCr(line);
         if (clean.len == 0) break;
         const colon = std.mem.indexOfScalar(u8, clean, ':') orelse continue;
         const header_name = std.mem.trim(u8, clean[0..colon], " \t");
         const value = std.mem.trim(u8, clean[colon + 1 ..], " \t");
+
+        // Reject header values containing CR/LF (header injection prevention)
+        if (std.mem.indexOfScalar(u8, value, '\r') != null or std.mem.indexOfScalar(u8, value, '\n') != null) {
+            return error.BadRequest;
+        }
+
         if (req.header_count < req.headers.len) {
             req.headers[req.header_count] = .{ .name = header_name, .value = value };
             req.header_count += 1;
@@ -229,11 +155,16 @@ pub fn receiveHead(req: *Request) !void {
         } else if (std.ascii.eqlIgnoreCase(header_name, "connection")) {
             if (std.ascii.eqlIgnoreCase(value, "close")) req.keep_alive = false;
             if (std.ascii.eqlIgnoreCase(value, "keep-alive")) req.keep_alive = true;
+        } else if (std.ascii.eqlIgnoreCase(header_name, "transfer-encoding")) {
+            if (std.ascii.eqlIgnoreCase(value, "chunked")) {
+                req.has_chunked_encoding = true;
+                req.keep_alive = false; // chunked not supported; close after response
+            }
         }
     }
 
     req.request_count += 1;
-    if (req.request_count > 1) inc(&counters.keepalive_reuse_count);
+    if (req.request_count > 1) proto.inc(&counters.keepalive_reuse_count);
     req.close_after_response = !req.keep_alive;
 }
 
@@ -262,17 +193,47 @@ pub fn header(req: *Request, header_name: []const u8) ?[]const u8 {
 
 pub fn readBody(req: *Request, allocator: std.mem.Allocator, max_bytes: usize) ![]const u8 {
     if (req.body_cache) |body| return body;
+    if (req.has_chunked_encoding) {
+        // Chunked transfer encoding is not supported.
+        // Mark as read and return empty so the connection can close cleanly.
+        req.body_read = true;
+        req.body_cache = &.{};
+        return req.body_cache.?;
+    }
     if (max_bytes == 0) {
         if (req.content_length > 0) return error.PayloadTooLarge;
+        req.body_read = true;
         req.body_cache = &.{};
         return req.body_cache.?;
     }
     if (req.content_length > max_bytes) return error.PayloadTooLarge;
     const body = try allocator.alloc(u8, req.content_length);
     try req.reader.interface.readSliceAll(body);
-    add(&counters.bytes_read, body.len);
+    proto.add(&counters.bytes_read, body.len);
     req.body_cache = body;
+    req.body_read = true;
     return body;
+}
+
+/// Drain any unread body so the connection can be reused for the next request.
+/// Must be called after serveRequest if keep-alive is desired.
+pub fn drainBody(req: *Request) void {
+    if (req.body_read or req.content_length == 0 or req.has_chunked_encoding) return;
+    // Drain content_length bytes from the reader
+    var remaining = req.content_length;
+    var buf: [4096]u8 = undefined;
+    while (remaining > 0) {
+        const to_read = @min(remaining, buf.len);
+        req.reader.interface.readSliceAll(buf[0..to_read]) catch {
+            // If drain fails, force close the connection
+            req.keep_alive = false;
+            req.close_after_response = true;
+            return;
+        };
+        proto.add(&counters.bytes_read, to_read);
+        remaining -= to_read;
+    }
+    req.body_read = true;
 }
 
 pub fn respondText(req: *Request, status: u16, body: []const u8) !void {
@@ -281,18 +242,35 @@ pub fn respondText(req: *Request, status: u16, body: []const u8) !void {
 }
 
 pub fn respondBytes(req: *Request, status: u16, content_type: []const u8, body: []const u8) !void {
-    const reason = reasonPhrase(status);
-    var response_buffer: [8192]u8 = undefined;
+    const reason = proto.reasonPhrase(status);
     const connection = if (req.keep_alive) "keep-alive" else "close";
-    const response = try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {d} {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\nconnection: {s}\r\n\r\n{s}", .{ status, reason, content_type, body.len, connection, body });
+
+    // Use heap for large responses to avoid stack buffer overflow
+    if (body.len > 6144) {
+        const date = http_date.formatHttpDate(req.date_seconds);
+        const response = try std.fmt.allocPrint(std.heap.smp_allocator, "HTTP/1.1 {d} {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\nconnection: {s}\r\ndate: {s}\r\n\r\n", .{ status, reason, content_type, body.len, connection, date });
+        defer std.heap.smp_allocator.free(response);
+        try req.writer.interface.writeAll(response);
+        try req.writer.interface.writeAll(body);
+        try req.writer.interface.flush();
+        proto.inc(&counters.requests_served);
+        proto.add(&counters.bytes_written, response.len + body.len);
+        req.close_after_response = !req.keep_alive;
+        return;
+    }
+
+    var response_buffer: [8192]u8 = undefined;
+    const date = http_date.formatHttpDate(req.date_seconds);
+    const response = try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {d} {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\nconnection: {s}\r\ndate: {s}\r\n\r\n{s}", .{ status, reason, content_type, body.len, connection, date, body });
     try writeRaw(req, response);
 }
 
 pub fn respondStatic(req: *Request, status: u16, content_type: []const u8, content_length: u64, cache_control: []const u8, etag: []const u8, content_encoding: ?[]const u8, body: []const u8, head_only: bool) !void {
-    const reason = reasonPhrase(status);
+    const reason = proto.reasonPhrase(status);
     var response_buffer: [16384]u8 = undefined;
     const connection = if (req.keep_alive) "keep-alive" else "close";
     const encoding = content_encoding orelse "";
+    const date = http_date.formatHttpDate(req.date_seconds);
     const response = if (status == 304 and content_encoding != null)
         try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 304 Not Modified\r\ncache-control: {s}\r\netag: {s}\r\nvary: Accept-Encoding\r\nconnection: {s}\r\n\r\n", .{ cache_control, etag, connection })
     else if (status == 304)
@@ -300,12 +278,12 @@ pub fn respondStatic(req: *Request, status: u16, content_type: []const u8, conte
     else if (content_encoding != null)
         try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {d} {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\ncache-control: {s}\r\netag: {s}\r\ncontent-encoding: {s}\r\nvary: Accept-Encoding\r\nconnection: {s}\r\n\r\n", .{ status, reason, content_type, content_length, cache_control, etag, encoding, connection })
     else
-        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {d} {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\ncache-control: {s}\r\netag: {s}\r\nconnection: {s}\r\n\r\n", .{ status, reason, content_type, content_length, cache_control, etag, connection });
+        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {d} {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\ncache-control: {s}\r\netag: {s}\r\nconnection: {s}\r\ndate: {s}\r\n\r\n", .{ status, reason, content_type, content_length, cache_control, etag, connection, date });
     try req.writer.interface.writeAll(response);
     if (!head_only and status != 304) try req.writer.interface.writeAll(body);
     try req.writer.interface.flush();
-    inc(&counters.requests_served);
-    add(&counters.bytes_written, response.len + if (head_only or status == 304) 0 else body.len);
+    proto.inc(&counters.requests_served);
+    proto.add(&counters.bytes_written, response.len + if (head_only or status == 304) 0 else body.len);
     req.close_after_response = !req.keep_alive;
 }
 
@@ -317,41 +295,13 @@ pub fn respondRawOk(req: *Request) !void {
 pub fn writeRaw(req: *Request, bytes: []const u8) !void {
     try req.writer.interface.writeAll(bytes);
     try req.writer.interface.flush();
-    inc(&counters.requests_served);
-    add(&counters.bytes_written, bytes.len);
+    proto.inc(&counters.requests_served);
+    proto.add(&counters.bytes_written, bytes.len);
     req.close_after_response = !req.keep_alive;
 }
 
 pub fn finish(_: *Request) !void {}
 
+
 const raw_ok_keepalive = "HTTP/1.1 200 OK\r\ncontent-type: text/plain; charset=utf-8\r\ncontent-length: 2\r\nconnection: keep-alive\r\n\r\nok";
 const raw_ok_close = "HTTP/1.1 200 OK\r\ncontent-type: text/plain; charset=utf-8\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok";
-
-fn trimCr(line: []const u8) []const u8 {
-    if (line.len > 0 and line[line.len - 1] == '\r') return line[0 .. line.len - 1];
-    return line;
-}
-
-fn parseMethod(value: []const u8) Method {
-    if (std.mem.eql(u8, value, "GET")) return .GET;
-    if (std.mem.eql(u8, value, "HEAD")) return .HEAD;
-    if (std.mem.eql(u8, value, "POST")) return .POST;
-    if (std.mem.eql(u8, value, "PUT")) return .PUT;
-    if (std.mem.eql(u8, value, "PATCH")) return .PATCH;
-    if (std.mem.eql(u8, value, "DELETE")) return .DELETE;
-    return .OTHER;
-}
-
-fn reasonPhrase(status: u16) []const u8 {
-    return switch (status) {
-        200 => "OK",
-        400 => "Bad Request",
-        404 => "Not Found",
-        405 => "Method Not Allowed",
-        413 => "Payload Too Large",
-        414 => "URI Too Long",
-        500 => "Internal Server Error",
-        501 => "Not Implemented",
-        else => "OK",
-    };
-}

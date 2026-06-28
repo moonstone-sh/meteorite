@@ -251,7 +251,7 @@ function Parser:parse_atom()
     if tok.value == "|" then
       raise(self.source, tok.pos, "unsupported Meteorite pattern syntax: alternation",
         "Meteorite Patterns v0.2 does not support | alternation yet.",
-        "Split the route or validate alternatives in a handler.")
+        "Split the route or validate alterzigs in a handler.")
     end
     return AST.Literal(tok.value:byte())
   elseif tok.kind == "class" then
@@ -327,7 +327,7 @@ function Parser:parse_alt()
   if tok.kind == "literal" and tok.value == "|" then
     raise(self.source, tok.pos, "unsupported Meteorite pattern syntax: alternation",
       "Meteorite Patterns v0.2 does not support | alternation yet.",
-      "Split the route or validate alternatives in a handler.")
+      "Split the route or validate alterzigs in a handler.")
   end
   return node, nil
 end

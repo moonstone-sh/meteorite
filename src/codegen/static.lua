@@ -1,68 +1,15 @@
 local static = {}
 
-local function mkdir_p(path)
-  os.execute("mkdir -p " .. string.format("%q", path))
-end
-
-local function capture(command)
-  local pipe = io.popen(command, "r")
-  if not pipe then return "" end
-  local out = pipe:read("*a") or ""
-  pipe:close()
-  return (out:gsub("%s+$", ""))
-end
-
-local function dirname(path)
-  return tostring(path):match("^(.*)/[^/]*$") or "."
-end
-
-local function path_join(a, b)
-  if a == "" or a == "." then return b end
-  return a .. "/" .. b
-end
-
-local function shell_quote(path)
-  return string.format("%q", tostring(path))
-end
-
-local function read_file(path)
-  local file = io.open(path, "rb")
-  if not file then return nil end
-  local data = file:read("*a")
-  file:close()
-  return data
-end
-
-local function write_file(path, content)
-  mkdir_p(dirname(path))
-  local file, err = io.open(path, "wb")
-  if not file then error("cannot write " .. path .. ": " .. tostring(err)) end
-  file:write(content)
-  file:close()
-end
-
-local function hash_text(text)
-  local tmp = os.tmpname()
-  write_file(tmp, text)
-  local hash = capture("b3sum --no-names " .. shell_quote(tmp) .. " 2>/dev/null")
-  os.remove(tmp)
-  if hash ~= "" then return "b3:" .. hash end
-  local h = 2166136261
-  for i = 1, #text do h = (h + text:byte(i) * 16777619) % 4294967296 end
-  return string.format("fnv32:%08x", h)
-end
-
-local function etag_for_text(text)
-  return '"' .. hash_text(text) .. '"'
-end
-
-local function file_size(path)
-  local file = io.open(path, "rb")
-  if not file then return nil end
-  local size = file:seek("end")
-  file:close()
-  return size or 0
-end
+local fs = require("utils.fs")
+local mkdir_p = fs.mkdir_p
+local dirname = fs.dirname
+local path_join = fs.join
+local shell_quote = fs.shell_quote
+local read_file = fs.read_file
+local write_file = fs.write_file
+local hash_text = fs.hash_text
+local etag_for_text = fs.etag_for_text
+local file_size = fs.file_size
 
 local function file_exists(path)
   local file = io.open(path, "rb")
@@ -71,10 +18,7 @@ local function file_exists(path)
   return true
 end
 
-local function is_dir(path)
-  local ok = os.execute("test -d " .. shell_quote(path) .. " >/dev/null 2>&1")
-  return ok == true or ok == 0
-end
+local is_dir = fs.is_dir
 
 local function copy_file(src, dst)
   mkdir_p(dirname(dst))
@@ -118,7 +62,9 @@ local function static_artifact_path(output, route, relative)
 end
 
 local function scan_files(root)
-  local links = capture("cd " .. shell_quote(root) .. " && find . -type l -print")
+  local links_raw = fs.list_symlinks(root)
+  local links = {}
+  for _, l in ipairs(links_raw) do links[#links + 1] = l end
   if links ~= "" then
     error(table.concat({
       "static directory contains symlinks",
@@ -133,7 +79,9 @@ local function scan_files(root)
       "  copy real files into the static root or remove the symlink",
     }, "\n"))
   end
-  local out = capture("cd " .. shell_quote(root) .. " && find . -type f -print")
+  local files_raw = fs.list_files(root)
+  local out = ""
+  for _, f in ipairs(files_raw) do out = out .. "./" .. f .. "\n" end
   local files = {}
   for line in (out .. "\n"):gmatch("([^\n]*)\n") do
     if line ~= "" then

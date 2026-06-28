@@ -1,6 +1,6 @@
 # Meteorite Benchmark Harness
 
-This directory contains a reproducible local benchmark harness for Meteorite. It builds the current Meteorite service, starts the generated native server, drives a fixed set of HTTP scenarios with `oha`, records memory samples, captures binary metadata, and generates a Markdown summary from raw machine-readable artifacts.
+This directory contains a reproducible local benchmark harness for Meteorite. It builds the current Meteorite service, starts the generated Zig server, drives a fixed set of HTTP scenarios with `oha`, records memory samples, captures binary metadata, and generates a Markdown summary from raw machine-readable artifacts.
 
 Benchmarks use the dedicated `fixtures/apps/bench-service` fixture. Keep `/__bench/*` routes and Lua-state stress routes there so showcase and acceptance fixtures stay focused.
 
@@ -96,7 +96,7 @@ bench/results/20260618T120000Z/
   keepalive-off-smoke.json
   server.log
   memory.csv
-  plain-native-oha-c1.json
+  plain-zig-oha-c1.json
   health-oha-c256.json
   wrk-health-c256.txt
   perf-c256.txt
@@ -109,7 +109,7 @@ Raw outputs are intentionally kept. `summary.md` is generated from those files a
 
 | Scenario | Request | Handler Kind | Purpose |
 |---|---|---|---|
-| `plain-native` | `GET /__bench/plain` | static Zig | Server/backend ceiling baseline |
+| `plain-zig` | `GET /__bench/plain` | static Zig | Server/backend ceiling baseline |
 | `health` | `GET /health` | static Zig | Static route overhead |
 | `echo-small` | `POST /echo`, small text body | static Zig | Small body read/write path |
 | `echo-8k` | `POST /echo`, 8192-byte body | static Zig | Body limit/copy/response overhead |

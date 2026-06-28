@@ -25,13 +25,14 @@ mkdir -p "$work" "$out/bin" "$out/lib" "$out/include"
 
 case "$src" in
   *.tar.gz|*.tgz) tar -xzf "$src" -C "$work" ;;
+  *.tar.zst|*.tzst) tar --zstd -xf "$src" -C "$work" ;;
   *.tar.xz) tar -xJf "$src" -C "$work" ;;
   *.tar.bz2) tar -xjf "$src" -C "$work" ;;
   *.zip) unzip -q "$src" -d "$work" ;;
   *) echo "unsupported Lua source payload archive: $src" >&2; exit 1 ;;
 esac
 
-root=$(find "$work" -maxdepth 2 -type f -name lua.c -path '*/src/lua.c' -print | head -n 1 | sed 's#/src/lua.c$##')
+root=$(find "$work" -maxdepth 3 -type f -name lua.c -path '*/src/lua.c' -print | head -n 1 | sed 's#/src/lua.c$##')
 [ -n "$root" ] || { echo "could not find PUC Lua source root in $src" >&2; exit 1; }
 
 cc="zig cc -target $target $copt -fPIC"

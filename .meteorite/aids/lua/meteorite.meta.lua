@@ -45,6 +45,36 @@
 ---@field delete fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table
 ---@field use fun(self: MeteoriteApp, plugin_or_middleware: table|function, options?: table): MeteoriteApp
 ---@field capability fun(self: MeteoriteApp, kind: string, spec: table): MeteoriteApp
+---@field get fun(self: MeteoriteApp, path: "/health", handler: fun(c: MeteoriteContext_health): any): table
+---@field get fun(self: MeteoriteApp, path: "/health", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_health): any): table
+---@field get fun(self: MeteoriteApp, path: "/users/:id", handler: fun(c: MeteoriteContext_get_user): any): table
+---@field get fun(self: MeteoriteApp, path: "/users/:id", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_get_user): any): table
+---@field put fun(self: MeteoriteApp, path: "/users/:id", handler: fun(c: MeteoriteContext_put_user): any): table
+---@field put fun(self: MeteoriteApp, path: "/users/:id", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_put_user): any): table
+---@field patch fun(self: MeteoriteApp, path: "/users/:id", handler: fun(c: MeteoriteContext_patch_user): any): table
+---@field patch fun(self: MeteoriteApp, path: "/users/:id", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_patch_user): any): table
+---@field delete fun(self: MeteoriteApp, path: "/users/:id", handler: fun(c: MeteoriteContext_delete_user): any): table
+---@field delete fun(self: MeteoriteApp, path: "/users/:id", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_delete_user): any): table
+---@field post fun(self: MeteoriteApp, path: "/echo", handler: fun(c: MeteoriteContext_echo): any): table
+---@field post fun(self: MeteoriteApp, path: "/echo", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_echo): any): table
+---@field get fun(self: MeteoriteApp, path: "/devices/:device_id", handler: fun(c: MeteoriteContext_get_device): any): table
+---@field get fun(self: MeteoriteApp, path: "/devices/:device_id", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_get_device): any): table
+---@field get fun(self: MeteoriteApp, path: "/files/:name", handler: fun(c: MeteoriteContext_file): any): table
+---@field get fun(self: MeteoriteApp, path: "/files/:name", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_file): any): table
+---@field get fun(self: MeteoriteApp, path: "/slugs/:slug", handler: fun(c: MeteoriteContext_slug): any): table
+---@field get fun(self: MeteoriteApp, path: "/slugs/:slug", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_slug): any): table
+---@field get fun(self: MeteoriteApp, path: "/uuids/:id", handler: fun(c: MeteoriteContext_uuid): any): table
+---@field get fun(self: MeteoriteApp, path: "/uuids/:id", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_uuid): any): table
+---@field get fun(self: MeteoriteApp, path: "/hex/:digest", handler: fun(c: MeteoriteContext_hex): any): table
+---@field get fun(self: MeteoriteApp, path: "/hex/:digest", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_hex): any): table
+---@field get fun(self: MeteoriteApp, path: "/emails/:email", handler: fun(c: MeteoriteContext_email): any): table
+---@field get fun(self: MeteoriteApp, path: "/emails/:email", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_email): any): table
+---@field get fun(self: MeteoriteApp, path: "/tokens/:token", handler: fun(c: MeteoriteContext_token): any): table
+---@field get fun(self: MeteoriteApp, path: "/tokens/:token", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_token): any): table
+---@field get fun(self: MeteoriteApp, path: "/search", handler: fun(c: MeteoriteContext_search): any): table
+---@field get fun(self: MeteoriteApp, path: "/search", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_search): any): table
+---@field get fun(self: MeteoriteApp, path: "/hybrid-inline", handler: fun(c: MeteoriteContext_hybrid_inline): any): table
+---@field get fun(self: MeteoriteApp, path: "/hybrid-inline", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_hybrid_inline): any): table
 
 ---@class MeteoriteModule
 ---@field profiles table
@@ -62,20 +92,29 @@
 ---@field pattern fun(name_or_source: string, source_or_opts?: string|table, opts?: table): MeteoritePattern
 ---@field zig fun(path_or_symbol: string, opts?: {decl?: string}): table
 ---@field lua fun(module_ref: string): table
+---@field file fun(path: string, opts?: table): table
+---@field dir fun(root: string, opts?: table): table
+---@field site fun(app: MeteoriteApp, opts: table): MeteoriteApp
 ---@type MeteoriteModule
 local meteorite = {}
 
 ---@class MeteoriteContext
----@field params table
----@field query table
----@field state table
+---@field params table<string, string|integer|number|boolean>
+---@field query table<string, string|integer|number|boolean|nil>
+---@field state table<string, any>
 local Context = {}
 
 ---@param body string
 function Context:text(body) end
 
 ---@param value table|string|number|boolean
-function Context:json(value) end
+---@param opts? {status?: integer}
+function Context:json(value, opts) end
+
+---@param status integer
+---@param content_type string
+---@param body string
+function Context:bytes(status, content_type, body) end
 
 ---@return string
 function Context:body() end
@@ -189,11 +228,5 @@ local ZigClient = {}
 
 ---@class MeteoriteContext_search : MeteoriteContext
 ---@field query MeteoriteQuery_search
-
----@class MeteoriteParams_hybrid_inline_params
----@field id integer
-
----@class MeteoriteContext_hybrid_inline_params : MeteoriteContext
----@field params MeteoriteParams_hybrid_inline_params
 
 return meteorite

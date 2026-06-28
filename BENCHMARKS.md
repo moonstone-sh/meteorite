@@ -7,7 +7,7 @@
 > - Meteorite release-hybrid optimized: [`bench/results/latest-meteorite-release-hybrid/`](bench/results/latest-meteorite-release-hybrid/)
 > - Hono Bun: [`bench/results/latest-hono-bun/`](bench/results/latest-hono-bun/)
 
-These benchmarks measure local framework/runtime overhead on one machine. They are **not** claims of real-world internet throughput.
+These benchmarks measure local framework/runtime overhead on one machine. They are **not** claims of real-world internet throughput. Headline numbers should come from runs using `--strict-bench`; non-strict runs are development diagnostics only.
 
 ## Scope and Caveat
 
@@ -24,12 +24,16 @@ Environment:
 ```text
 Commit: 1201f23
 OS: macOS arm64
+Machine: Apple Silicon local laptop/workstation
 Zig: 0.16.0
 Load generator: oha 1.14.0
 Backend: fast_http_pool
 Meteorite mode: release-hybrid
 Hybrid profile: optimized
 Lua state strategy: per_thread_cached_refs
+Route set: /__bench/plain-static, /__bench/hybrid-zig, /__bench/hybrid-inline, /__bench/hybrid-inline-params, /__bench/echo
+Warmup: see bench/run.sh strict-bench warmup phase
+Concurrency: 1, 8, 32, 128, 256, 512, plus pressure probes noted below
 ```
 
 ### Correctness smoke
@@ -48,7 +52,7 @@ Validated behavior:
 - Lua state reuse works.
 - Worker-local counters remain monotonic per Lua state.
 - require() cache persists per Lua state.
-- shared native store increments globally.
+- shared zig store increments globally.
 - request-local state does not leak between requests.
 ```
 
@@ -91,7 +95,7 @@ The queue drained cleanly and the worker pool did not show unbounded thread grow
 |---|---|---:|---:|
 | `plain-static` | 1024 | 214,095 | ~0.122 ms |
 | `hybrid-zig` | 1024 | 205,963 | ~0.121 ms |
-| `raw-native` | 1024 | 203,732 | ~0.127 ms |
+| `raw-zig` | 1024 | 203,732 | ~0.127 ms |
 | `hybrid-inline` | 512 | 182,616 | ~0.124 ms |
 | `hybrid-inline` | 1024 | 180,201 | ~0.131 ms |
 | `hybrid-inline-params` | 1024 | 183,796 | ~0.123 ms |
@@ -105,17 +109,17 @@ The previous optimized hybrid bottleneck was the single Lua lock. Replacing the 
 The benchmark ladder now shows:
 
 ```text
-- Static native routes remain near the fast_http_pool backend ceiling.
+- Static zig routes remain near the fast_http_pool backend ceiling.
 - Hybrid Zig routes remain close to release-static routes.
-- Inline Lua routes are close to the native baseline for trivial, param, and echo workloads.
-- Request-local state isolation, per-state require caching, and shared native store behavior are validated.
+- Inline Lua routes are close to the zig baseline for trivial, param, and echo workloads.
+- Request-local state isolation, per-state require caching, and shared zig store behavior are validated.
 ```
 
 The remaining caveat is high max-latency outliers where max latency exceeds 10× p99. On local macOS loopback this is likely scheduler noise, but the report keeps the warning visible and does not use max latency as the main performance claim.
 
 ## Current Claim
 
-In these local benchmark scenarios, Meteorite's optimized hybrid Lua mode with `fast_http_pool` and per-thread Lua states matched the native baseline closely and exceeded the same-machine Hono Bun baseline on the tested inline, param, and echo routes.
+In these reproducible local benchmark scenarios, Meteorite's optimized hybrid Lua mode with `fast_http_pool` and per-thread Lua states matched the zig baseline closely and exceeded the same-machine Hono Bun baseline on the tested inline, param, and echo routes. This is a benchmark result for this harness and machine, not a universal framework-performance claim.
 
 The claim is limited to:
 
@@ -194,7 +198,7 @@ All runs used the same route shapes, the same load generator (`oha v1.14.0`), th
 | Field | Meteorite static | Meteorite hybrid | Hono Bun |
 |---|---|---|---|
 | Framework | meteorite | meteorite | hono |
-| Runtime | native-zig | native-zig + Lua | bun |
+| Runtime | zig-zig | zig-zig + Lua | bun |
 | Mode | release-static | release-hybrid | n/a |
 | Hybrid profile | default | optimized | n/a |
 | Zig optimize | ReleaseFast | ReleaseFast | n/a |
@@ -209,7 +213,7 @@ All runs used the same route shapes, the same load generator (`oha v1.14.0`), th
 | Zig optimize mode | ReleaseFast (not Debug) | ReleaseFast (not Debug) | n/a |
 | Keep-alive reuse | on = 53.0k, off = 24.5k (53.8% separated) | on = 53.1k, off = 18.1k (66.0% separated) | on = 165.2k, off = 33.2k (79.9% separated) |
 | oha / wrk agreement | ~1.19x | ~1.14x | ~1.11x |
-| Native baseline | `plain-native` tracks other static routes | `plain-native` tracks hybrid static routes; inline Lua is 11–13% below | `plain-native` tracks other routes |
+| Zig baseline | `plain-zig` tracks other static routes | `plain-zig` tracks hybrid static routes; inline Lua is 11–13% below | `plain-zig` tracks other routes |
 | Plateau | No — max ~55k, well above 20k | No — max ~54k, well above 20k | No — max ~169k, well above 20k |
 
 ## Peak throughput comparison
@@ -229,11 +233,11 @@ Latencies reported are **p50/p95/p99 at the concurrency where peak req/s occurs*
 
 ## Interpretation
 
-1. **Meteorite release-static is optimized and consistent.** All static routes (including pattern-matched routes) cluster around the same ~55k req/s ceiling. `plain-native` matches them, so the bottleneck is not route-matcher or param-validation cost.
+1. **Meteorite release-static is optimized and consistent.** All static routes (including pattern-matched routes) cluster around the same ~55k req/s ceiling. `plain-zig` matches them, so the bottleneck is not route-matcher or param-validation cost.
 2. **Including the Lua runtime has negligible effect on static routes.** Hybrid static_zig routes are within 1–2% of release-static, so the runtime's global presence is not the bottleneck.
 3. **Inline Lua adds ~11–13% overhead versus the same route as static Zig.** The optimized hybrid profile preloads and caches the Lua handler once, so the cost is the bridge call itself, not source lifting or file I/O.
-4. **The dominant gap is the backend/server ceiling.** Hono on Bun reaches ~167k req/s on the same machine, while Meteorite's `plain-native` ceiling is ~55k req/s. That is roughly a 3x difference at the HTTP layer, before any routing or handler logic.
-5. **Until the `/__bench/plain` ceiling is competitive with Hono Bun, optimizing the router or Lua bridge further will not close the overall gap.** The next optimization target is the std.http server shape (or an alternative backend), not routing or the Lua bridge.
+4. **The dominant gap is the backend/server ceiling.** Hono on Bun reaches ~167k req/s on the same machine, while Meteorite's `plain-zig` ceiling is ~55k req/s. That is roughly a 3x difference at the HTTP layer, before any routing or handler logic.
+5. **Until the `/__bench/plain` ceiling is competitive with Hono Bun, optimizing the router or Lua bridge further will not close the overall gap.** The next optimization target is the std.http server shape (or an alterzig backend), not routing or the Lua bridge.
 
 ## Gate checks
 

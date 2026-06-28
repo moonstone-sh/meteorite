@@ -177,7 +177,7 @@ def peak_concurrency(results, scenario):
 
 
 def relative_to_plain(results, scenario):
-    plain = peak_rps(results, "plain-native")
+    plain = peak_rps(results, "plain-zig")
     val = peak_rps(results, scenario)
     if plain and val:
         return val / plain
@@ -201,8 +201,8 @@ def main():
     results_list.sort(key=sort_key)
 
     scenarios = [
-        "plain-native",
-        "raw-native",
+        "plain-zig",
+        "raw-zig",
         "plain-static",
         "hybrid-zig",
         "hybrid-inline-bench",
@@ -275,7 +275,7 @@ def main():
     print("| Target | Route | Handler | Peak req/s | p99 at peak | Binary/RSS |")
     print("|---|---|---:|---:|---:|---:|")
     for r in results_list:
-        row = peak_row(r, "plain-native")
+        row = peak_row(r, "plain-zig")
         binary = r["binary"]
         bytes_val = binary.get("bytes", 0)
         rss = None
@@ -302,7 +302,7 @@ def main():
     print("|---|---|---:|---:|")
     for r in results_list:
         for scen in scenarios:
-            if scen == "plain-native":
+            if scen == "plain-zig":
                 continue
             rel = relative_to_plain(r, scen)
             rel_str = f"{rel*100:.1f}%" if rel else "n/a"
@@ -348,15 +348,15 @@ def main():
     failed_gates = []
 
     if static_r and hono_bun:
-        static_plain = peak_rps(static_r, "plain-native") or 0
-        hono_plain = peak_rps(hono_bun, "plain-native") or 0
+        static_plain = peak_rps(static_r, "plain-zig") or 0
+        hono_plain = peak_rps(hono_bun, "plain-zig") or 0
         if hono_plain > 0:
             ratio = static_plain / hono_plain
             print(f"- **Gate 1 (static ceiling):** Meteorite static /__bench/plain = {fmt(static_plain)} req/s; Hono Bun = {fmt(hono_plain)} req/s; ratio = {ratio*100:.1f}%")
             if ratio < 0.90:
                 failed_gates.append("Gate 1 (static ceiling): std.http/Zig backend is behind Bun serve")
         else:
-            print("- **Gate 1 (static ceiling):** Hono Bun plain-native data unavailable")
+            print("- **Gate 1 (static ceiling):** Hono Bun plain-zig data unavailable")
 
     if static_r and hybrid_r:
         # Use a static zig route from hybrid (e.g., health) vs static mode health

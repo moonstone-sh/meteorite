@@ -1,0 +1,42 @@
+{
+  "workspace": {
+    "library": [
+      ".meteorite/aids/lua",
+      ".moonstone/env/share/lua/{{lua_ver}}",
+      ".moonstone/env/lib/lua/{{lua_ver}}",
+      "src"
+    ],
+    "checkThirdParty": false,
+    "useGitIgnore": false,
+    "ignoreDir": [
+      ".moonstone/env/bin",
+      ".moonstone/env/include",
+      "zig-cache",
+      "zig-out",
+      ".meteorite/graph",
+      "dist",
+      ".git"
+    ]
+  },
+  "runtime": {
+    "version": "Lua {{lua_ver}}",
+    "path": [
+      "src/?.lua",
+      "src/?/init.lua",
+      ".meteorite/aids/lua/?.lua",
+      ".meteorite/aids/lua/?/init.lua",
+      ".moonstone/env/share/lua/{{lua_ver}}/?.lua",
+      ".moonstone/env/share/lua/{{lua_ver}}/?/init.lua",
+      ".moonstone/env/share/lua/{{lua_ver}}/meteorite/?.lua",
+      ".moonstone/env/share/lua/{{lua_ver}}/meteorite/?/init.lua"
+    ]
+  },
+  "completion": {
+    "autoRequire": true
+  },
+  "diagnostics": {
+    "disable": [
+      "lowercase-global"
+    ]
+  }
+}

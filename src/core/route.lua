@@ -111,9 +111,16 @@ local function symbol_id(symbol)
   return tostring(symbol):match("([%w_]+)$") or tostring(symbol):gsub("%W", "_")
 end
 
+local function path_symbol_id(path)
+  local value = tostring(path):gsub("%.zig$", "")
+  value = value:gsub("[/\\]+", "_"):gsub("%W", "_"):gsub("_+", "_"):gsub("^_", ""):gsub("_$", "")
+  if value == "" then value = "zig_file" end
+  return value
+end
+
 local function normalize_handler(handler)
   if handler.kind == "zig" then return { kind = "zig", symbol = symbol_id(handler.symbol), import = handler.symbol } end
-  if handler.kind == "zig_file" then return { kind = "zig_file", symbol = symbol_id(handler.path), path = handler.path, decl = handler.decl or "handle" } end
+  if handler.kind == "zig_file" then return { kind = "zig_file", symbol = path_symbol_id(handler.path), path = handler.path, decl = handler.decl or "handle" } end
   if handler.kind == "lua" then return { kind = "lua", module = handler.module, path = handler.path } end
   if handler.kind == "file" then return handler end
   if handler.kind == "dir" then return handler end

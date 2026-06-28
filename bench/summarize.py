@@ -304,8 +304,8 @@ def scan_routes_zon(text):
 
 
 SCENARIO_TO_PATH = {
-    "plain-native": "/__bench/plain",
-    "raw-native": "/__bench/raw",
+    "plain-zig": "/__bench/plain",
+    "raw-zig": "/__bench/raw",
     "plain-static": "/__bench/plain-static",
     "hybrid-zig": "/__bench/hybrid-zig",
     "hybrid-inline-bench": "/__bench/hybrid-inline",
