@@ -139,7 +139,21 @@ wait_for_server() {
     sleep 0.05
   done
   echo "  $name did not become ready on :$port" >&2
+  cat "$OUT/$(echo $name | tr '[:upper:]' '[:lower:]' | tr -d '/')-server.log" 2>/dev/null | tail -5 >&2 || true
   return 1
+}
+
+# Kill server on failure, don't hang
+start_or_skip() {
+  local start_fn="$1"
+  local name="$2"
+  if $start_fn; then
+    return 0
+  else
+    echo "  WARNING: $name failed to start, skipping" >&2
+    kill_server
+    return 1
+  fi
 }
 
 # ============================================================
@@ -152,15 +166,16 @@ run_scenario() {
   local out_file="$OUT/${label}-${name}-c${c}.json"
   local log_file="$OUT/${label}-${name}-c${c}.log"
 
+  local timeout=$((duration + 10))
   if [[ "$method" == "POST" ]]; then
     local body_path="$OUT/$body_file"
-    env -u NO_COLOR oha --no-tui --output-format json \
+    timeout "$timeout" env -u NO_COLOR oha --no-tui --output-format json \
       -z "${duration}s" -c "$c" $KA_FLAG \
       -d "$body_path" \
       -o "$out_file" \
       "$url" > "$log_file" 2>&1 || true
   else
-    env -u NO_COLOR oha --no-tui --output-format json \
+    timeout "$timeout" env -u NO_COLOR oha --no-tui --output-format json \
       -z "${duration}s" -c "$c" $KA_FLAG \
       -o "$out_file" \
       "$url" > "$log_file" 2>&1 || true
@@ -180,9 +195,8 @@ except: print('0')
 import json
 try:
   d=json.load(open('$out_file'))
-  s=d.get('summary',{})
-  ls=s.get('latencyStatistics',{})
-  print(f\"{ls.get('P99',0):.3f}\")
+  lp=d.get('latencyPercentiles',{})
+  print(f\"{lp.get('p99',0):.3f}\")
 except: print('0')
 " 2>/dev/null || echo "0")
 
@@ -364,8 +378,10 @@ fi
 if [[ "$RUN_HONO" == "1" ]]; then
   if ! command -v bun >/dev/null 2>&1; then
     echo "WARNING: bun not found, skipping Hono/Bun" >&2
+  elif ! start_hono_bun; then
+    echo "WARNING: Hono/Bun failed to start, skipping" >&2
+    kill_server
   else
-    start_hono_bun
     trap kill_server EXIT INT TERM
     run_warmup "$PORT_HONO" "hono-bun"
     run_all_scenarios "$PORT_HONO" "hono-bun" "$DURATION"
@@ -422,8 +438,8 @@ def load_p99(label, name, c):
     f = out / f"{label}-{name}-c{c}.json"
     try:
         d = json.loads(f.read_text())
-        ls = d.get("summary", {}).get("latencyStatistics", {})
-        return ls.get("P99", 0)
+        lp = d.get("latencyPercentiles", {})
+        return lp.get("p99", 0)
     except Exception:
         return None
 
