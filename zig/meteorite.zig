@@ -69,7 +69,23 @@ const server_limits = @import("server/request_limits.zig");
             try serve(io, .{});
         }
 
+        var global_cached_time_started = std.atomic.Value(bool).init(false);
+        var global_cached_time = std.atomic.Value(i64).init(0);
+
+        fn timerWorker(io: Io) void {
+            while (true) {
+                global_cached_time.store(Io.Timestamp.now(io, .real).toSeconds(), .release);
+                io.sleep(.{ .nanoseconds = std.time.ns_per_s }, .real) catch {};
+            }
+        }
+
         pub fn serve(io: Io, config: ListenConfig) !void {
+            if (!global_cached_time_started.swap(true, .acquire)) {
+                global_cached_time.store(Io.Timestamp.now(io, .real).toSeconds(), .release);
+                const thread = std.Thread.spawn(.{}, timerWorker, .{io}) catch unreachable;
+                thread.detach();
+            }
+
             var server = try backend.listen(.{ .host = config.host, .port = config.port, .io = io });
             defer server.deinit();
 
@@ -242,7 +258,7 @@ const server_limits = @import("server/request_limits.zig");
                 request.close_after_response = true;
                 // Cache current time for Date header in responses
                 if (@hasField(@TypeOf(request.*), "date_seconds")) {
-                    request.date_seconds = Io.Timestamp.now(io, .real).toSeconds();
+                    request.date_seconds = global_cached_time.load(.acquire);
                 }
                 serveRequest(arena, io, request) catch |err| {
                     std.debug.print("request failed for {s}: {s}\n", .{ backend.path(request), @errorName(err) });

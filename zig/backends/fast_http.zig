@@ -244,25 +244,20 @@ pub fn respondText(req: *Request, status: u16, body: []const u8) !void {
 pub fn respondBytes(req: *Request, status: u16, content_type: []const u8, body: []const u8) !void {
     const reason = proto.reasonPhrase(status);
     const connection = if (req.keep_alive) "keep-alive" else "close";
-
-    // Use heap for large responses to avoid stack buffer overflow
-    if (body.len > 6144) {
-        const date = http_date.formatHttpDate(req.date_seconds);
-        const response = try std.fmt.allocPrint(std.heap.smp_allocator, "HTTP/1.1 {d} {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\nconnection: {s}\r\ndate: {s}\r\n\r\n", .{ status, reason, content_type, body.len, connection, date });
-        defer std.heap.smp_allocator.free(response);
-        try req.writer.interface.writeAll(response);
-        try req.writer.interface.writeAll(body);
-        try req.writer.interface.flush();
-        proto.inc(&counters.requests_served);
-        proto.add(&counters.bytes_written, response.len + body.len);
-        req.close_after_response = !req.keep_alive;
-        return;
-    }
-
-    var response_buffer: [8192]u8 = undefined;
     const date = http_date.formatHttpDate(req.date_seconds);
-    const response = try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {d} {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\nconnection: {s}\r\ndate: {s}\r\n\r\n{s}", .{ status, reason, content_type, body.len, connection, date, body });
-    try writeRaw(req, response);
+
+    var header_buffer: [4096]u8 = undefined;
+    const headers = try std.fmt.bufPrint(&header_buffer, "HTTP/1.1 {d} {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\nconnection: {s}\r\ndate: {s}\r\n\r\n", .{ status, reason, content_type, body.len, connection, date });
+    
+    try req.writer.interface.writeAll(headers);
+    if (body.len > 0) {
+        try req.writer.interface.writeAll(body);
+    }
+    try req.writer.interface.flush();
+    
+    proto.inc(&counters.requests_served);
+    proto.add(&counters.bytes_written, headers.len + body.len);
+    req.close_after_response = !req.keep_alive;
 }
 
 pub fn respondStatic(req: *Request, status: u16, content_type: []const u8, content_length: u64, cache_control: []const u8, etag: []const u8, content_encoding: ?[]const u8, body: []const u8, head_only: bool) !void {

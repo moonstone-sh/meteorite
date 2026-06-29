@@ -7,6 +7,52 @@ const lua_vtable = @import("bridge/lua_vtable.zig");
 const lua_json = @import("bridge/lua_json.zig");
 const lua_http = @import("bridge/lua_http.zig");
 
+// --- Lua ABI Compatibility Shim ---
+const LuaAbi = enum {
+    lua_5_4,
+    lua_5_1,
+    unknown,
+};
+
+const lua_abi: LuaAbi = if (@hasDecl(c, "lua_pcallk")) .lua_5_4 else if (@hasDecl(c, "lua_pcall")) .lua_5_1 else .unknown;
+
+const LUA_OK = if (lua_abi == .lua_5_4) c.LUA_OK else 0;
+
+inline fn pcall(L: *c.lua_State, nargs: c_int, nresults: c_int, errfunc: c_int) c_int {
+    switch (comptime lua_abi) {
+        .lua_5_4 => return c.lua_pcallk(L, nargs, nresults, errfunc, 0, null),
+        .lua_5_1 => return c.lua_pcall(L, nargs, nresults, errfunc),
+        else => @compileError("Undefined ABI layout: " ++ @tagName(lua_abi)),
+    }
+}
+
+inline fn loadfile(L: *c.lua_State, filename: [*c]const u8) c_int {
+    switch (comptime lua_abi) {
+        .lua_5_4 => return c.luaL_loadfilex(L, filename, null),
+        .lua_5_1 => return c.luaL_loadfile(L, filename),
+        else => @compileError("Undefined ABI layout: " ++ @tagName(lua_abi)),
+    }
+}
+
+inline fn getStatusInt(L: *c.lua_State, idx: c_int, default: u16) u16 {
+    switch (comptime lua_abi) {
+        .lua_5_4 => {
+            if (c.lua_isinteger(L, idx) != 0) {
+                return @intCast(c.lua_tointegerx(L, idx, null));
+            }
+        },
+        .lua_5_1 => {
+            if (c.lua_isnumber(L, idx) != 0) {
+                return @intCast(c.lua_tointeger(L, idx));
+            }
+        },
+        else => @compileError("Undefined ABI layout: " ++ @tagName(lua_abi)),
+    }
+    return default;
+}
+// -------------------------------------------
+
+
 pub const LuaRuntimeUnavailable = struct {
     pub const lua_state_strategy = "none";
     pub const lua_handler_ref_strategy = "none";
@@ -110,13 +156,13 @@ pub const HybridLuaRuntime = struct {
 
         try setupLuaPackagePaths(L);
 
-        if (c.luaL_loadfilex(L, @ptrCast(handler.path.ptr), @as([*c]const u8, null)) != c.LUA_OK) {
+        if (loadfile(L, @ptrCast(handler.path.ptr)) != LUA_OK) {
             const err = c.lua_tolstring(L, -1, null);
             std.log.err("load handler {s}: {s}", .{ handler.path, err });
             incLua(&lua_stats.stats.lua_errors);
             return error.LuaLoadFailed;
         }
-        if (c.lua_pcallk(L, 0, 1, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
+        if (pcall(L, 0, 1, 0) != LUA_OK) {
             const err = c.lua_tolstring(L, -1, null);
             std.log.err("init handler {s}: {s}", .{ handler.path, err });
             incLua(&lua_stats.stats.lua_errors);
@@ -186,7 +232,7 @@ pub const HybridLuaRuntime = struct {
             lua_vtable.current_vtable = null;
         }
 
-        if (c.lua_pcallk(L, 1, 1, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
+        if (pcall(L, 1, 1, 0) != LUA_OK) {
             const err = c.lua_tolstring(L, -1, null);
             std.log.err("handler {s}: {s}", .{ handler.path, err });
             incLua(&lua_stats.stats.lua_errors);
@@ -195,7 +241,7 @@ pub const HybridLuaRuntime = struct {
 
         if (c.lua_istable(L, -1)) {
             _ = c.lua_getfield(L, -1, "status");
-            const status: u16 = if (c.lua_isinteger(L, -1) != 0) @intCast(c.lua_tointegerx(L, -1, @as([*c]c_int, null))) else 200;
+            const status: u16 = getStatusInt(L, -1, 200);
             c.lua_pop(L, 1);
 
             _ = c.lua_getfield(L, -1, "content_type");
@@ -242,12 +288,12 @@ pub const HybridLuaRuntime = struct {
         setupLuaPackagePaths(L) catch return false;
 
         const plugin_path = if (@hasField(@TypeOf(handler), "chunk_path")) handler.chunk_path else handler.path;
-        if (c.luaL_loadfilex(L, @ptrCast(plugin_path.ptr), @as([*c]const u8, null)) != c.LUA_OK) {
+        if (loadfile(L, @ptrCast(plugin_path.ptr)) != LUA_OK) {
             std.log.err("load plugin {s}: {s}", .{ plugin_path, c.lua_tolstring(L, -1, null) });
             incLua(&lua_stats.stats.lua_errors);
             return false;
         }
-        if (c.lua_pcallk(L, 0, 1, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
+        if (pcall(L, 0, 1, 0) != LUA_OK) {
             std.log.err("init plugin {s}: {s}", .{ plugin_path, c.lua_tolstring(L, -1, null) });
             incLua(&lua_stats.stats.lua_errors);
             return false;
@@ -316,7 +362,7 @@ pub const HybridLuaRuntime = struct {
             lua_vtable.current_vtable = null;
         }
 
-        if (c.lua_pcallk(L, 1, 1, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
+        if (pcall(L, 1, 1, 0) != LUA_OK) {
             std.log.err("plugin {s}: {s}", .{ plugin_path, c.lua_tolstring(L, -1, null) });
             incLua(&lua_stats.stats.lua_errors);
             return false;
@@ -324,7 +370,7 @@ pub const HybridLuaRuntime = struct {
 
         if (c.lua_istable(L, -1)) {
             _ = c.lua_getfield(L, -1, "status");
-            const status: u16 = if (c.lua_isinteger(L, -1) != 0) @intCast(c.lua_tointegerx(L, -1, @as([*c]c_int, null))) else 200;
+            const status: u16 = getStatusInt(L, -1, 200);
             c.lua_pop(L, 1);
             _ = c.lua_getfield(L, -1, "content_type");
             _ = c.lua_getfield(L, -2, "body");
@@ -444,12 +490,12 @@ pub const CachedHybridRuntime = struct {
 
     fn loadHandlerRef(comptime idx: usize, comptime handler: graph_cached.InlineLuaHandler, comptime replace: bool) !void {
         if (replace) c.luaL_unref(L.?, c.LUA_REGISTRYINDEX, refs[idx]);
-        if (c.luaL_loadfilex(L.?, @ptrCast(handler.chunk_path.ptr), @as([*c]const u8, null)) != c.LUA_OK) {
+        if (loadfile(L.?, @ptrCast(handler.chunk_path.ptr)) != LUA_OK) {
             std.log.err("cached load handler {s}: {s}", .{ handler.chunk_path, c.lua_tolstring(L.?, -1, null) });
             incLua(&lua_stats.stats.lua_errors);
             return error.LuaLoadFailed;
         }
-        if (c.lua_pcallk(L.?, 0, 1, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
+        if (pcall(L.?, 0, 1, 0) != LUA_OK) {
             std.log.err("cached init handler {s}: {s}", .{ handler.chunk_path, c.lua_tolstring(L.?, -1, null) });
             incLua(&lua_stats.stats.lua_errors);
             return error.LuaRuntimeError;
@@ -537,7 +583,7 @@ pub const CachedHybridRuntime = struct {
             lua_vtable.current_vtable = null;
         }
 
-        if (c.lua_pcallk(L2, 1, 1, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
+        if (pcall(L2, 1, 1, 0) != LUA_OK) {
             const err = c.lua_tolstring(L2, -1, null);
             std.log.err("cached handler {s}: {s}", .{ handler.id, err });
             incLua(&lua_stats.stats.lua_errors);
@@ -546,7 +592,7 @@ pub const CachedHybridRuntime = struct {
 
         if (c.lua_istable(L2, -1)) {
             _ = c.lua_getfield(L2, -1, "status");
-            const status: u16 = if (c.lua_isinteger(L2, -1) != 0) @intCast(c.lua_tointegerx(L2, -1, @as([*c]c_int, null))) else 200;
+            const status: u16 = getStatusInt(L2, -1, 200);
             c.lua_pop(L2, 1);
 
             _ = c.lua_getfield(L2, -1, "content_type");
@@ -586,12 +632,12 @@ pub const CachedHybridRuntime = struct {
         const L2 = L.?;
 
         const plugin_path = if (@hasField(@TypeOf(handler), "chunk_path")) handler.chunk_path else handler.path;
-        if (c.luaL_loadfilex(L2, @ptrCast(plugin_path.ptr), @as([*c]const u8, null)) != c.LUA_OK) {
+        if (loadfile(L2, @ptrCast(plugin_path.ptr)) != LUA_OK) {
             std.log.err("cached load plugin {s}: {s}", .{ plugin_path, c.lua_tolstring(L2, -1, null) });
             incLua(&lua_stats.stats.lua_errors);
             return false;
         }
-        if (c.lua_pcallk(L2, 0, 1, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
+        if (pcall(L2, 0, 1, 0) != LUA_OK) {
             std.log.err("cached init plugin {s}: {s}", .{ plugin_path, c.lua_tolstring(L2, -1, null) });
             incLua(&lua_stats.stats.lua_errors);
             return false;
@@ -660,7 +706,7 @@ pub const CachedHybridRuntime = struct {
             lua_vtable.current_vtable = null;
         }
 
-        if (c.lua_pcallk(L2, 1, 1, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
+        if (pcall(L2, 1, 1, 0) != LUA_OK) {
             std.log.err("cached plugin {s}: {s}", .{ plugin_path, c.lua_tolstring(L2, -1, null) });
             incLua(&lua_stats.stats.lua_errors);
             return false;
@@ -668,7 +714,7 @@ pub const CachedHybridRuntime = struct {
 
         if (c.lua_istable(L2, -1)) {
             _ = c.lua_getfield(L2, -1, "status");
-            const status: u16 = if (c.lua_isinteger(L2, -1) != 0) @intCast(c.lua_tointegerx(L2, -1, @as([*c]c_int, null))) else 200;
+            const status: u16 = getStatusInt(L2, -1, 200);
             c.lua_pop(L2, 1);
             _ = c.lua_getfield(L2, -1, "content_type");
             _ = c.lua_getfield(L2, -2, "body");
