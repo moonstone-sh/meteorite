@@ -391,6 +391,36 @@ if [[ "$RUN_HONO" == "1" ]]; then
   fi
 fi
 
+# --- Meteorite Static ---
+if [[ "$RUN_STATIC" == "1" ]]; then
+  build_meteorite "release-static" "static"
+  start_meteorite
+  if wait_for_server "$PORT_METEORITE" "Meteorite"; then
+    trap kill_server EXIT INT TERM HUP
+    run_warmup "$PORT_METEORITE" "meteorite-static"
+    run_all_scenarios "$PORT_METEORITE" "meteorite-static" "$DURATION"
+    curl -fsS "http://$HOST:$PORT_METEORITE/__bench/counters" > "$OUT/meteorite-static-counters.json" 2>/dev/null || true
+  else
+    echo "WARNING: Meteorite static failed to start" >&2
+  fi
+  kill_server
+fi
+
+# --- Meteorite Hybrid ---
+if [[ "$RUN_HYBRID" == "1" ]]; then
+  build_meteorite "release-hybrid" "hybrid"
+  start_meteorite
+  if wait_for_server "$PORT_METEORITE" "Meteorite"; then
+    trap kill_server EXIT INT TERM HUP
+    run_warmup "$PORT_METEORITE" "meteorite-hybrid"
+    run_all_scenarios "$PORT_METEORITE" "meteorite-hybrid" "$DURATION"
+    curl -fsS "http://$HOST:$PORT_METEORITE/__bench/counters" > "$OUT/meteorite-hybrid-counters.json" 2>/dev/null || true
+  else
+    echo "WARNING: Meteorite hybrid failed to start" >&2
+  fi
+  kill_server
+fi
+
 # ============================================================
 # Generate comparison table
 # ============================================================
