@@ -524,9 +524,44 @@ function graph_emit.route_module_content(route)
     lines[#lines + 1] = "            .{ .key = " .. helpers.zig_string(item.key) .. ", .value = " .. helpers.zig_string(item.value) .. " },"
   end
   lines[#lines + 1] = "        };"
+  -- Pipeline stages (inside the data struct)
+  if route.pipeline and #route.pipeline > 0 then
+    lines[#lines + 1] = "        const pipeline = [_]graph.PipelineStage{"
+    for _, stage in ipairs(route.pipeline) do
+      local stage_fields = { '.id = ' .. helpers.zig_string(stage.id or "") }
+      stage_fields[#stage_fields + 1] = '.kind = .' .. (stage.kind or "handle")
+      stage_fields[#stage_fields + 1] = '.strat = .' .. (stage.strat or "inline_lua")
+      if stage.path then stage_fields[#stage_fields + 1] = '.path = ' .. helpers.zig_string(stage.path) end
+      if stage.symbol then stage_fields[#stage_fields + 1] = '.symbol = ' .. helpers.zig_string(stage.symbol) end
+      stage_fields[#stage_fields + 1] = '.may_short_circuit = ' .. tostring(stage.may_short_circuit ~= false)
+      if stage.owner then stage_fields[#stage_fields + 1] = '.owner = ' .. helpers.zig_string(stage.owner) end
+      lines[#lines + 1] = "            .{ " .. table.concat(stage_fields, ", ") .. " },"
+    end
+    lines[#lines + 1] = "        };"
+  else
+    lines[#lines + 1] = "        const pipeline = [_]graph.PipelineStage{};"
+  end
   lines[#lines + 1] = "    };"
   local scope_zig = graph_emit.route_scope_zig(route.scope)
-  lines[#lines + 1] = "    return .{ .id = " .. helpers.zig_string(route.id) .. ", .method = ." .. route.method .. ", .raw_path = " .. helpers.zig_string(route.raw_path) .. ", .path = &data.segments, .params = &data.params, .query = &data.query, .memory = " .. graph_emit.route_memory_zig(route) .. ", .max_body_bytes = " .. route.memory.max_body_bytes .. ", .request_arena_bytes = " .. route.memory.request_arena_bytes .. ", .handler = " .. graph_emit.route_handler_zig(route) .. ", .runtime = " .. graph_emit.route_runtime_zig(route) .. ", .execution = " .. graph_emit.route_execution_zig(route) .. ", .capabilities = &data.capabilities, .scope = " .. scope_zig .. " };"
+    local pipeline_zig = ".{}"
+  if route.pipeline and #route.pipeline > 0 then
+    local stage_lines = { ".{" }
+    for _, stage in ipairs(route.pipeline) do
+      local stage_fields = {
+        ".id = " .. helpers.zig_string(stage.id or ""),
+        ".kind = ." .. (stage.kind or "handle"),
+        ".strat = ." .. (stage.strat or "inline_lua"),
+        ".may_short_circuit = " .. tostring(stage.may_short_circuit ~= false),
+      }
+      if stage.path then stage_fields[#stage_fields + 1] = ".path = " .. helpers.zig_string(stage.path) end
+      if stage.symbol then stage_fields[#stage.fields or {}] = ".symbol = " .. helpers.zig_string(stage.symbol) end
+      if stage.owner then stage_fields[#stage_fields + 1] = ".owner = " .. helpers.zig_string(stage.owner) end
+      stage_lines[#stage_lines + 1] = "        .{ " .. table.concat(stage_fields, ", ") .. " },"
+    end
+    stage_lines[#stage_lines + 1] = "    }"
+    pipeline_zig = table.concat(stage_lines, "\n")
+  end
+  lines[#lines + 1] = "    return .{ .id = " .. helpers.zig_string(route.id) .. ", .method = ." .. route.method .. ", .raw_path = " .. helpers.zig_string(route.raw_path) .. ", .path = &data.segments, .params = &data.params, .query = &data.query, .memory = " .. graph_emit.route_memory_zig(route) .. ", .max_body_bytes = " .. route.memory.max_body_bytes .. ", .request_arena_bytes = " .. route.memory.request_arena_bytes .. ", .handler = " .. graph_emit.route_handler_zig(route) .. ", .pipeline = &data.pipeline, .runtime = " .. graph_emit.route_runtime_zig(route) .. ", .execution = " .. graph_emit.route_execution_zig(route) .. ", .capabilities = &data.capabilities, .scope = " .. scope_zig .. " };"
   lines[#lines + 1] = "}"
   return table.concat(lines, "\n") .. "\n"
 end
@@ -579,6 +614,9 @@ function graph_emit.emit_graph_zig(graph, output)
     "pub const StaticAsset = struct { request_path: []const u8, artifact_path: []const u8, content_type: []const u8, content_length: u64, etag: []const u8, cache_control: []const u8, compressed_br_path: ?[]const u8 = null, compressed_br_length: u64 = 0, compressed_br_etag: ?[]const u8 = null, compressed_gzip_path: ?[]const u8 = null, compressed_gzip_length: u64 = 0, compressed_gzip_etag: ?[]const u8 = null };",
     "pub const DirHandler = struct { mount_root: []const u8, param_name: []const u8, manifest: []const StaticAsset, cache_control: []const u8, immutable: bool = false };",
     "pub const Handler = union(enum) { zig_symbol: ZigSymbolHandler, zig_file: ZigFileHandler, lua_file: LuaFileHandler, inline_lua: InlineLuaHandler, file: FileHandler, dir: DirHandler };",
+    "pub const StageKind = enum { transform, handle, hook };",
+    "pub const StageStrat = enum { inline_lua, lua, zig, rust };",
+    "pub const PipelineStage = struct { id: []const u8 = \"\", kind: StageKind = .handle, strat: StageStrat = .inline_lua, path: []const u8 = \"\", symbol: []const u8 = \"\", may_short_circuit: bool = true, owner: []const u8 = \"\" };",
     "pub const ExecutionClass = enum { default, lua, blocking_io, cpu };",
     "pub const RouteRuntime = struct { requires_lua: bool = false, requires_http: bool = false, requires_auth: bool = false, requires_zig_capability: bool = false, execution_class: ExecutionClass = .default };",
     "pub const RouteExecution = struct { class: ExecutionClass = .default, may_block: bool = false, requires_lua: bool = false, requires_worker_pool: bool = false };",
@@ -596,7 +634,7 @@ function graph_emit.emit_graph_zig(graph, output)
     "pub const RouteScope = struct { id: []const u8 = \"root\", parent: []const u8 = \"\", path_prefix: []const u8 = \"\", chain: []const ScopeRef = &.{}, plugins: []const []const u8 = &.{}, context: []const ScopeContextRef = &.{} };",
     "pub const PluginHandler = union(enum) { inline_lua: InlineLuaHandler, lua_file: LuaFileHandler, zig_symbol: ZigSymbolHandler, none };",
     "pub const PluginDescriptor = struct { id: []const u8, kind: []const u8, handler: PluginHandler = .none };",
-    "pub const Route = struct { id: []const u8, method: Method, raw_path: []const u8, path: []const Segment, params: []const ParamSpec, query: []const ParamSpec, memory: RouteMemory, max_body_bytes: usize, request_arena_bytes: usize, handler: Handler, runtime: RouteRuntime = .{}, execution: RouteExecution = .{}, capabilities: []const CapabilityRef = &.{}, scope: RouteScope = .{} };",
+    "pub const Route = struct { id: []const u8, method: Method, raw_path: []const u8, path: []const Segment, params: []const ParamSpec, query: []const ParamSpec, memory: RouteMemory, max_body_bytes: usize, request_arena_bytes: usize, handler: Handler, pipeline: []const PipelineStage = &.{}, runtime: RouteRuntime = .{}, execution: RouteExecution = .{}, capabilities: []const CapabilityRef = &.{}, scope: RouteScope = .{} };",
     "",
   }
   graph_emit.emit_pattern_tables(graph, lines, output)

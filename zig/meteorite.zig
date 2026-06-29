@@ -389,12 +389,60 @@ const server_limits = @import("server/request_limits.zig");
             if (!try enforceBodyLimit(allocator, request, route)) return true;
             var ctx = Context{ .allocator = allocator, .io = io, .request = request, .captures = captures, .route = route };
             if (try executeScopePlugins(route, &ctx)) return true;
-            switch (route.handler) {
-                .zig_symbol, .zig_file => try graph.bindings.callRoute(route.id, &ctx),
-                .inline_lua => |handler| try callLuaHandler(handler, &ctx),
-                .lua_file => |handler| try callLuaHandler(handler, &ctx),
-                .file => |handler| try serveFileHandler(handler, allocator, io, request),
-                .dir => |handler| try serveDirHandler(handler, allocator, io, request, captures),
+            // If route has a pipeline, execute stages in order.
+            // For v0.1, pipeline stages use the same handler infrastructure.
+            // The last handle stage is the primary response producer.
+            if (route.pipeline.len > 0) {
+                for (route.pipeline) |stage| {
+                    switch (stage.strat) {
+                        .inline_lua => {
+                            // Inline Lua stages use the same bridge as handlers
+                            // For transforms, we need a separate call path — but
+                            // for v0.1, all inline_lua stages use the handler's fn_ref
+                            // which is stored in the route's handler field.
+                            // Transforms that don't produce a response continue;
+                            // handle stages produce the response.
+                            if (stage.kind == .handle) {
+                                switch (route.handler) {
+                                    .inline_lua => |handler| try callLuaHandler(handler, &ctx),
+                                    .lua_file => |handler| try callLuaHandler(handler, &ctx),
+                                    else => {},
+                                }
+                            }
+                            // Transform stages are a no-op in v0.1 runtime —
+                            // they're graph-visible but execution is stubbed
+                            // until the full pipeline executor is implemented.
+                        },
+                        .lua => {
+                            // External Lua stages — same as inline_lua for now
+                            if (stage.kind == .handle) {
+                                switch (route.handler) {
+                                    .inline_lua => |handler| try callLuaHandler(handler, &ctx),
+                                    .lua_file => |handler| try callLuaHandler(handler, &ctx),
+                                    else => {},
+                                }
+                            }
+                        },
+                        .zig => {
+                            // Zig stages call graph bindings
+                            if (stage.kind == .handle) {
+                                try graph.bindings.callRoute(route.id, &ctx);
+                            }
+                            // Zig transform stages are stubbed in v0.1
+                        },
+                        .rust => {
+                            // Rust stages are not supported
+                        },
+                    }
+                }
+            } else {
+                switch (route.handler) {
+                    .zig_symbol, .zig_file => try graph.bindings.callRoute(route.id, &ctx),
+                    .inline_lua => |handler| try callLuaHandler(handler, &ctx),
+                    .lua_file => |handler| try callLuaHandler(handler, &ctx),
+                    .file => |handler| try serveFileHandler(handler, allocator, io, request),
+                    .dir => |handler| try serveDirHandler(handler, allocator, io, request, captures),
+                }
             }
             return true;
         }

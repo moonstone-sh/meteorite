@@ -19,6 +19,9 @@ pub const FileHandler = struct { artifact_path: []const u8, content_type: []cons
 pub const StaticAsset = struct { request_path: []const u8, artifact_path: []const u8, content_type: []const u8, content_length: u64, etag: []const u8, cache_control: []const u8, compressed_br_path: ?[]const u8 = null, compressed_br_length: u64 = 0, compressed_br_etag: ?[]const u8 = null, compressed_gzip_path: ?[]const u8 = null, compressed_gzip_length: u64 = 0, compressed_gzip_etag: ?[]const u8 = null };
 pub const DirHandler = struct { mount_root: []const u8, param_name: []const u8, manifest: []const StaticAsset, cache_control: []const u8, immutable: bool = false };
 pub const Handler = union(enum) { zig_symbol: ZigSymbolHandler, zig_file: ZigFileHandler, lua_file: LuaFileHandler, inline_lua: InlineLuaHandler, file: FileHandler, dir: DirHandler };
+pub const StageKind = enum { transform, handle, hook };
+pub const StageStrat = enum { inline_lua, lua, zig, rust };
+pub const PipelineStage = struct { id: []const u8 = "", kind: StageKind = .handle, strat: StageStrat = .inline_lua, path: []const u8 = "", symbol: []const u8 = "", may_short_circuit: bool = true, owner: []const u8 = "" };
 pub const ExecutionClass = enum { default, lua, blocking_io, cpu };
 pub const RouteRuntime = struct { requires_lua: bool = false, requires_http: bool = false, requires_auth: bool = false, requires_zig_capability: bool = false, execution_class: ExecutionClass = .default };
 pub const RouteExecution = struct { class: ExecutionClass = .default, may_block: bool = false, requires_lua: bool = false, requires_worker_pool: bool = false };
@@ -36,7 +39,7 @@ pub const ScopeContextRef = struct { key: []const u8, value: []const u8 };
 pub const RouteScope = struct { id: []const u8 = "root", parent: []const u8 = "", path_prefix: []const u8 = "", chain: []const ScopeRef = &.{}, plugins: []const []const u8 = &.{}, context: []const ScopeContextRef = &.{} };
 pub const PluginHandler = union(enum) { inline_lua: InlineLuaHandler, lua_file: LuaFileHandler, zig_symbol: ZigSymbolHandler, none };
 pub const PluginDescriptor = struct { id: []const u8, kind: []const u8, handler: PluginHandler = .none };
-pub const Route = struct { id: []const u8, method: Method, raw_path: []const u8, path: []const Segment, params: []const ParamSpec, query: []const ParamSpec, memory: RouteMemory, max_body_bytes: usize, request_arena_bytes: usize, handler: Handler, runtime: RouteRuntime = .{}, execution: RouteExecution = .{}, capabilities: []const CapabilityRef = &.{}, scope: RouteScope = .{} };
+pub const Route = struct { id: []const u8, method: Method, raw_path: []const u8, path: []const Segment, params: []const ParamSpec, query: []const ParamSpec, memory: RouteMemory, max_body_bytes: usize, request_arena_bytes: usize, handler: Handler, pipeline: []const PipelineStage = &.{}, runtime: RouteRuntime = .{}, execution: RouteExecution = .{}, capabilities: []const CapabilityRef = &.{}, scope: RouteScope = .{} };
 
 pub const PatternId = enum { none,
     pattern_1,
