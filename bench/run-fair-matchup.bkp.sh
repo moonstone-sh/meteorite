@@ -43,12 +43,11 @@ PORT_METEORITE=8080
 PORT_HONO=8081
 DURATION="10"
 WARMUP="3"
-CONCURRENCY="1,4,16,64,256,512,1024"
+CONCURRENCY="1,4,16,64,256,512"
 OUT=""
 KEEPALIVE="on"
 BACKEND="fast_http"
 FAST_HTTP_STRATEGY="pool"
-TOOL="oha"
 RUN_STATIC=1
 RUN_HYBRID=1
 RUN_HONO=1
@@ -83,10 +82,6 @@ while [[ $# -gt 0 ]]; do
     FAST_HTTP_STRATEGY="${2:?}"
     shift 2
     ;;
-  --tool)
-    TOOL="${2:?}"
-    shift 2
-    ;;
   --static-only)
     RUN_HYBRID=0
     shift
@@ -110,11 +105,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "$TOOL" == "oha" ]] && ! command -v oha >/dev/null 2>&1; then
+if ! command -v oha >/dev/null 2>&1; then
   echo "error: oha is required" >&2
-  exit 1
-elif [[ "$TOOL" == "wrk" ]] && ! command -v wrk >/dev/null 2>&1; then
-  echo "error: wrk is required" >&2
   exit 1
 fi
 
@@ -233,57 +225,18 @@ run_scenario() {
   local out_file="$OUT/${label}-${name}-c${c}.json"
   local log_file="$OUT/${label}-${name}-c${c}.log"
 
-  if [[ "$TOOL" == "oha" ]]; then
-    if [[ "$method" == "POST" ]]; then
-      local body_path="$OUT/$body_file"
-      env -u NO_COLOR oha --no-tui --output-format json \
-        -z "${duration}s" -c "$c" $KA_FLAG \
-        -d "$body_path" \
-        -o "$out_file" \
-        "$url" >"$log_file" 2>&1 || true
-    else
-      env -u NO_COLOR oha --no-tui --output-format json \
-        -z "${duration}s" -c "$c" $KA_FLAG \
-        -o "$out_file" \
-        "$url" >"$log_file" 2>&1 || true
-    fi
-  elif [[ "$TOOL" == "wrk" ]]; then
-    local script_file="$OUT/wrk-${label}-${name}.lua"
-    if [[ "$method" == "POST" ]]; then
-      local body_path="$OUT/$body_file"
-      cat <<EOF >"$script_file"
-wrk.method = "POST"
-wrk.body = io.open("$body_path"):read("*a")
-done = function(summary, latency, requests)
-   io.write(string.format('{"summary": {"requestsPerSec": %f, "slowest": %f}, "latencyPercentiles": {"p50": %f, "p90": %f, "p99": %f, "p99.9": %f}, "errorDistribution": {"errors": %d}}\n',
-      summary.requests / (summary.duration / 1000000),
-      latency.max/1000000,
-      latency:percentile(50)/1000000,
-      latency:percentile(90)/1000000,
-      latency:percentile(99)/1000000,
-      latency:percentile(99.9)/1000000,
-      summary.errors.connect + summary.errors.read + summary.errors.write + summary.errors.status + summary.errors.timeout))
-end
-EOF
-    else
-      cat <<EOF >"$script_file"
-done = function(summary, latency, requests)
-   io.write(string.format('{"summary": {"requestsPerSec": %f, "slowest": %f}, "latencyPercentiles": {"p50": %f, "p90": %f, "p99": %f, "p99.9": %f}, "errorDistribution": {"errors": %d}}\n',
-      summary.requests / (summary.duration / 1000000),
-      latency.max/1000000,
-      latency:percentile(50)/1000000,
-      latency:percentile(90)/1000000,
-      latency:percentile(99)/1000000,
-      latency:percentile(99.9)/1000000,
-      summary.errors.connect + summary.errors.read + summary.errors.write + summary.errors.status + summary.errors.timeout))
-end
-EOF
-    fi
-
-    local threads=4
-    if ((c < 4)); then threads=$c; fi
-    env -u NO_COLOR wrk -t $threads -c "$c" -d "${duration}s" -s "$script_file" "$url" >"$log_file" 2>&1 || true
-    grep '{"summary":' "$log_file" >"$out_file" || echo "{}" >"$out_file"
+  if [[ "$method" == "POST" ]]; then
+    local body_path="$OUT/$body_file"
+    env -u NO_COLOR oha --no-tui --output-format json \
+      -z "${duration}s" -c "$c" $KA_FLAG \
+      -d "$body_path" \
+      -o "$out_file" \
+      "$url" >"$log_file" 2>&1 || true
+  else
+    env -u NO_COLOR oha --no-tui --output-format json \
+      -z "${duration}s" -c "$c" $KA_FLAG \
+      -o "$out_file" \
+      "$url" >"$log_file" 2>&1 || true
   fi
 
   # Extract RPS and latency
@@ -315,15 +268,10 @@ run_warmup() {
   for _ in $(seq 1 3); do
     curl -fsS "http://$HOST:$port/health" >/dev/null 2>&1 || true
   done
-  if [[ "$TOOL" == "oha" ]]; then
-    env -u NO_COLOR oha --no-tui -z "${WARMUP}s" -c 64 \
-      "http://$HOST:$port/health" >/dev/null 2>&1 || true
-    env -u NO_COLOR oha --no-tui -z "${WARMUP}s" -c 64 \
-      "http://$HOST:$port/__bench/plain" >/dev/null 2>&1 || true
-  elif [[ "$TOOL" == "wrk" ]]; then
-    env -u NO_COLOR wrk -t 4 -c 64 -d "${WARMUP}s" "http://$HOST:$port/health" >/dev/null 2>&1 || true
-    env -u NO_COLOR wrk -t 4 -c 64 -d "${WARMUP}s" "http://$HOST:$port/__bench/plain" >/dev/null 2>&1 || true
-  fi
+  env -u NO_COLOR oha --no-tui -z "${WARMUP}s" -c 64 \
+    "http://$HOST:$port/health" >/dev/null 2>&1 || true
+  env -u NO_COLOR oha --no-tui -z "${WARMUP}s" -c 64 \
+    "http://$HOST:$port/__bench/plain" >/dev/null 2>&1 || true
 }
 
 run_all_scenarios() {
@@ -392,12 +340,6 @@ start_meteorite() {
     ./dist/server >"$OUT/meteorite-server.log" 2>&1 &
   SERVER_PID=$!
   register_pid "$SERVER_PID"
-  rm -f "$OUT/meteorite-${1}-stats.log"
-  (while kill -0 "$SERVER_PID" 2>/dev/null; do
-    ps -p "$SERVER_PID" -o %cpu,rss | tail -1 >>"$OUT/meteorite-${1}-stats.log"
-    sleep 1
-  done) &
-  register_pid $!
 }
 
 start_hono_bun() {
@@ -407,12 +349,6 @@ start_hono_bun() {
     bun server.ts --port="$PORT_HONO" >"$OUT/hono-server.log" 2>&1 &
   SERVER_PID=$!
   register_pid "$SERVER_PID"
-  rm -f "$OUT/hono-bun-stats.log"
-  (while kill -0 "$SERVER_PID" 2>/dev/null; do
-    ps -p "$SERVER_PID" -o %cpu,rss | tail -1 >>"$OUT/hono-bun-stats.log"
-    sleep 1
-  done) &
-  register_pid $!
 }
 
 # ============================================================
@@ -496,7 +432,7 @@ fi
 # --- Meteorite Static ---
 if [[ "$RUN_STATIC" == "1" ]]; then
   build_meteorite "release-static" "static"
-  start_meteorite "static"
+  start_meteorite
   if wait_for_server "$PORT_METEORITE" "Meteorite"; then
     trap kill_server EXIT INT TERM HUP
     run_warmup "$PORT_METEORITE" "meteorite-static"
@@ -511,7 +447,7 @@ fi
 # --- Meteorite Hybrid ---
 if [[ "$RUN_HYBRID" == "1" ]]; then
   build_meteorite "release-hybrid" "hybrid"
-  start_meteorite "hybrid"
+  start_meteorite
   if wait_for_server "$PORT_METEORITE" "Meteorite"; then
     trap kill_server EXIT INT TERM HUP
     run_warmup "$PORT_METEORITE" "meteorite-hybrid"
@@ -626,137 +562,6 @@ for name, method, path in scenarios:
             else:
                 row += f" {'—':>12s}"
     print(row)
-
-
-def load_errors(label, name, c):
-    f = out / f"{label}-{name}-c{c}.json"
-    try:
-        d = json.loads(f.read_text())
-        ed = d.get("errorDistribution", {})
-        if "errors" in ed:
-            return ed["errors"]
-        return sum(ed.values())
-    except Exception:
-        return None
-
-def load_stat(label, stat):
-    log = out / f"{label}-stats.log"
-    try:
-        lines = log.read_text().strip().split('\n')
-        vals = [float(l.split()[stat]) for l in lines if len(l.split()) >= 2 and l.split()[0].replace('.','',1).isdigit()]
-        if not vals: return 0
-        return sum(vals)/len(vals) if stat == 0 else max(vals)/1024 # max RSS in MB
-    except Exception:
-        return 0
-
-# Print p50 Latency
-print()
-print("=== p50 Latency (ms) ===")
-print()
-header = f"{'scenario':<28s}"
-for c in concurrency:
-    for label in labels:
-        short = label.replace("meteorite-", "m-").replace("hono-bun", "hono")
-        header += f" {short}-c{c:>10}"
-print(header)
-print("-" * len(header))
-
-for name, method, path in scenarios:
-    row = f"{name:<28s}"
-    for c in concurrency:
-        for label in labels:
-            f = out / f"{label}-{name}-c{c}.json"
-            try:
-                d = json.loads(f.read_text())
-                val = d.get("latencyPercentiles", {}).get("p50", 0)
-                row += f" {val * 1000:>12.3f}"
-            except Exception:
-                row += f" {'—':>12s}"
-    print(row)
-
-# Print p99.9 Latency
-print()
-print("=== p99.9 Latency (ms) ===")
-print()
-header = f"{'scenario':<28s}"
-for c in concurrency:
-    for label in labels:
-        short = label.replace("meteorite-", "m-").replace("hono-bun", "hono")
-        header += f" {short}-c{c:>10}"
-print(header)
-print("-" * len(header))
-
-for name, method, path in scenarios:
-    row = f"{name:<28s}"
-    for c in concurrency:
-        for label in labels:
-            f = out / f"{label}-{name}-c{c}.json"
-            try:
-                d = json.loads(f.read_text())
-                val = d.get("latencyPercentiles", {}).get("p99.9", 0)
-                row += f" {val * 1000:>12.3f}"
-            except Exception:
-                row += f" {'—':>12s}"
-    print(row)
-
-# Print Max Latency
-print()
-print("=== Max Latency (ms) ===")
-print()
-header = f"{'scenario':<28s}"
-for c in concurrency:
-    for label in labels:
-        short = label.replace("meteorite-", "m-").replace("hono-bun", "hono")
-        header += f" {short}-c{c:>10}"
-print(header)
-print("-" * len(header))
-
-for name, method, path in scenarios:
-    row = f"{name:<28s}"
-    for c in concurrency:
-        for label in labels:
-            f = out / f"{label}-{name}-c{c}.json"
-            try:
-                d = json.loads(f.read_text())
-                val = d.get("summary", {}).get("slowest", 0)
-                row += f" {val * 1000:>12.3f}"
-            except Exception:
-                row += f" {'—':>12s}"
-    print(row)
-
-# Print Errors
-print()
-print("=== Errors / Timeouts ===")
-print()
-header = f"{'scenario':<28s}"
-for c in concurrency:
-    for label in labels:
-        short = label.replace("meteorite-", "m-").replace("hono-bun", "hono")
-        header += f" {short}-c{c:>10}"
-print(header)
-print("-" * len(header))
-
-for name, method, path in scenarios:
-    row = f"{name:<28s}"
-    for c in concurrency:
-        for label in labels:
-            err = load_errors(label, name, c)
-            if err is not None:
-                row += f" {err:>12d}"
-            else:
-                row += f" {'—':>12s}"
-    print(row)
-
-# Print Server Stats
-print()
-print("=== Server Resource Usage ===")
-print()
-print(f"{'Server':<28s} {'Avg CPU %':>12s} {'Max RSS (MB)':>16s}")
-print("-" * 58)
-for label in labels:
-    avg_cpu = load_stat(label, 0)
-    max_rss = load_stat(label, 1)
-    print(f"{label:<28s} {avg_cpu:>12.1f} {max_rss:>16.1f}")
 
 # Print ratios vs Hono/Bun
 if "hono-bun" in labels and any((out / f"hono-bun-{name}-c{c}.json").exists() for name, _, _ in scenarios for c in concurrency):

@@ -23,7 +23,32 @@ fn enterReleaseRoot(init: std.process.Init) !void {
     try std.Io.Threaded.chdir(exe_dir);
 }
 
-const LuaRuntime = if (std.mem.eql(u8, build_info.hybrid_profile, "optimized"))
+const requires_lua = blk: {
+    var req = false;
+    for (graph.routes) |r| {
+        if (r.runtime.requires_lua) req = true;
+        switch (r.handler) {
+            .inline_lua, .lua_file => req = true,
+            else => {},
+        }
+        for (r.pipeline) |stage| {
+            if (stage.strat == .inline_lua or stage.strat == .lua) req = true;
+        }
+    }
+    for (graph.plugins) |p| {
+        switch (p.handler) {
+            .inline_lua, .lua_file => req = true,
+            else => {},
+        }
+    }
+    break :blk req;
+};
+
+const final_requires_lua = requires_lua or build_info.lua_runtime;
+
+const LuaRuntime = if (!final_requires_lua)
+    bridge.LuaRuntimeUnavailable
+else if (std.mem.eql(u8, build_info.hybrid_profile, "optimized"))
     bridge.CachedHybridRuntime
 else
     bridge.HybridLuaRuntime;

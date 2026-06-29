@@ -32,5 +32,5 @@ app.get('/hybrid-inline', (c) => c.text('ok'))
 
 const portArg = process.argv.find((a) => a.startsWith('--port='))
 const port = portArg ? Number(portArg.slice('--port='.length)) : 8081
-Bun.serve({ port, fetch: app.fetch, hostname: '127.0.0.1' })
+Bun.serve({ port, fetch: app.fetch, hostname: '127.0.0.1', reusePort: true })
 console.log(`Hono Bun listening on http://127.0.0.1:${port}`)

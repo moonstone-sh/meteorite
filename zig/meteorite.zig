@@ -630,10 +630,7 @@ const server_limits = @import("server/request_limits.zig");
         }
 
         fn graphRequiresLua() bool {
-            inline for (graph.routes) |route| {
-                if (route.runtime.requires_lua) return true;
-            }
-            return false;
+            return !std.mem.eql(u8, lua_runtime.lua_state_strategy, "none");
         }
 
         fn countHandlers(comptime tag: std.meta.Tag(graph.Handler)) usize {
