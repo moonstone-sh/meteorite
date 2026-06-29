@@ -454,7 +454,7 @@ header = f"{'scenario':<28s}"
 for c in concurrency:
     for label in labels:
         short = label.replace("meteorite-", "m-").replace("hono-bun", "hono")
-        header += f" {short}-c{c:>10s}"
+        header += f" {short}-c{c:>10}"
 print(header)
 print("-" * len(header))
 
@@ -477,7 +477,7 @@ header = f"{'scenario':<28s}"
 for c in concurrency:
     for label in labels:
         short = label.replace("meteorite-", "m-").replace("hono-bun", "hono")
-        header += f" {short}-c{c:>10s}"
+        header += f" {short}-c{c:>10}"
 print(header)
 print("-" * len(header))
 
@@ -632,7 +632,7 @@ header = f"{'scenario':<28s}"
 for c in concurrency:
     for label in labels:
         short = label.replace("meteorite-", "m-").replace("hono-bun", "hono")
-        header += f" {short}-c{c:>10s}"
+        header += f" {short}-c{c:>10}"
 print(header)
 print("-" * len(header))
 
@@ -655,7 +655,7 @@ header = f"{'scenario':<28s}"
 for c in concurrency:
     for label in labels:
         short = label.replace("meteorite-", "m-").replace("hono-bun", "hono")
-        header += f" {short}-c{c:>10s}"
+        header += f" {short}-c{c:>10}"
 print(header)
 print("-" * len(header))
 
