@@ -228,17 +228,23 @@ graph-readable contract. See `src/core/contract.lua` for the implementation.
 
 ### Still pending
 
-- [ ] Transformer semantics: runtime execution model for pipeline stages
-- [ ] Handler semantics: pipeline with no explicit handler, transform-only pipeline
+- [x] Transformer semantics: runtime execution model (pipeline executor in meteorite.zig, transform stages stubbed for v0.1)
+- [x] Handler semantics: pipeline with no explicit handler (transform-only flagged in contract.build)
 - [x] Hook phase enforcement: phase permissions at graph validation ()
 - [x] Plugin model: `PluginContract`, graph mutation API ()
 - [x] First-party plugin: cache ()
 - [x] First-party plugin: idempotency ()
-- [ ] First-party plugin: cache (`meteorite.plugins.cache`)
-- [ ] First-party plugin: idempotency (`meteorite.plugins.idempotency`)
-- [ ] Pipeline stage representation in Zig graph types
-- [ ] Native stage compilation contract for Zig stages
+- [x] First-party plugin: cache (`src/core/plugins/cache.lua`)
+- [x] First-party plugin: idempotency (`src/core/plugins/idempotency.lua`)
+- [x] Pipeline stage representation in Zig graph types (PipelineStage in graph.zig, pipeline field on Route)
+- [x] Native stage compilation contract for Zig stages (stage paths captured in graph, Zig stages call graph bindings)
 - [ ] Diagnostics: pipeline failure with route id, stage id, kind, strat, path, owner
 - [ ] Dev endpoint `/__meteorite/graph` for runtime graph inspection
 - [ ] Graph JSON snapshot tests
+- [ ] Diagnostics: pipeline failure with route id, stage id, kind, strat, path, owner
+- [ ] Dev endpoint `/__meteorite/graph` for runtime graph inspection
+- [ ] Graph JSON snapshot tests
+- [ ] Runtime transform execution (v0.1 stubs transforms, need request-time execution)
+- [ ] Runtime hook execution (v0.1 stubs hooks, need phase-bound execution)
+- [ ] Plugin wiring into meteorite.lua app:use (graph plugins vs scope plugins)
 - [ ] Documentation: canonical route contract, pipeline declaration, transform notation

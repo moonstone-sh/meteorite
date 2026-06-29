@@ -80,6 +80,7 @@ local function add_route(self, method, path_or_table, options_or_handler, maybe_
       end
       -- Store the pipeline on the declaration for graph inspection
       declaration.pipeline = rc.pipeline
+      declaration.policy = rc.policy
       declaration.source_form = rc._source_form
     elseif rc.handler then
       -- Special file/dir handler
@@ -87,12 +88,14 @@ local function add_route(self, method, path_or_table, options_or_handler, maybe_
         params = rc.params, query = rc.query, body = rc.body,
         memory = rc.memory, capabilities = rc.capabilities, scope = scope,
       }, rc.handler)
+      declaration.policy = rc.policy
     else
       -- No handler or pipeline — shouldn't happen after validation
       declaration = route.declare(method, rc.route, {
         params = rc.params, query = rc.query, body = rc.body,
         memory = rc.memory, capabilities = rc.capabilities, scope = scope,
       }, "handlers.unreachable")
+      declaration.policy = rc.policy
     end
     self.routes[#self.routes + 1] = declaration
     return declaration
@@ -238,7 +241,14 @@ end
 ---@param options? table
 ---@return MeteoriteApp
 function App:use(plugin_or_middleware, options)
+  if type(plugin_or_middleware) == "table" and plugin_or_middleware.__meteorite_graph_plugin then
+    -- Graph plugin (new contract system) — register for graph passes
+    self.graph_plugins = self.graph_plugins or {}
+    self.graph_plugins[#self.graph_plugins + 1] = plugin_or_middleware
+    return self
+  end
   if type(plugin_or_middleware) == "table" and plugin_or_middleware.__meteorite_plugin then
+    -- Legacy scope plugin — register in scope chain
     local plugin = plugin_or_middleware
     options = options or {}
     if plugin.options then

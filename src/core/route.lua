@@ -326,6 +326,7 @@ function route.normalize_app(app, opts)
       scope = declaration.scope or root_scope(),
       memory = memory,
       source = declaration.source,
+      policy = declaration.policy,
       source_form = declaration.source_form or "legacy_signature",
       _migration_hint = (declaration.source_form == nil or declaration.source_form == "legacy_signature") and {
         "legacy route signature detected",
@@ -369,6 +370,37 @@ function route.normalize_app(app, opts)
     end
   end
   table.sort(plugins, function(a, b) return a.id < b.id end)
+
+  -- Run graph plugins (new contract system)
+  local graph_plugins = app.graph_plugins or {}
+  if #graph_plugins > 0 then
+    local plugin_contract = require("core.plugin_contract")
+    local hooks_mod = require("core.hooks")
+
+    -- Build the graph object that plugins will mutate
+    local plugin_graph = {
+      routes = routes,
+      patterns = patterns,
+      plugins = plugins,
+      hooks = {},
+      capabilities = app.capabilities or {},
+    }
+
+    -- Run plugin passes (validate -> transform -> codegen -> profile)
+    local plugin_result = plugin_contract.run_passes(plugin_graph, graph_plugins)
+
+    -- Validate hooks
+    local hook_errors = hooks_mod.validate_graph(plugin_graph)
+    for _, err in ipairs(hook_errors) do
+      error("hook validation error: " .. err)
+    end
+
+    -- Store plugin results on the graph
+    plugin_graph.plugin_diagnostics = plugin_result.diagnostics
+    plugin_graph.plugin_codegen_units = plugin_result.codegen_units
+    plugin_graph.plugin_profile_counters = plugin_result.profile_counters
+  end
+
   return {
     format = "meteorite.graph.v0",
     meteorite_version = "0.1.0",

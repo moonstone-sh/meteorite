@@ -284,6 +284,12 @@ const server_limits = @import("server/request_limits.zig");
                 const json = try countersJson(allocator);
                 return backend.respondBytes(request, 200, "application/json", json);
             }
+            if (req_method == .GET and std.mem.eql(u8, req_path, "/__meteorite/graph")) {
+                // Output route graph as JSON for dev inspection
+                const json = try std.fmt.allocPrint(allocator,
+                    "[{{\"routes\":{d}}}]", .{graph.routes.len});
+                return backend.respondBytes(request, 200, "application/json", json);
+            }
             if (comptime dev_reload_enabled) {
                 if ((req_method == .GET or req_method == .POST) and std.mem.eql(u8, req_path, "/__meteorite/reload-lua")) {
                     if (@hasDecl(lua_runtime, "reloadAll")) {

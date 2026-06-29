@@ -45,10 +45,36 @@
 ---@field delete fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table
 ---@field use fun(self: MeteoriteApp, plugin_or_middleware: table|function, options?: table): MeteoriteApp
 ---@field capability fun(self: MeteoriteApp, kind: string, spec: table): MeteoriteApp
----@field get fun(self: MeteoriteApp, path: "/orders/:id", handler: fun(c: MeteoriteContext_handlers_get_order): any): table
----@field get fun(self: MeteoriteApp, path: "/orders/:id", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_handlers_get_order): any): table
 ---@field get fun(self: MeteoriteApp, path: "/health", handler: fun(c: MeteoriteContext_health): any): table
 ---@field get fun(self: MeteoriteApp, path: "/health", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_health): any): table
+---@field get fun(self: MeteoriteApp, path: "/users/:id", handler: fun(c: MeteoriteContext_get_user): any): table
+---@field get fun(self: MeteoriteApp, path: "/users/:id", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_get_user): any): table
+---@field put fun(self: MeteoriteApp, path: "/users/:id", handler: fun(c: MeteoriteContext_put_user): any): table
+---@field put fun(self: MeteoriteApp, path: "/users/:id", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_put_user): any): table
+---@field patch fun(self: MeteoriteApp, path: "/users/:id", handler: fun(c: MeteoriteContext_patch_user): any): table
+---@field patch fun(self: MeteoriteApp, path: "/users/:id", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_patch_user): any): table
+---@field delete fun(self: MeteoriteApp, path: "/users/:id", handler: fun(c: MeteoriteContext_delete_user): any): table
+---@field delete fun(self: MeteoriteApp, path: "/users/:id", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_delete_user): any): table
+---@field post fun(self: MeteoriteApp, path: "/echo", handler: fun(c: MeteoriteContext_echo): any): table
+---@field post fun(self: MeteoriteApp, path: "/echo", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_echo): any): table
+---@field get fun(self: MeteoriteApp, path: "/devices/:device_id", handler: fun(c: MeteoriteContext_get_device): any): table
+---@field get fun(self: MeteoriteApp, path: "/devices/:device_id", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_get_device): any): table
+---@field get fun(self: MeteoriteApp, path: "/files/:name", handler: fun(c: MeteoriteContext_file): any): table
+---@field get fun(self: MeteoriteApp, path: "/files/:name", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_file): any): table
+---@field get fun(self: MeteoriteApp, path: "/slugs/:slug", handler: fun(c: MeteoriteContext_slug): any): table
+---@field get fun(self: MeteoriteApp, path: "/slugs/:slug", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_slug): any): table
+---@field get fun(self: MeteoriteApp, path: "/uuids/:id", handler: fun(c: MeteoriteContext_uuid): any): table
+---@field get fun(self: MeteoriteApp, path: "/uuids/:id", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_uuid): any): table
+---@field get fun(self: MeteoriteApp, path: "/hex/:digest", handler: fun(c: MeteoriteContext_hex): any): table
+---@field get fun(self: MeteoriteApp, path: "/hex/:digest", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_hex): any): table
+---@field get fun(self: MeteoriteApp, path: "/emails/:email", handler: fun(c: MeteoriteContext_email): any): table
+---@field get fun(self: MeteoriteApp, path: "/emails/:email", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_email): any): table
+---@field get fun(self: MeteoriteApp, path: "/tokens/:token", handler: fun(c: MeteoriteContext_token): any): table
+---@field get fun(self: MeteoriteApp, path: "/tokens/:token", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_token): any): table
+---@field get fun(self: MeteoriteApp, path: "/search", handler: fun(c: MeteoriteContext_search): any): table
+---@field get fun(self: MeteoriteApp, path: "/search", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_search): any): table
+---@field get fun(self: MeteoriteApp, path: "/hybrid-inline", handler: fun(c: MeteoriteContext_hybrid_inline): any): table
+---@field get fun(self: MeteoriteApp, path: "/hybrid-inline", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_hybrid_inline): any): table
 
 ---@class MeteoriteModule
 ---@field profiles table
@@ -129,10 +155,78 @@ local AuthClient = {}
 ---@field [string] function
 local ZigClient = {}
 
----@class MeteoriteParams_handlers_get_order
+---@class MeteoriteParams_get_user
 ---@field id integer
 
----@class MeteoriteContext_handlers_get_order : MeteoriteContext
----@field params MeteoriteParams_handlers_get_order
+---@class MeteoriteContext_get_user : MeteoriteContext
+---@field params MeteoriteParams_get_user
+
+---@class MeteoriteParams_put_user
+---@field id integer
+
+---@class MeteoriteContext_put_user : MeteoriteContext
+---@field params MeteoriteParams_put_user
+
+---@class MeteoriteParams_patch_user
+---@field id integer
+
+---@class MeteoriteContext_patch_user : MeteoriteContext
+---@field params MeteoriteParams_patch_user
+
+---@class MeteoriteParams_delete_user
+---@field id integer
+
+---@class MeteoriteContext_delete_user : MeteoriteContext
+---@field params MeteoriteParams_delete_user
+
+---@class MeteoriteParams_get_device
+---@field device_id string
+
+---@class MeteoriteContext_get_device : MeteoriteContext
+---@field params MeteoriteParams_get_device
+
+---@class MeteoriteParams_file
+---@field name string
+
+---@class MeteoriteContext_file : MeteoriteContext
+---@field params MeteoriteParams_file
+
+---@class MeteoriteParams_slug
+---@field slug string
+
+---@class MeteoriteContext_slug : MeteoriteContext
+---@field params MeteoriteParams_slug
+
+---@class MeteoriteParams_uuid
+---@field id string
+
+---@class MeteoriteContext_uuid : MeteoriteContext
+---@field params MeteoriteParams_uuid
+
+---@class MeteoriteParams_hex
+---@field digest string
+
+---@class MeteoriteContext_hex : MeteoriteContext
+---@field params MeteoriteParams_hex
+
+---@class MeteoriteParams_email
+---@field email string
+
+---@class MeteoriteContext_email : MeteoriteContext
+---@field params MeteoriteParams_email
+
+---@class MeteoriteParams_token
+---@field token string
+
+---@class MeteoriteContext_token : MeteoriteContext
+---@field params MeteoriteParams_token
+
+---@class MeteoriteQuery_search
+---@field exact boolean|nil
+---@field page integer|nil
+---@field q string
+
+---@class MeteoriteContext_search : MeteoriteContext
+---@field query MeteoriteQuery_search
 
 return meteorite
