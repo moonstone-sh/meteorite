@@ -438,7 +438,10 @@ concurrency = [int(x) for x in "$CONCURRENCY".split(",")]
 labels = []
 if $RUN_STATIC: labels.append("meteorite-static")
 if $RUN_HYBRID: labels.append("meteorite-hybrid")
-if $RUN_HONO: labels.append("hono-bun")
+# Only include hono-bun if it actually ran (files exist)
+import os
+hono_files = [f for f in os.listdir(out) if f.startswith("hono-bun-")]
+if $RUN_HONO and hono_files: labels.append("hono-bun")
 
 scenarios = [
     ("health", "GET", "/health"),
@@ -518,7 +521,7 @@ for name, method, path in scenarios:
     print(row)
 
 # Print ratios vs Hono/Bun
-if "hono-bun" in labels:
+if "hono-bun" in labels and any((out / f"hono-bun-{name}-c{c}.json").exists() for name, _, _ in scenarios for c in concurrency):
     print()
     print("=== Meteorite/Hono ratio (RPS, >1.0 = Meteorite wins) ===")
     print()
