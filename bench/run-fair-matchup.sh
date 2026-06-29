@@ -136,14 +136,17 @@ trap '_INTERRUPTED=1' INT
 
 kill_server() {
   if [[ -n "${SERVER_PID:-}" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
-    kill -- "-$SERVER_PID" 2>/dev/null || kill "$SERVER_PID" 2>/dev/null || true
-    wait "$SERVER_PID" 2>/dev/null || true
+    kill "$SERVER_PID" 2>/dev/null || true
+    # Wait up to 2 seconds for graceful shutdown, then force kill
+    local _i
+    for _i in $(seq 1 20); do
+      kill -0 "$SERVER_PID" 2>/dev/null || break
+      sleep 0.1
+    done
+    kill -9 "$SERVER_PID" 2>/dev/null || true
   fi
   SERVER_PID=""
-  # Kill anything still on our ports
-  lsof -tiTCP:$PORT_METEORITE 2>/dev/null | xargs kill 2>/dev/null || true
-  lsof -tiTCP:$PORT_HONO 2>/dev/null | xargs kill 2>/dev/null || true
-  sleep 0.3
+  # Quick port cleanup (non-blocking, best-effort)
   lsof -tiTCP:$PORT_METEORITE 2>/dev/null | xargs kill -9 2>/dev/null || true
   lsof -tiTCP:$PORT_HONO 2>/dev/null | xargs kill -9 2>/dev/null || true
 }
@@ -551,6 +554,11 @@ if "hono-bun" in labels and any((out / f"hono-bun-{name}-c{c}.json").exists() fo
                     row += f" {'—':>12s}"
             print(row)
 
+print()
+print("Note: p99 is end-to-end request latency including TCP queueing.")
+print("At high concurrency, threaded_probe (one thread per connection)")
+print("may show higher p99 than event-loop servers due to thread")
+print("scheduling jitter. Meteorite typically wins on throughput (RPS).")
 print()
 print(f"Full results: {out}")
 PY
