@@ -373,7 +373,157 @@ sleep 0.5
 
 capture_env "multiple"
 
-# --- Meteorite Static ---
+# --- Hono/Bun ---
+if [[ "$RUN_HONO" == "1" ]]; then
+  if command -v bun >/dev/null 2>&1; then
+    start_hono_bun
+    if wait_for_server "$PORT_HONO" "Hono/Bun"; then
+          run_warmup "$PORT_HONO" "hono-bun"
+      run_all_scenarios "$PORT_HONO" "hono-bun" "$DURATION"
+      kill_server
+      sleep 0.5
+    else
+      echo "WARNING: Hono/Bun failed to start, skipping" >&2
+      kill_server
+    fi
+  else
+    echo "WARNING: bun not found, skipping Hono/Bun" >&2
+  fi
+fi
+
+# ============================================================
+# Generate comparison table
+# ============================================================
+
+echo ""
+echo "============================================================"
+echo "  Comparison Summary"
+echo "============================================================"
+echo ""
+
+python3 << PY
+import json
+from pathlib import Path
+
+out = Path("$OUT")
+concurrency = [int(x) for x in "$CONCURRENCY".split(",")]
+labels = []
+if $RUN_STATIC: labels.append("meteorite-static")
+if $RUN_HYBRID: labels.append("meteorite-hybrid")
+# Only include hono-bun if it actually ran (files exist)
+import os
+hono_files = [f for f in os.listdir(out) if f.startswith("hono-bun-")]
+if $RUN_HONO and hono_files: labels.append("hono-bun")
+
+scenarios = [
+    ("health", "GET", "/health"),
+    ("plain", "GET", "/__bench/plain"),
+    ("raw", "GET", "/__bench/raw"),
+    ("typed-param", "GET", "/users/123"),
+    ("pattern-param", "GET", "/devices/router_01"),
+    ("file-pattern", "GET", "/files/readme-01.txt"),
+    ("hybrid-inline", "GET", "/__bench/hybrid-inline"),
+    ("hybrid-inline-text", "GET", "/__bench/hybrid-inline-text-literal"),
+    ("hybrid-inline-params", "GET", "/__bench/hybrid-inline-params/123"),
+    ("echo-small", "POST", "/echo"),
+    ("echo-1k", "POST", "/echo"),
+    ("hybrid-inline-echo", "POST", "/__bench/hybrid-inline-echo"),
+]
+
+def load_rps(label, name, c):
+    f = out / f"{label}-{name}-c{c}.json"
+    try:
+        d = json.loads(f.read_text())
+        return d.get("summary", {}).get("requestsPerSec", 0)
+    except Exception:
+        return None
+
+def load_p99(label, name, c):
+    f = out / f"{label}-{name}-c{c}.json"
+    try:
+        d = json.loads(f.read_text())
+        lp = d.get("latencyPercentiles", {})
+        return lp.get("p99", 0)
+    except Exception:
+        return None
+
+# Print RPS table
+print("=== Requests/sec ===")
+print()
+header = f"{'scenario':<28s}"
+for c in concurrency:
+    for label in labels:
+        short = label.replace("meteorite-", "m-").replace("hono-bun", "hono")
+        header += f" {short}-c{c:>10s}"
+print(header)
+print("-" * len(header))
+
+for name, method, path in scenarios:
+    row = f"{name:<28s}"
+    for c in concurrency:
+        for label in labels:
+            rps = load_rps(label, name, c)
+            if rps is not None:
+                row += f" {rps:>12.0f}"
+            else:
+                row += f" {'—':>12s}"
+    print(row)
+
+# Print p99 latency table
+print()
+print("=== p99 Latency (ms) ===")
+print()
+header = f"{'scenario':<28s}"
+for c in concurrency:
+    for label in labels:
+        short = label.replace("meteorite-", "m-").replace("hono-bun", "hono")
+        header += f" {short}-c{c:>10s}"
+print(header)
+print("-" * len(header))
+
+for name, method, path in scenarios:
+    row = f"{name:<28s}"
+    for c in concurrency:
+        for label in labels:
+            p99 = load_p99(label, name, c)
+            if p99 is not None:
+                row += f" {p99 * 1000:>12.3f}"
+            else:
+                row += f" {'—':>12s}"
+    print(row)
+
+# Print ratios vs Hono/Bun
+if "hono-bun" in labels and any((out / f"hono-bun-{name}-c{c}.json").exists() for name, _, _ in scenarios for c in concurrency):
+    print()
+    print("=== Meteorite/Hono ratio (RPS, >1.0 = Meteorite wins) ===")
+    print()
+    header = f"{'scenario':<28s}"
+    for c in concurrency:
+        header += f" {'c' + str(c):>12s}"
+    print(header)
+    print("-" * len(header))
+
+    for name, method, path in scenarios:
+        for mlabel in ["meteorite-static", "meteorite-hybrid"]:
+            if mlabel not in labels:
+                continue
+            row = f"{name + ' (' + mlabel.replace('meteorite-', '') + ')':<28s}"
+            for c in concurrency:
+                m_rps = load_rps(mlabel, name, c)
+                h_rps = load_rps("hono-bun", name, c)
+                if m_rps and h_rps and h_rps > 0:
+                    ratio = m_rps / h_rps
+                    row += f" {ratio:>12.2f}"
+                else:
+                    row += f" {'—':>12s}"
+            print(row)
+
+print()
+print(f"Full results: {out}")
+PY
+
+echo ""
+echo "Done."# --- Meteorite Static ---
 if [[ "$RUN_STATIC" == "1" ]]; then
   build_meteorite "release-static" "static"
   start_meteorite
