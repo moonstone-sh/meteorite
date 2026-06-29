@@ -230,8 +230,10 @@ graph-readable contract. See `src/core/contract.lua` for the implementation.
 
 - [ ] Transformer semantics: runtime execution model for pipeline stages
 - [ ] Handler semantics: pipeline with no explicit handler, transform-only pipeline
-- [ ] Hook phase enforcement: phase permissions at graph validation time
-- [ ] Plugin model: `PluginContract`, graph mutation API, first-party plugins
+- [x] Hook phase enforcement: phase permissions at graph validation ()
+- [x] Plugin model: `PluginContract`, graph mutation API ()
+- [x] First-party plugin: cache ()
+- [x] First-party plugin: idempotency ()
 - [ ] First-party plugin: cache (`meteorite.plugins.cache`)
 - [ ] First-party plugin: idempotency (`meteorite.plugins.idempotency`)
 - [ ] Pipeline stage representation in Zig graph types
