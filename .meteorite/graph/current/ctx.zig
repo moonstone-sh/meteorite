@@ -485,34 +485,34 @@ pub const ctx = struct {
         pub fn bytes(self: search, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
         pub fn json(self: search, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
     };
-    pub const Params_hybrid_inline = struct {
+    pub const Params_route_15 = struct {
         };
 
-    pub const Query_hybrid_inline = struct {
+    pub const Query_route_15 = struct {
         };
 
-    pub const hybrid_inline = struct {
+    pub const route_15 = struct {
         pub const method_name = "GET";
         pub const route_path = "/hybrid-inline";
-        params: Params_hybrid_inline,
-        query: Query_hybrid_inline,
+        params: Params_route_15,
+        query: Query_route_15,
         raw: *anyopaque,
         vtable: *const VTable,
 
-        pub fn from(raw: anytype) Error!hybrid_inline {
+        pub fn from(raw: anytype) Error!route_15 {
             return .{ .params = .{
             }, .query = .{
             }, .raw = raw, .vtable = &VTableFor(@TypeOf(raw)).value };
         }
 
-        pub fn method(self: hybrid_inline) []const u8 { return self.vtable.method(self.raw); }
-        pub fn path(self: hybrid_inline) []const u8 { return self.vtable.path(self.raw); }
-        pub fn param(self: hybrid_inline, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
-        pub fn queryValue(self: hybrid_inline, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
-        pub fn header(self: hybrid_inline, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
-        pub fn body(self: hybrid_inline) ![]const u8 { return self.vtable.body(self.raw); }
-        pub fn text(self: hybrid_inline, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
-        pub fn bytes(self: hybrid_inline, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
-        pub fn json(self: hybrid_inline, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
+        pub fn method(self: route_15) []const u8 { return self.vtable.method(self.raw); }
+        pub fn path(self: route_15) []const u8 { return self.vtable.path(self.raw); }
+        pub fn param(self: route_15, name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }
+        pub fn queryValue(self: route_15, name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }
+        pub fn header(self: route_15, name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }
+        pub fn body(self: route_15) ![]const u8 { return self.vtable.body(self.raw); }
+        pub fn text(self: route_15, status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }
+        pub fn bytes(self: route_15, status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }
+        pub fn json(self: route_15, status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }
     };
 };

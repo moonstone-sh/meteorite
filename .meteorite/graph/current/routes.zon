@@ -1001,7 +1001,7 @@
         },
     },
     .{
-        .id = "hybrid_inline",
+        .id = "route_15",
         .method = .GET,
         .raw_path = "/hybrid-inline",
         .path = .{
@@ -1013,21 +1013,24 @@
         },
         .query = .{},
         .handler = .{
-            .zig_symbol = .{
-                .id = "hybrid_inline",
-                .symbol = "handlers.hybrid_inline",
+            .inline_lua = .{
+                .id = "route_15",
+                .chunk_path = "./.meteorite/graph/current/../../lua/inline/route_15.lua",
+                .source_column = 1,
+                .source_file = "./fixtures/apps/showcase-service/src/app.lua",
+                .source_line = 87,
             },
         },
         .source = .{
             .file = "./fixtures/apps/showcase-service/src/app.lua",
-            .line = 89,
+            .line = 87,
             .column = 1,
         },
         .capabilities = .{},
         .execution = .{
-            .class = .default,
+            .class = .lua,
             .may_block = false,
-            .requires_lua = false,
+            .requires_lua = true,
             .requires_worker_pool = false,
         },
         .memory = .{
@@ -1050,10 +1053,10 @@
             .request_arena_bytes = 262144,
         },
         .runtime = .{
-            .execution_class = .default,
+            .execution_class = .lua,
             .requires_auth = false,
             .requires_http = false,
-            .requires_lua = false,
+            .requires_lua = true,
             .requires_zig_capability = false,
         },
         .scope = .{

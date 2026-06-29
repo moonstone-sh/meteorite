@@ -88,7 +88,7 @@ const route_GET__hex__digest_hex = @import("routes/route_GET__hex__digest_hex.zi
 const route_GET__emails__email_email = @import("routes/route_GET__emails__email_email.zig");
 const route_GET__tokens__token_token = @import("routes/route_GET__tokens__token_token.zig");
 const route_GET__search_search = @import("routes/route_GET__search_search.zig");
-const route_GET__hybrid_inline_hybrid_inline = @import("routes/route_GET__hybrid_inline_hybrid_inline.zig");
+const route_GET__hybrid_inline_route_15 = @import("routes/route_GET__hybrid_inline_route_15.zig");
 
 pub const plugins = [_]PluginDescriptor{};
 
@@ -112,7 +112,7 @@ pub const routes = [_]Route{
     route_GET__emails__email_email.route(@This()),
     route_GET__tokens__token_token.route(@This()),
     route_GET__search_search.route(@This()),
-    route_GET__hybrid_inline_hybrid_inline.route(@This()),
+    route_GET__hybrid_inline_route_15.route(@This()),
 };
 
 pub const get_routes = [_]Route{

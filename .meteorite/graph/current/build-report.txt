@@ -1,11 +1,11 @@
 Meteorite build
-  mode: static
+  mode: hybrid
   backend: fast_http
-  Lua runtime: removed
+  Lua runtime: included
   Lua state: single_locked
   workers: auto
-  inline Lua handlers: 0
-  Zig handlers: 15
+  inline Lua handlers: 1
+  Zig handlers: 14
   HTTP capabilities: db
   Auth capabilities: none
   Zig capabilities: data_cruncher
@@ -16,5 +16,5 @@ Meteorite build
   max path: 4.0kb
   max query: 4.0kb / 64 pairs
   DFA tables: 3620b / 148 states
-  graph data: ~31393b
+  graph data: ~31561b
   artifact: dist/server

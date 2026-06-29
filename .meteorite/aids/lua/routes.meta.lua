@@ -80,5 +80,5 @@
 ---@class MeteoriteContext_search : MeteoriteContext
 ---@field query MeteoriteQuery_search
 
----@class MeteoriteContext_hybrid_inline : MeteoriteContext
+---@class MeteoriteContext_route_15 : MeteoriteContext
 

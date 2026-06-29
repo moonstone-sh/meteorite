@@ -73,8 +73,8 @@
 ---@field get fun(self: MeteoriteApp, path: "/tokens/:token", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_token): any): table
 ---@field get fun(self: MeteoriteApp, path: "/search", handler: fun(c: MeteoriteContext_search): any): table
 ---@field get fun(self: MeteoriteApp, path: "/search", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_search): any): table
----@field get fun(self: MeteoriteApp, path: "/hybrid-inline", handler: fun(c: MeteoriteContext_hybrid_inline): any): table
----@field get fun(self: MeteoriteApp, path: "/hybrid-inline", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_hybrid_inline): any): table
+---@field get fun(self: MeteoriteApp, path: "/hybrid-inline", handler: fun(c: MeteoriteContext_route_15): any): table
+---@field get fun(self: MeteoriteApp, path: "/hybrid-inline", options: MeteoriteRouteOptions, handler: fun(c: MeteoriteContext_route_15): any): table
 
 ---@class MeteoriteModule
 ---@field profiles table

@@ -140,6 +140,12 @@ kill_server() {
     wait "$SERVER_PID" 2>/dev/null || true
   fi
   SERVER_PID=""
+  # Kill anything still on our ports
+  lsof -tiTCP:$PORT_METEORITE 2>/dev/null | xargs kill 2>/dev/null || true
+  lsof -tiTCP:$PORT_HONO 2>/dev/null | xargs kill 2>/dev/null || true
+  sleep 0.3
+  lsof -tiTCP:$PORT_METEORITE 2>/dev/null | xargs kill -9 2>/dev/null || true
+  lsof -tiTCP:$PORT_HONO 2>/dev/null | xargs kill -9 2>/dev/null || true
 }
 
 wait_for_server() {
@@ -359,6 +365,11 @@ capture_env() {
 echo "============================================================"
 echo "  Fair Matchup: Meteorite vs Hono/Bun"
 echo "============================================================"
+
+# Kill any existing processes on our ports
+lsof -tiTCP:$PORT_METEORITE 2>/dev/null | xargs kill -9 2>/dev/null || true
+lsof -tiTCP:$PORT_HONO 2>/dev/null | xargs kill -9 2>/dev/null || true
+sleep 0.5
 
 capture_env "multiple"
 

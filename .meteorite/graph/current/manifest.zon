@@ -1,14 +1,14 @@
 .{
     .format = "meteorite.graph.v0",
     .meteorite_version = "0.1.0",
-    .graph_hash = "b3:de6f4f9933a3071c2ee956ab2a8cf92275792456aa677758f008df26d0fcdc64",
-    .mode = .release_static,
+    .graph_hash = "b3:cb83167a06aa449b4e99c787fdf157cae29d9fb985d5f4b9b1d19262e8071f63",
+    .mode = .release_hybrid,
     .partitions = .{
         .capabilities = "b3:2f7ef78d19184c0a0fda382c07d0a748d996ef340b814b6d2bdbf14aa843afa0",
-        .handlers = "b3:087e0935482f6da8abd329fa2cb37de21b85b3d9aaa6a1947b6f76078c129daa",
-        .lua_chunks = "b3:086f07b3e2932b84626af671f05c581384a712028e2ef7fc60ccd293dca5a195",
+        .handlers = "b3:fa305a2e631e82d6ab0782aee7da758e097770abe547472b9b57453d7621f3b3",
+        .lua_chunks = "b3:34f68be4f56c382c0b336df74c25a8b75a5774ea583a0b9ad70649e89d71fbc2",
         .patterns = "b3:9656e1bd0476d2a612e7acee60fe6866123c0098037ad7076de78c9d6d457473",
-        .route_graph = "b3:8bd9b6525f756270412adff5292a2b9438050c31426694defe9ff8a6af307328",
-        .runtime = "b3:b52d0a89f9a2646b344729e743557e347b550213b670020cf079c127ce1f9225",
+        .route_graph = "b3:6f4ebe823c89163bfcfbbbd3d3d1f9f132264327025e0aac8e391575b123d877",
+        .runtime = "b3:3974f5a846f2f0b2b7e8e7dce7ba25df598db26c0710b02fbaba0ef3bcbb1f7a",
     },
 }

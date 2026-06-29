@@ -7,11 +7,13 @@ const filePattern = /^[a-z0-9_.-]{1,80}$/
 app.get('/__bench/meta', (c) => c.json({ framework: 'hono', runtime: 'bun', backend: 'bun-serve' }))
 app.get('/__bench/plain', (c) => c.text('ok'))
 app.get('/__bench/plain-static', (c) => c.text('ok'))
+app.get('/__bench/raw', (c) => c.text('ok'))
 app.get('/__bench/hybrid-zig', (c) => c.text('ok'))
 app.get('/__bench/hybrid-inline', (c) => c.text('ok'))
 app.get('/__bench/hybrid-inline-text-literal', (c) => c.text('ok'))
 app.get('/__bench/hybrid-inline-params/:id', (c) => c.text(c.req.param('id')))
 app.post('/__bench/hybrid-inline-echo', async (c) => c.text(await c.req.text()))
+
 app.get('/health', (c) => c.text('ok'))
 app.get('/users/:id', (c) => {
   const id = Number(c.req.param('id'))
