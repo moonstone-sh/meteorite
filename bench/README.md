@@ -46,6 +46,12 @@ cargo install oha
 From the Meteorite project root:
 
 ```bash
+# Public/fair comparison suite used for presentation numbers.
+moon run bench:public
+
+# Shorter version for local sanity checks.
+moon run bench:smoke
+
 # Default smoke-sized run through Moonstone scripts
 moon run bench
 moon run bench:matrix
@@ -65,6 +71,17 @@ bench/run.sh --mode release-static --router-dispatch static_fast_path --out benc
 bench/run.sh --mode release-static --router-dispatch param_matchers --out bench/results/router-param-matchers
 python3 bench/compare.py bench/results/router-legacy bench/results/router-method-buckets bench/results/router-static-fast-path bench/results/router-param-matchers
 ```
+
+The public suite includes Meteorite plus external baselines:
+
+- `hono-bun-single` and `hono-bun-multiprocess`
+- `go-nethttp`: standard-library `net/http` with a hand-written route switch, representing Go's stdlib HTTP ceiling rather than a third-party router.
+- `go-fiber-fasthttp`: Fiber on fasthttp with prefork enabled, representing Fiber's multicore performance-oriented shape.
+- `rust-actix`: Actix Web release build with its default worker count, which uses available CPU parallelism; unused default features such as cookies, compression, HTTP/2, and WebSockets are disabled for this HTTP/1 plaintext microbenchmark.
+
+The fair headline set is `meteorite-auto`, `hono-bun-multiprocess`, `go-nethttp`, `go-fiber-fasthttp`, and `rust-actix`. `meteorite-1worker` and `hono-bun-single` are kept as diagnostic single-worker/single-process baselines.
+
+Before each measured run, the harness verifies that the server is serving the intended route and exact response body. If a competitor returns the wrong body or a non-2xx response, that rep is marked invalid with `preflight-response`.
 
 Defaults:
 

@@ -14,5 +14,6 @@ if (cluster.isPrimary) {
   });
 } else {
   // Workers can share any TCP connection.
+  process.argv.push('--bench-mode=multiprocess-worker', '--reuse-port');
   import('./server');
 }

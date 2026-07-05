@@ -1,0 +1,8 @@
+[package]
+name = "meteorite-bench-rust-actix"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix-web = { version = "=4.14.0", default-features = false, features = ["macros"] }
+regex = "1.11"

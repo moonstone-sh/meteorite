@@ -4,7 +4,43 @@ const app = new Hono()
 const devicePattern = /^[a-z0-9_-]{1,64}$/
 const filePattern = /^[a-z0-9_.-]{1,80}$/
 
-app.get('/__bench/meta', (c) => c.json({ framework: 'hono', runtime: 'bun', backend: 'bun-serve' }))
+const modeArg = process.argv.find((a) => a.startsWith('--bench-mode='))
+const benchMode = modeArg ? modeArg.slice('--bench-mode='.length) : 'single-process'
+const reusePort = process.argv.includes('--reuse-port')
+
+const cpuWork: Record<string, bigint> = {
+  '50us': 50_000n,
+  '100us': 100_000n,
+  '250us': 250_000n,
+  '500us': 500_000n,
+  '1ms': 1_000_000n,
+  '2ms': 2_000_000n,
+  '5ms': 5_000_000n,
+}
+const sleepWork: Record<string, number> = { '1ms': 1, '5ms': 5, '10ms': 10 }
+const checksumFor: Record<string, string> = {
+  '50us': '50',
+  '100us': '100',
+  '250us': '250',
+  '500us': '500',
+  '1ms': '1000',
+  '2ms': '2000',
+  '5ms': '5000',
+}
+
+function spinFor(ns: bigint) {
+  const start = process.hrtime.bigint()
+  while (process.hrtime.bigint() - start < ns) {}
+}
+
+app.get('/__bench/meta', (c) => c.json({
+  framework: 'hono',
+  runtime: 'bun',
+  backend: 'bun-serve',
+  mode: benchMode,
+  pid: process.pid,
+  reuse_port: reusePort,
+}))
 app.get('/__bench/plain', (c) => c.text('ok'))
 app.get('/__bench/plain-static', (c) => c.text('ok'))
 app.get('/__bench/raw', (c) => c.text('ok'))
@@ -13,6 +49,18 @@ app.get('/__bench/hybrid-inline', (c) => c.text('ok'))
 app.get('/__bench/hybrid-inline-text-literal', (c) => c.text('ok'))
 app.get('/__bench/hybrid-inline-params/:id', (c) => c.text(c.req.param('id')))
 app.post('/__bench/hybrid-inline-echo', async (c) => c.text(await c.req.text()))
+for (const [duration, ns] of Object.entries(cpuWork)) {
+  app.get(`/__bench/work/cpu/${duration}`, (c) => {
+    spinFor(ns)
+    return c.text(`work:cpu:${duration}:${checksumFor[duration]}`)
+  })
+}
+for (const [duration, ms] of Object.entries(sleepWork)) {
+  app.get(`/__bench/work/sleep/${duration}`, async (c) => {
+    await new Promise((resolve) => setTimeout(resolve, ms))
+    return c.text(`sleep:${duration}`)
+  })
+}
 
 app.get('/health', (c) => c.text('ok'))
 app.get('/users/:id', (c) => {
@@ -32,5 +80,5 @@ app.get('/hybrid-inline', (c) => c.text('ok'))
 
 const portArg = process.argv.find((a) => a.startsWith('--port='))
 const port = portArg ? Number(portArg.slice('--port='.length)) : 8081
-Bun.serve({ port, fetch: app.fetch, hostname: '127.0.0.1', reusePort: true })
+Bun.serve({ port, fetch: app.fetch, hostname: '127.0.0.1', reusePort })
 console.log(`Hono Bun listening on http://127.0.0.1:${port}`)
