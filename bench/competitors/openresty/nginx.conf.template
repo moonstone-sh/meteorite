@@ -1,0 +1,37 @@
+worker_processes 1;
+error_log stderr notice;
+daemon off;
+pid nginx.pid;
+
+env LUA_PATH;
+env LUA_CPATH;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    access_log off;
+    lua_code_cache on;
+
+    init_by_lua_block {
+        local path = os.getenv("LUA_PATH")
+        if path then package.path = path .. ";" .. package.path end
+        local cpath = os.getenv("LUA_CPATH")
+        if cpath then package.cpath = cpath .. ";" .. package.cpath end
+    }
+
+    init_worker_by_lua_block {
+        require("app").init_db()
+    }
+
+    server {
+        listen ${{PORT}};
+
+        location / {
+            content_by_lua_block {
+                require("app").handle()
+            }
+        }
+    }
+}

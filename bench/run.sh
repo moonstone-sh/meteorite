@@ -335,14 +335,14 @@ fi
 
 if [[ -n "$ONLY_VARIANT" ]]; then
   case "$MODE:$ONLY_VARIANT" in
-  --mode=public:meteorite-1worker | --mode=public:meteorite-auto | --mode=public:hono-bun-single | --mode=public:hono-bun-multiprocess | --mode=public:go-nethttp | --mode=public:go-fiber-fasthttp | --mode=public:rust-actix) ;;
-  --mode=smoke:meteorite-1worker | --mode=smoke:meteorite-auto | --mode=smoke:hono-bun-single | --mode=smoke:go-nethttp | --mode=smoke:go-fiber-fasthttp | --mode=smoke:rust-actix) ;;
-  --mode=work:meteorite-1worker | --mode=work:meteorite-auto | --mode=work:hono-bun-single | --mode=work:hono-bun-multiprocess | --mode=work:go-nethttp | --mode=work:go-fiber-fasthttp | --mode=work:rust-actix) ;;
+  --mode=public:meteorite-1worker | --mode=public:meteorite-auto | --mode=public:hono-bun-single | --mode=public:hono-bun-multiprocess | --mode=public:go-nethttp | --mode=public:go-fiber-fasthttp | --mode=public:rust-actix | --mode=public:openresty | --mode=public:lapis-openresty | --mode=public:lapis-cqueues | --mode=public:turbo | --mode=public:pegasus) ;;
+  --mode=smoke:meteorite-1worker | --mode=smoke:meteorite-auto | --mode=smoke:hono-bun-single | --mode=smoke:go-nethttp | --mode=smoke:go-fiber-fasthttp | --mode=smoke:rust-actix | --mode=smoke:openresty | --mode=smoke:lapis-openresty | --mode=smoke:lapis-cqueues | --mode=smoke:turbo | --mode=smoke:pegasus) ;;
+  --mode=work:meteorite-1worker | --mode=work:meteorite-auto | --mode=work:hono-bun-single | --mode=work:hono-bun-multiprocess | --mode=work:go-nethttp | --mode=work:go-fiber-fasthttp | --mode=work:rust-actix | --mode=work:openresty | --mode=work:lapis-openresty | --mode=work:lapis-cqueues | --mode=work:turbo | --mode=work:pegasus) ;;
   --mode=meteorite-app:meteorite-1worker | --mode=meteorite-app:meteorite-auto) ;;
   --mode=lua-bridge:meteorite-1worker | --mode=lua-bridge:meteorite-auto | --mode=lua-bridge-smoke:meteorite-1worker | --mode=lua-bridge-smoke:meteorite-auto) ;;
   *)
     echo "INVALID --variant=$ONLY_VARIANT for ${MODE#--mode=}" >&2
-    echo "public variants: meteorite-1worker, meteorite-auto, hono-bun-single, hono-bun-multiprocess, go-nethttp, go-fiber-fasthttp, rust-actix" >&2
+    echo "public variants: meteorite-1worker, meteorite-auto, hono-bun-single, hono-bun-multiprocess, go-nethttp, go-fiber-fasthttp, rust-actix, openresty, lapis-openresty, lapis-cqueues, turbo, pegasus" >&2
     echo "lua-bridge variants: meteorite-1worker, meteorite-auto" >&2
     exit 2
     ;;
@@ -435,6 +435,11 @@ if [[ "$MODE" == "--mode=smoke" ]]; then
   run_selected_variant "go-nethttp" start_go_nethttp
   run_selected_variant "go-fiber-fasthttp" start_go_fiber
   run_selected_variant "rust-actix" start_rust_actix
+  run_selected_variant "openresty" start_openresty
+  run_selected_variant "lapis-openresty" start_lapis_openresty
+  run_selected_variant "lapis-cqueues" start_lapis_cqueues
+  run_selected_variant "turbo" start_turbo
+  run_selected_variant "pegasus" start_pegasus
 elif [[ "$MODE" == "--mode=work" ]]; then
   run_selected_variant "meteorite-1worker" start_meteorite "1"
   run_selected_variant "meteorite-auto" start_meteorite "0"
@@ -443,6 +448,11 @@ elif [[ "$MODE" == "--mode=work" ]]; then
   run_selected_variant "go-nethttp" start_go_nethttp
   run_selected_variant "go-fiber-fasthttp" start_go_fiber
   run_selected_variant "rust-actix" start_rust_actix
+  run_selected_variant "openresty" start_openresty
+  run_selected_variant "lapis-openresty" start_lapis_openresty
+  run_selected_variant "lapis-cqueues" start_lapis_cqueues
+  run_selected_variant "turbo" start_turbo
+  run_selected_variant "pegasus" start_pegasus
 elif [[ "$MODE" == "--mode=meteorite-app" ]]; then
   run_selected_variant "meteorite-1worker" start_meteorite "1"
   run_selected_variant "meteorite-auto" start_meteorite "0"
@@ -454,6 +464,11 @@ elif [[ "$MODE" == "--mode=public" ]]; then
   run_selected_variant "go-nethttp" start_go_nethttp
   run_selected_variant "go-fiber-fasthttp" start_go_fiber
   run_selected_variant "rust-actix" start_rust_actix
+  run_selected_variant "openresty" start_openresty
+  run_selected_variant "lapis-openresty" start_lapis_openresty
+  run_selected_variant "lapis-cqueues" start_lapis_cqueues
+  run_selected_variant "turbo" start_turbo
+  run_selected_variant "pegasus" start_pegasus
 elif [[ "$MODE" == "--mode=lua-bridge" || "$MODE" == "--mode=lua-bridge-smoke" ]]; then
   run_selected_variant "meteorite-1worker" start_meteorite "1"
   run_selected_variant "meteorite-auto" start_meteorite "0"

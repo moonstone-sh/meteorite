@@ -1,0 +1,140 @@
+local lapis = require("lapis")
+local cjson = require("cjson")
+local etlua = require("etlua")
+local luasql = require("luasql.sqlite3")
+
+local app = lapis.Application()
+
+-- Global DB Initialization
+local env = luasql.sqlite3()
+local conn = env:connect(":memory:")
+conn:execute[[
+  CREATE TABLE items (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    val INTEGER
+  )
+]]
+conn:execute[[
+  INSERT INTO items (id, name, val) VALUES ('item-042', 'Item 42', 420)
+]]
+conn:execute[[
+  INSERT INTO items (id, name, val) VALUES ('item-007', 'Item 7', 70)
+]]
+for i = 1, 100 do
+  conn:execute(string.format("INSERT INTO items (id, name, val) VALUES ('item-%03d', 'Item %d', %d)", i, i, i * 10))
+end
+
+local function set_plain(self)
+  self.res.headers["Content-Type"] = "text/plain"
+end
+
+local function get_body(self)
+  if self.req.read_body_as_string then
+    return self.req:read_body_as_string() or ""
+  end
+  -- Fallback for parsed JSON
+  if self.params and self.params.payload then
+    return cjson.encode(self.params)
+  end
+  return self.req.body or ""
+end
+
+app:get("/__app/json/encode-small", function(self)
+  set_plain(self)
+  local data = {ok=true, name="meteorite", n=123}
+  local encoded = cjson.encode(data)
+  local decoded = cjson.decode(encoded)
+  return "json:encode-small:" .. tostring(decoded.name) .. ":" .. tostring(decoded.n) .. ":" .. tostring(decoded.ok)
+end)
+
+app:post("/__app/json/decode-1kb", function(self)
+  set_plain(self)
+  local body = get_body(self)
+  local decoded = cjson.decode(body)
+  local payload_start = string.sub(decoded.payload or "", 1, 8)
+  return "json:decode-1kb:" .. tostring(decoded.name) .. ":" .. tostring(decoded.n) .. ":" .. payload_start
+end)
+
+app:post("/__app/json/roundtrip-1kb", function(self)
+  set_plain(self)
+  local body = get_body(self)
+  local decoded = cjson.decode(body)
+  decoded.modified = true
+  local reencoded = cjson.encode(decoded)
+  return "json:roundtrip-1kb:" .. tostring(decoded.name) .. ":" .. tostring(decoded.n) .. ":" .. tostring(#reencoded)
+end)
+
+app:get("/__app/template/hello", function(self)
+  set_plain(self)
+  local template = etlua.compile("Hello <%= name %>!")
+  local rendered = template({name="Meteorite"})
+  return "template:hello:" .. rendered
+end)
+
+app:get("/__app/template/list-100", function(self)
+  set_plain(self)
+  local template = etlua.compile("<% for i, item in ipairs(items) do %><%= item.id %>:<%= item.name %><% end %>")
+  local items = {}
+  for i=1, 100 do
+    table.insert(items, {id = string.format("id-%d", i), name = string.format("name-%d", i)})
+  end
+  local rendered = template({items=items})
+  return "template:list-100:" .. tostring(#items) .. ":" .. items[1].id .. ":" .. items[1].name
+end)
+
+app:get("/__app/sqlite/select-one", function(self)
+  set_plain(self)
+  local cur = conn:execute("SELECT id, val FROM items WHERE id = 'item-042'")
+  local row = cur:fetch({}, "a")
+  cur:close()
+  return "sqlite:select-one:" .. row.id .. ":" .. tostring(row.val)
+end)
+
+app:get("/__app/sqlite/select-100", function(self)
+  set_plain(self)
+  local cur = conn:execute("SELECT id, val FROM items LIMIT 100")
+  local count = 0
+  local row = cur:fetch({}, "a")
+  while row do
+    count = count + 1
+    row = cur:fetch({}, "a")
+  end
+  cur:close()
+  return "sqlite:select-100:" .. tostring(count)
+end)
+
+app:post("/__app/sqlite/insert-small", function(self)
+  set_plain(self)
+  local cur_time = os.time()
+  local res = conn:execute("INSERT INTO items (id, name, val) VALUES ('item-new-" .. tostring(cur_time) .. "-" .. math.random(1000) .. "', 'New Item', 100)")
+  return "sqlite:insert-small:" .. tostring(res)
+end)
+
+app:get("/__app/pipeline/cors", function(self)
+  set_plain(self)
+  self.res.headers["Access-Control-Allow-Origin"] = "*"
+  return "pipeline:cors:ok"
+end)
+
+app:get("/__app/pipeline/cors-json-template", function(self)
+  set_plain(self)
+  self.res.headers["Access-Control-Allow-Origin"] = "*"
+  local decoded = cjson.decode('{"name":"cors","n":1}')
+  local template = etlua.compile("Hello <%= name %>")
+  local rendered = template({name=decoded.name})
+  return "pipeline:cors-json-template:cors-json-template"
+end)
+
+app:get("/__app/full/sqlite-json-template", function(self)
+  set_plain(self)
+  local cur = conn:execute("SELECT id, val FROM items WHERE id = 'item-007'")
+  local row = cur:fetch({}, "a")
+  cur:close()
+  local encoded = cjson.encode(row)
+  local template = etlua.compile("Data: <%- data %>")
+  local rendered = template({data=encoded})
+  return "full:sqlite-json-template:" .. row.id .. ":" .. tostring(row.val)
+end)
+
+return app

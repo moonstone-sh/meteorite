@@ -18,7 +18,7 @@
             },
         },
         .source = .{
-            .file = "./fixtures/apps/showcase-service/src/app.lua",
+            .file = "fixtures/apps/showcase-service/src/app.lua",
             .line = 17,
             .column = 1,
         },
@@ -89,7 +89,7 @@
             },
         },
         .source = .{
-            .file = "./fixtures/apps/showcase-service/src/app.lua",
+            .file = "fixtures/apps/showcase-service/src/app.lua",
             .line = 18,
             .column = 1,
         },
@@ -160,7 +160,7 @@
             },
         },
         .source = .{
-            .file = "./fixtures/apps/showcase-service/src/app.lua",
+            .file = "fixtures/apps/showcase-service/src/app.lua",
             .line = 22,
             .column = 1,
         },
@@ -231,7 +231,7 @@
             },
         },
         .source = .{
-            .file = "./fixtures/apps/showcase-service/src/app.lua",
+            .file = "fixtures/apps/showcase-service/src/app.lua",
             .line = 26,
             .column = 1,
         },
@@ -302,7 +302,7 @@
             },
         },
         .source = .{
-            .file = "./fixtures/apps/showcase-service/src/app.lua",
+            .file = "fixtures/apps/showcase-service/src/app.lua",
             .line = 30,
             .column = 1,
         },
@@ -367,7 +367,7 @@
             },
         },
         .source = .{
-            .file = "./fixtures/apps/showcase-service/src/app.lua",
+            .file = "fixtures/apps/showcase-service/src/app.lua",
             .line = 34,
             .column = 1,
         },
@@ -440,7 +440,7 @@
             },
         },
         .source = .{
-            .file = "./fixtures/apps/showcase-service/src/app.lua",
+            .file = "fixtures/apps/showcase-service/src/app.lua",
             .line = 44,
             .column = 1,
         },
@@ -513,7 +513,7 @@
             },
         },
         .source = .{
-            .file = "./fixtures/apps/showcase-service/src/app.lua",
+            .file = "fixtures/apps/showcase-service/src/app.lua",
             .line = 50,
             .column = 1,
         },
@@ -585,7 +585,7 @@
             },
         },
         .source = .{
-            .file = "./fixtures/apps/showcase-service/src/app.lua",
+            .file = "fixtures/apps/showcase-service/src/app.lua",
             .line = 56,
             .column = 1,
         },
@@ -657,7 +657,7 @@
             },
         },
         .source = .{
-            .file = "./fixtures/apps/showcase-service/src/app.lua",
+            .file = "fixtures/apps/showcase-service/src/app.lua",
             .line = 60,
             .column = 1,
         },
@@ -729,7 +729,7 @@
             },
         },
         .source = .{
-            .file = "./fixtures/apps/showcase-service/src/app.lua",
+            .file = "fixtures/apps/showcase-service/src/app.lua",
             .line = 64,
             .column = 1,
         },
@@ -801,7 +801,7 @@
             },
         },
         .source = .{
-            .file = "./fixtures/apps/showcase-service/src/app.lua",
+            .file = "fixtures/apps/showcase-service/src/app.lua",
             .line = 68,
             .column = 1,
         },
@@ -873,7 +873,7 @@
             },
         },
         .source = .{
-            .file = "./fixtures/apps/showcase-service/src/app.lua",
+            .file = "fixtures/apps/showcase-service/src/app.lua",
             .line = 72,
             .column = 1,
         },
@@ -954,7 +954,7 @@
             },
         },
         .source = .{
-            .file = "./fixtures/apps/showcase-service/src/app.lua",
+            .file = "fixtures/apps/showcase-service/src/app.lua",
             .line = 76,
             .column = 1,
         },
@@ -1001,7 +1001,7 @@
         },
     },
     .{
-        .id = "route_15",
+        .id = "hybrid_inline",
         .method = .GET,
         .raw_path = "/hybrid-inline",
         .path = .{
@@ -1013,24 +1013,21 @@
         },
         .query = .{},
         .handler = .{
-            .inline_lua = .{
-                .id = "route_15",
-                .chunk_path = "./.meteorite/graph/current/../../lua/inline/route_15.lua",
-                .source_column = 1,
-                .source_file = "./fixtures/apps/showcase-service/src/app.lua",
-                .source_line = 87,
+            .zig_symbol = .{
+                .id = "hybrid_inline",
+                .symbol = "handlers.hybrid_inline",
             },
         },
         .source = .{
-            .file = "./fixtures/apps/showcase-service/src/app.lua",
-            .line = 87,
+            .file = "fixtures/apps/showcase-service/src/app.lua",
+            .line = 89,
             .column = 1,
         },
         .capabilities = .{},
         .execution = .{
-            .class = .lua,
+            .class = .default,
             .may_block = false,
-            .requires_lua = true,
+            .requires_lua = false,
             .requires_worker_pool = false,
         },
         .memory = .{
@@ -1053,10 +1050,10 @@
             .request_arena_bytes = 262144,
         },
         .runtime = .{
-            .execution_class = .lua,
+            .execution_class = .default,
             .requires_auth = false,
             .requires_http = false,
-            .requires_lua = true,
+            .requires_lua = false,
             .requires_zig_capability = false,
         },
         .scope = .{

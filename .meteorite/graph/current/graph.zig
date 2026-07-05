@@ -14,7 +14,8 @@ pub const Segment = union(enum) { literal: []const u8, param: []const u8, catch_
 pub const ZigSymbolHandler = struct { id: bindings.HandlerId, symbol: []const u8 };
 pub const ZigFileHandler = struct { id: []const u8, path: []const u8, decl: []const u8 = "handle" };
 pub const LuaFileHandler = struct { id: []const u8, path: []const u8 };
-pub const InlineLuaHandler = struct { id: []const u8, chunk_path: []const u8, source_file: []const u8, source_line: u32, source_column: u32 };
+pub const LuaArgMode = enum { request_table, lazy_context, direct_params, no_args };
+pub const InlineLuaHandler = struct { id: []const u8, chunk_path: []const u8, source_file: []const u8, source_line: u32, source_column: u32, nparams: u8 = 1, arg_mode: LuaArgMode = .request_table };
 pub const FileHandler = struct { artifact_path: []const u8, content_type: []const u8, content_length: u64, etag: []const u8, cache_control: []const u8, only_accept: ?[]const u8 = null };
 pub const StaticAsset = struct { request_path: []const u8, artifact_path: []const u8, content_type: []const u8, content_length: u64, etag: []const u8, cache_control: []const u8, compressed_br_path: ?[]const u8 = null, compressed_br_length: u64 = 0, compressed_br_etag: ?[]const u8 = null, compressed_gzip_path: ?[]const u8 = null, compressed_gzip_length: u64 = 0, compressed_gzip_etag: ?[]const u8 = null };
 pub const DirHandler = struct { mount_root: []const u8, param_name: []const u8, manifest: []const StaticAsset, cache_control: []const u8, immutable: bool = false };
@@ -88,7 +89,7 @@ const route_GET__hex__digest_hex = @import("routes/route_GET__hex__digest_hex.zi
 const route_GET__emails__email_email = @import("routes/route_GET__emails__email_email.zig");
 const route_GET__tokens__token_token = @import("routes/route_GET__tokens__token_token.zig");
 const route_GET__search_search = @import("routes/route_GET__search_search.zig");
-const route_GET__hybrid_inline_route_15 = @import("routes/route_GET__hybrid_inline_route_15.zig");
+const route_GET__hybrid_inline_hybrid_inline = @import("routes/route_GET__hybrid_inline_hybrid_inline.zig");
 
 pub const plugins = [_]PluginDescriptor{};
 
@@ -112,7 +113,7 @@ pub const routes = [_]Route{
     route_GET__emails__email_email.route(@This()),
     route_GET__tokens__token_token.route(@This()),
     route_GET__search_search.route(@This()),
-    route_GET__hybrid_inline_route_15.route(@This()),
+    route_GET__hybrid_inline_hybrid_inline.route(@This()),
 };
 
 pub const get_routes = [_]Route{

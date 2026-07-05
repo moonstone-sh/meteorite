@@ -10,6 +10,7 @@ pub const VTable = struct {
     bytes: *const fn (ctx: *anyopaque, status: u16, content_type: []const u8, body: []const u8) anyerror!void,
     body: *const fn (ctx: *anyopaque) anyerror![]const u8,
     param: *const fn (ctx: *anyopaque, name: []const u8) ?[]const u8,
+    param_at: *const fn (ctx: *anyopaque, index: usize) ?[]const u8,
     query: *const fn (ctx: *anyopaque, name: []const u8) ?[]const u8,
     header: *const fn (ctx: *anyopaque, name: []const u8) ?[]const u8,
     allocator: *const fn (ctx: *anyopaque) std.mem.Allocator,
@@ -55,6 +56,12 @@ pub fn makeVTable(comptime Ctx: type) VTable {
                 return typed.query(name);
             }
         }.f,
+        .param_at = struct {
+            fn f(ptr: *anyopaque, index: usize) ?[]const u8 {
+                const typed: *Ctx = @ptrCast(@alignCast(ptr));
+                return typed.paramAt(index);
+            }
+        }.f,
         .header = struct {
             fn f(ptr: *anyopaque, name: []const u8) ?[]const u8 {
                 const typed: *Ctx = @ptrCast(@alignCast(ptr));
@@ -91,3 +98,14 @@ pub fn globalVtable(comptime Ctx: type) *const VTable {
 /// Set before each pcall and cleared after.
 pub threadlocal var current_ctx: ?*anyopaque = null;
 pub threadlocal var current_vtable: ?*const VTable = null;
+pub threadlocal var current_responded: bool = false;
+
+pub fn markResponded() void {
+    current_responded = true;
+}
+
+pub fn resetCurrent() void {
+    current_ctx = null;
+    current_vtable = null;
+    current_responded = false;
+}

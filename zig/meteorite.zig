@@ -1,6 +1,7 @@
 const std = @import("std");
 const Io = std.Io;
 const process = std.process;
+const bench_stats = @import("bridge/lua_bench_stats");
 
 pub const backends = struct {
     pub const std_http = @import("backends/std_http.zig");
@@ -260,6 +261,7 @@ const server_limits = @import("server/request_limits.zig");
                 if (@hasField(@TypeOf(request.*), "date_seconds")) {
                     request.date_seconds = global_cached_time.load(.acquire);
                 }
+                backend.requestStarted();
                 serveRequest(arena, io, request) catch |err| {
                     std.debug.print("request failed for {s}: {s}\n", .{ backend.path(request), @errorName(err) });
                     request.close_after_response = true;
@@ -267,6 +269,7 @@ const server_limits = @import("server/request_limits.zig");
                 // Drain unread body before next keep-alive request.
                 // If the handler didn't call body(), unread bytes would corrupt the next request.
                 if (@hasDecl(backend, "drainBody")) backend.drainBody(request);
+                backend.requestCompleted();
                 if (request.close_after_response) break;
             }
             request.close(io);
@@ -275,7 +278,13 @@ const server_limits = @import("server/request_limits.zig");
         pub fn countersJson(allocator: std.mem.Allocator) ![]const u8 {
             const c = backend.snapshotCounters();
             const lua = lua_runtime.snapshotStats();
-            return std.fmt.allocPrint(allocator, "{{\"backend\":\"{s}\",\"connection_strategy\":\"{s}\",\"bounded\":{},\"active_connections\":{d},\"total_connections\":{d},\"accepted_connections\":{d},\"threads_spawned\":{d},\"requests_served\":{d},\"requests_per_connection\":{d},\"keepalive_reuse_count\":{d},\"connection_close_count\":{d},\"bytes_read\":{d},\"bytes_written\":{d},\"connection_errors\":{d},\"max_active_connections\":{d},\"queue_depth\":{d},\"max_queue_depth\":{d},\"dropped_connections\":{d},\"lua_states_created\":{d},\"lua_handler_refs_loaded\":{d},\"lua_handler_calls\":{d},\"lua_errors\":{d},\"lua_state_reuse_hits\":{d},\"lua_state_reuse_misses\":{d},\"per_thread_state_count\":{d}}}", .{ backend.name, backend.connection_strategy, backend.bounded, c.active_connections, c.total_connections, c.accepted_connections, c.threads_spawned, c.requests_served, c.requests_per_connection, c.keepalive_reuse_count, c.connection_close_count, c.bytes_read, c.bytes_written, c.connection_errors, c.max_active_connections, c.queue_depth, c.max_queue_depth, c.dropped_connections, lua.lua_states_created, lua.lua_handler_refs_loaded, lua.lua_handler_calls, lua.lua_errors, lua.lua_state_reuse_hits, lua.lua_state_reuse_misses, lua.per_thread_state_count });
+            const prefix = try std.fmt.allocPrint(allocator, "{{\"backend\":\"{s}\",\"connection_strategy\":\"{s}\",\"bounded\":{},\"active_connections\":{d},\"open_connections_current\":{d},\"inflight_current\":{d},\"inflight_requests_current\":{d},\"inflight_max\":{d},\"inflight_requests_max\":{d},\"open_connections_max\":{d},\"total_connections\":{d},\"accepted_connections\":{d},\"accepted_total\":{d},\"completed_total\":{d},\"threads_spawned\":{d},\"requests_served\":{d},\"requests_per_connection\":{d},\"keepalive_reuse_count\":{d},\"connection_close_count\":{d},\"bytes_read\":{d},\"bytes_written\":{d},\"connection_errors\":{d}", .{ backend.name, backend.connection_strategy, backend.bounded, c.active_connections, c.active_connections, c.inflight_current, c.inflight_current, c.inflight_max, c.inflight_max, c.max_active_connections, c.total_connections, c.accepted_connections, c.accepted_total, c.completed_total, c.threads_spawned, c.requests_served, c.requests_per_connection, c.keepalive_reuse_count, c.connection_close_count, c.bytes_read, c.bytes_written, c.connection_errors });
+            defer allocator.free(prefix);
+            const pressure = try std.fmt.allocPrint(allocator, ",\"max_active_connections\":{d},\"queue_depth\":{d},\"queue_depth_current\":{d},\"max_queue_depth\":{d},\"queue_depth_max\":{d},\"worker_queue_depth_max\":{d},\"budget_capacity\":{d},\"budget_rejections_total\":{d},\"backpressure_total\":{d},\"dropped_connections\":{d}", .{ c.max_active_connections, c.queue_depth, c.queue_depth, c.max_queue_depth, c.max_queue_depth, c.worker_queue_depth_max, c.budget_capacity, c.budget_rejections_total, c.backpressure_total, c.dropped_connections });
+            defer allocator.free(pressure);
+            const suffix = try std.fmt.allocPrint(allocator, ",\"lua_states_created\":{d},\"lua_handler_refs_loaded\":{d},\"lua_handler_calls\":{d},\"lua_errors\":{d},\"lua_state_reuse_hits\":{d},\"lua_state_reuse_misses\":{d},\"per_thread_state_count\":{d}}}", .{ lua.lua_states_created, lua.lua_handler_refs_loaded, lua.lua_handler_calls, lua.lua_errors, lua.lua_state_reuse_hits, lua.lua_state_reuse_misses, lua.per_thread_state_count });
+            defer allocator.free(suffix);
+            return std.mem.concat(allocator, u8, &.{ prefix, pressure, suffix });
         }
 
         pub fn metaJson(allocator: std.mem.Allocator) ![]const u8 {
@@ -283,9 +292,13 @@ const server_limits = @import("server/request_limits.zig");
             const lua = lua_runtime.snapshotStats();
             const prefix = try std.fmt.allocPrint(allocator, "{{\"meteorite_mode\":\"{s}\",\"zig_optimize\":\"{s}\",\"target\":\"{s}\",\"backend\":\"{s}\",\"connection_strategy\":\"{s}\",\"backend_strategy\":\"{s}\",\"worker_strategy\":\"{s}\",\"bounded\":{},\"fast_http_workers\":{d},\"fast_http_queue\":{d},\"router_dispatch\":\"{s}\",\"worker_count\":{d},\"lua_runtime\":{},\"hybrid_profile\":\"{s}\",\"lua_state_strategy\":\"{s}\",\"lua_handler_ref_strategy\":\"{s}\",\"capability_store_strategy\":\"{s}\",\"require_cache_strategy\":\"{s}\"", .{ build_info.meteorite_mode, build_info.zig_optimize, build_info.target, backend.name, backend.connection_strategy, backend.connection_strategy, backend.connection_strategy, backend.bounded, build_info.fast_http_workers, build_info.fast_http_queue, build_info.router_dispatch, c.threads_spawned, build_info.lua_runtime, build_info.hybrid_profile, lua_runtime.lua_state_strategy, lua_runtime.lua_handler_ref_strategy, lua_runtime.capability_store_strategy, lua_runtime.require_cache_strategy });
             defer allocator.free(prefix);
-            const suffix = try std.fmt.allocPrint(allocator, ",\"active_connections\":{d},\"total_connections\":{d},\"accepted_connections\":{d},\"threads_spawned\":{d},\"requests_served\":{d},\"requests_per_connection\":{d},\"bytes_read\":{d},\"bytes_written\":{d},\"connection_errors\":{d},\"max_active_connections\":{d},\"queue_depth\":{d},\"max_queue_depth\":{d},\"dropped_connections\":{d},\"lua_states_created\":{d},\"lua_handler_refs_loaded\":{d},\"lua_handler_calls\":{d},\"lua_errors\":{d},\"lua_state_reuse_hits\":{d},\"lua_state_reuse_misses\":{d},\"per_thread_state_count\":{d}}}", .{ c.active_connections, c.total_connections, c.accepted_connections, c.threads_spawned, c.requests_served, c.requests_per_connection, c.bytes_read, c.bytes_written, c.connection_errors, c.max_active_connections, c.queue_depth, c.max_queue_depth, c.dropped_connections, lua.lua_states_created, lua.lua_handler_refs_loaded, lua.lua_handler_calls, lua.lua_errors, lua.lua_state_reuse_hits, lua.lua_state_reuse_misses, lua.per_thread_state_count });
-            defer allocator.free(suffix);
-            return std.mem.concat(allocator, u8, &.{ prefix, suffix });
+            const counters_suffix = try std.fmt.allocPrint(allocator, ",\"active_connections\":{d},\"open_connections_current\":{d},\"inflight_current\":{d},\"inflight_requests_current\":{d},\"inflight_max\":{d},\"inflight_requests_max\":{d},\"open_connections_max\":{d},\"total_connections\":{d},\"accepted_connections\":{d},\"accepted_total\":{d},\"completed_total\":{d},\"threads_spawned\":{d},\"requests_served\":{d},\"requests_per_connection\":{d},\"bytes_read\":{d},\"bytes_written\":{d},\"connection_errors\":{d}", .{ c.active_connections, c.active_connections, c.inflight_current, c.inflight_current, c.inflight_max, c.inflight_max, c.max_active_connections, c.total_connections, c.accepted_connections, c.accepted_total, c.completed_total, c.threads_spawned, c.requests_served, c.requests_per_connection, c.bytes_read, c.bytes_written, c.connection_errors });
+            defer allocator.free(counters_suffix);
+            const pressure_suffix = try std.fmt.allocPrint(allocator, ",\"max_active_connections\":{d},\"queue_depth\":{d},\"queue_depth_current\":{d},\"max_queue_depth\":{d},\"queue_depth_max\":{d},\"worker_queue_depth_max\":{d},\"budget_capacity\":{d},\"budget_rejections_total\":{d},\"backpressure_total\":{d},\"dropped_connections\":{d}", .{ c.max_active_connections, c.queue_depth, c.queue_depth, c.max_queue_depth, c.max_queue_depth, c.worker_queue_depth_max, c.budget_capacity, c.budget_rejections_total, c.backpressure_total, c.dropped_connections });
+            defer allocator.free(pressure_suffix);
+            const lua_suffix = try std.fmt.allocPrint(allocator, ",\"lua_states_created\":{d},\"lua_handler_refs_loaded\":{d},\"lua_handler_calls\":{d},\"lua_errors\":{d},\"lua_state_reuse_hits\":{d},\"lua_state_reuse_misses\":{d},\"per_thread_state_count\":{d}}}", .{ lua.lua_states_created, lua.lua_handler_refs_loaded, lua.lua_handler_calls, lua.lua_errors, lua.lua_state_reuse_hits, lua.lua_state_reuse_misses, lua.per_thread_state_count });
+            defer allocator.free(lua_suffix);
+            return std.mem.concat(allocator, u8, &.{ prefix, counters_suffix, pressure_suffix, lua_suffix });
         }
 
         fn serveRequest(allocator: std.mem.Allocator, io: Io, request: *backend.Request) !void {
@@ -299,6 +312,11 @@ const server_limits = @import("server/request_limits.zig");
             if (req_method == .GET and std.mem.eql(u8, req_path, "/__bench/counters")) {
                 const json = try countersJson(allocator);
                 return backend.respondBytes(request, 200, "application/json", json);
+            }
+            if (req_method == .POST and std.mem.eql(u8, req_path, "/__bench/stats/reset")) {
+                backend.resetAuditCounters();
+                bench_stats.reset();
+                return backend.respondText(request, 200, "ok");
             }
             if (req_method == .GET and std.mem.eql(u8, req_path, "/__meteorite/graph")) {
                 // Output route graph as JSON for dev inspection
@@ -426,8 +444,8 @@ const server_limits = @import("server/request_limits.zig");
                             // handle stages produce the response.
                             if (stage.kind == .handle) {
                                 switch (route.handler) {
-                                    .inline_lua => |handler| try callLuaHandler(handler, &ctx),
-                                    .lua_file => |handler| try callLuaHandler(handler, &ctx),
+                                    .inline_lua => |handler| try callLuaHandler(route, handler, &ctx),
+                                    .lua_file => |handler| try callLuaHandler(route, handler, &ctx),
                                     else => {},
                                 }
                             }
@@ -439,8 +457,8 @@ const server_limits = @import("server/request_limits.zig");
                             // External Lua stages — same as inline_lua for now
                             if (stage.kind == .handle) {
                                 switch (route.handler) {
-                                    .inline_lua => |handler| try callLuaHandler(handler, &ctx),
-                                    .lua_file => |handler| try callLuaHandler(handler, &ctx),
+                                    .inline_lua => |handler| try callLuaHandler(route, handler, &ctx),
+                                    .lua_file => |handler| try callLuaHandler(route, handler, &ctx),
                                     else => {},
                                 }
                             }
@@ -460,8 +478,8 @@ const server_limits = @import("server/request_limits.zig");
             } else {
                 switch (route.handler) {
                     .zig_symbol, .zig_file => try graph.bindings.callRoute(route.id, &ctx),
-                    .inline_lua => |handler| try callLuaHandler(handler, &ctx),
-                    .lua_file => |handler| try callLuaHandler(handler, &ctx),
+                    .inline_lua => |handler| try callLuaHandler(route, handler, &ctx),
+                    .lua_file => |handler| try callLuaHandler(route, handler, &ctx),
                     .file => |handler| try serveFileHandler(handler, allocator, io, request),
                     .dir => |handler| try serveDirHandler(handler, allocator, io, request, captures),
                 }
@@ -618,14 +636,17 @@ const server_limits = @import("server/request_limits.zig");
             return true;
         }
 
-        fn callLuaHandler(comptime handler: anytype, ctx: anytype) !void {
+        fn callLuaHandler(comptime route: graph.Route, comptime handler: anytype, ctx: anytype) !void {
             return lua_runtime.call(.{
                 .id = handler.id,
+                .bench_route = route.raw_path,
                 .path = switch (@TypeOf(handler)) {
                     graph.InlineLuaHandler => handler.chunk_path,
                     graph.LuaFileHandler => handler.path,
                     else => @compileError("unsupported Lua handler type"),
                 },
+                .nparams = if (@TypeOf(handler) == graph.InlineLuaHandler) handler.nparams else 1,
+                .arg_mode = if (@TypeOf(handler) == graph.InlineLuaHandler) handler.arg_mode else .request_table,
             }, ctx);
         }
 
@@ -817,6 +838,11 @@ const server_limits = @import("server/request_limits.zig");
 
             pub fn param(self: *Context, name: []const u8) ?[]const u8 {
                 return self.captures.get(name);
+            }
+
+            pub fn paramAt(self: *Context, index: usize) ?[]const u8 {
+                if (index >= self.route.params.len) return null;
+                return self.captures.get(self.route.params[index].name);
             }
 
             pub fn query(self: *Context, name: []const u8) ?[]const u8 {

@@ -6,6 +6,7 @@ const lua_stats = @import("bridge/lua_stats.zig");
 const lua_vtable = @import("bridge/lua_vtable.zig");
 const lua_json = @import("bridge/lua_json.zig");
 const lua_http = @import("bridge/lua_http.zig");
+const lua_bench_stats = @import("bridge/lua_bench_stats");
 
 // --- Lua ABI Compatibility Shim ---
 const LuaAbi = enum {
@@ -131,6 +132,101 @@ const getCapabilityInt = lua_bindings.getCapabilityInt;
 const lookupString = lua_bindings.lookupString;
 const lookupInt = lua_bindings.lookupInt;
 const lookupZig = lua_bindings.lookupZig;
+const installGlobalResponseHelpers = lua_bindings.installGlobalResponseHelpers;
+
+fn pushCoreContextMethods(L: *c.lua_State) void {
+    pushMethod(L, "text", l_text);
+    pushMethod(L, "json", l_json);
+    pushMethod(L, "bytes", l_bytes);
+    pushMethod(L, "body", l_body);
+    pushMethod(L, "param", l_param);
+    pushMethod(L, "query", l_query);
+    pushMethod(L, "header", l_header);
+    pushMethod(L, "http", l_http);
+    pushMethod(L, "auth", l_auth);
+    pushMethod(L, "zig", l_zig);
+    pushMethod(L, "get", l_get);
+    pushMethod(L, "set", l_set);
+    pushMethod(L, "debug", l_debug);
+    pushMethod(L, "shared_counter", l_shared_counter);
+    pushMethod(L, "worker_counter", l_worker_counter);
+}
+
+fn pushFullRequestTable(comptime handler: anytype, L: *c.lua_State, ctx: anytype, vtable: *const VTable) c_int {
+    _ = handler;
+    c.lua_newtable(L);
+    pushCoreContextMethods(L);
+
+    if (@hasField(@TypeOf(ctx.*), "captures")) {
+        c.lua_newtable(L);
+        const captures = ctx.captures;
+        for (captures.items[0..captures.len]) |item| {
+            _ = c.lua_pushlstring(L, @ptrCast(item.value.ptr), item.value.len);
+            c.lua_setfield(L, -2, @ptrCast(item.name.ptr));
+        }
+        c.lua_setfield(L, -2, "params");
+    }
+
+    if (@hasField(@TypeOf(ctx.*), "route") and @hasField(@TypeOf(ctx.route), "query")) {
+        c.lua_newtable(L);
+        const query_specs = ctx.route.query;
+        for (query_specs) |spec| {
+            if (vtable.query(ctx, spec.name)) |value| {
+                _ = c.lua_pushlstring(L, @ptrCast(value.ptr), value.len);
+                c.lua_setfield(L, -2, @ptrCast(spec.name.ptr));
+            }
+        }
+        c.lua_setfield(L, -2, "query");
+    }
+
+    c.lua_newtable(L);
+    c.lua_setfield(L, -2, "state");
+
+    if (@hasField(@TypeOf(ctx.*), "route") and @hasField(@TypeOf(ctx.route), "scope")) {
+        c.lua_newtable(L);
+        for (ctx.route.scope.context) |ref| {
+            _ = c.lua_pushlstring(L, @ptrCast(ref.value.ptr), ref.value.len);
+            c.lua_setfield(L, -2, @ptrCast(ref.key.ptr));
+        }
+        c.lua_setfield(L, -2, "scope");
+    }
+
+    return 1;
+}
+
+fn pushLazyContextTable(comptime handler: anytype, L: *c.lua_State, ctx: anytype, vtable: *const VTable) c_int {
+    _ = handler;
+    _ = ctx;
+    _ = vtable;
+    c.lua_newtable(L);
+    pushCoreContextMethods(L);
+    c.lua_newtable(L);
+    c.lua_setfield(L, -2, "state");
+    return 1;
+}
+
+fn pushDirectParamArgs(comptime handler: anytype, L: *c.lua_State, ctx: anytype, vtable: *const VTable) c_int {
+    var pushed: c_int = 0;
+    var index: usize = 0;
+    while (index < handler.nparams) : (index += 1) {
+        if (vtable.param_at(ctx, index)) |value| {
+            _ = c.lua_pushlstring(L, @ptrCast(value.ptr), value.len);
+        } else {
+            c.lua_pushnil(L);
+        }
+        pushed += 1;
+    }
+    return pushed;
+}
+
+fn pushHandlerArgs(comptime handler: anytype, L: *c.lua_State, ctx: anytype, vtable: *const VTable) c_int {
+    return switch (handler.arg_mode) {
+        .no_args => 0,
+        .direct_params => pushDirectParamArgs(handler, L, ctx, vtable),
+        .lazy_context => pushLazyContextTable(handler, L, ctx, vtable),
+        .request_table => pushFullRequestTable(handler, L, ctx, vtable),
+    };
+}
 pub const HybridLuaRuntime = struct {
     pub const lua_state_strategy = "per_request_state";
     pub const lua_handler_ref_strategy = "load_per_request";
@@ -142,7 +238,6 @@ pub const HybridLuaRuntime = struct {
     }
 
     pub fn call(comptime handler: anytype, ctx: anytype) !void {
-        incLua(&lua_stats.stats.lua_handler_calls);
         incLua(&lua_stats.stats.lua_state_reuse_misses);
         const vtable = globalVtable(@TypeOf(ctx.*));
         const L = c.luaL_newstate() orelse {
@@ -155,6 +250,7 @@ pub const HybridLuaRuntime = struct {
         c.luaL_openlibs(L);
 
         try setupLuaPackagePaths(L);
+        installGlobalResponseHelpers(L);
 
         if (loadfile(L, @ptrCast(handler.path.ptr)) != LUA_OK) {
             const err = c.lua_tolstring(L, -1, null);
@@ -174,69 +270,24 @@ pub const HybridLuaRuntime = struct {
             return error.LuaHandlerInvalid;
         }
 
-        c.lua_newtable(L);
-        pushMethod(L, "text", l_text);
-        pushMethod(L, "json", l_json);
-        pushMethod(L, "bytes", l_bytes);
-        pushMethod(L, "body", l_body);
-        pushMethod(L, "param", l_param);
-        pushMethod(L, "query", l_query);
-        pushMethod(L, "header", l_header);
-        pushMethod(L, "http", l_http);
-        pushMethod(L, "auth", l_auth);
-        pushMethod(L, "zig", l_zig);
-        pushMethod(L, "get", l_get);
-        pushMethod(L, "set", l_set);
-        pushMethod(L, "debug", l_debug);
-        pushMethod(L, "shared_counter", l_shared_counter);
-        pushMethod(L, "worker_counter", l_worker_counter);
-
-        if (@hasField(@TypeOf(ctx.*), "captures")) {
-            c.lua_newtable(L);
-            const captures = ctx.captures;
-            for (captures.items[0..captures.len]) |item| {
-                _ = c.lua_pushlstring(L, @ptrCast(item.value.ptr), item.value.len);
-                c.lua_setfield(L, -2, @ptrCast(item.name.ptr));
-            }
-            c.lua_setfield(L, -2, "params");
-        }
-
-        if (@hasField(@TypeOf(ctx.*), "route") and @hasField(@TypeOf(ctx.route), "query")) {
-            c.lua_newtable(L);
-            const query_specs = ctx.route.query;
-            for (query_specs) |spec| {
-                if (vtable.query(ctx, spec.name)) |value| {
-                    _ = c.lua_pushlstring(L, @ptrCast(value.ptr), value.len);
-                    c.lua_setfield(L, -2, @ptrCast(spec.name.ptr));
-                }
-            }
-            c.lua_setfield(L, -2, "query");
-        }
-
-        c.lua_newtable(L);
-        c.lua_setfield(L, -2, "state");
-
-        if (@hasField(@TypeOf(ctx.*), "route") and @hasField(@TypeOf(ctx.route), "scope")) {
-            c.lua_newtable(L);
-            for (ctx.route.scope.context) |ref| {
-                _ = c.lua_pushlstring(L, @ptrCast(ref.value.ptr), ref.value.len);
-                c.lua_setfield(L, -2, @ptrCast(ref.key.ptr));
-            }
-            c.lua_setfield(L, -2, "scope");
-        }
+        const nargs = pushHandlerArgs(handler, L, ctx, vtable);
 
         lua_vtable.current_ctx = ctx;
         lua_vtable.current_vtable = vtable;
-        defer {
-            lua_vtable.current_ctx = null;
-            lua_vtable.current_vtable = null;
-        }
+        lua_vtable.current_responded = false;
+        defer lua_vtable.resetCurrent();
 
-        if (pcall(L, 1, 1, 0) != LUA_OK) {
+        if (@hasField(@TypeOf(handler), "bench_route")) lua_bench_stats.incLuaPcallByPath(handler.bench_route);
+        if (pcall(L, nargs, 1, 0) != LUA_OK) {
             const err = c.lua_tolstring(L, -1, null);
             std.log.err("handler {s}: {s}", .{ handler.path, err });
             incLua(&lua_stats.stats.lua_errors);
             return error.LuaRuntimeError;
+        }
+
+        if (lua_vtable.current_responded) {
+            c.lua_pop(L, 1);
+            return;
         }
 
         if (c.lua_istable(L, -1)) {
@@ -275,7 +326,6 @@ pub const HybridLuaRuntime = struct {
     }
 
     pub fn callPlugin(comptime handler: anytype, ctx: anytype) !bool {
-        incLua(&lua_stats.stats.lua_handler_calls);
         const vtable = globalVtable(@TypeOf(ctx.*));
         const L = c.luaL_newstate() orelse {
             std.log.err("failed to create Lua state for plugin", .{});
@@ -286,6 +336,7 @@ pub const HybridLuaRuntime = struct {
         c.luaL_openlibs(L);
 
         setupLuaPackagePaths(L) catch return false;
+        installGlobalResponseHelpers(L);
 
         const plugin_path = if (@hasField(@TypeOf(handler), "chunk_path")) handler.chunk_path else handler.path;
         if (loadfile(L, @ptrCast(plugin_path.ptr)) != LUA_OK) {
@@ -357,10 +408,8 @@ pub const HybridLuaRuntime = struct {
 
         lua_vtable.current_ctx = ctx;
         lua_vtable.current_vtable = vtable;
-        defer {
-            lua_vtable.current_ctx = null;
-            lua_vtable.current_vtable = null;
-        }
+        lua_vtable.current_responded = false;
+        defer lua_vtable.resetCurrent();
 
         if (pcall(L, 1, 1, 0) != LUA_OK) {
             std.log.err("plugin {s}: {s}", .{ plugin_path, c.lua_tolstring(L, -1, null) });
@@ -458,6 +507,7 @@ pub const CachedHybridRuntime = struct {
         c.luaL_openlibs(L.?);
 
         try setupLuaPackagePaths(L);
+        installGlobalResponseHelpers(L);
 
         comptime var idx: usize = 0;
         inline for (graph_cached.routes) |route| {
@@ -516,7 +566,6 @@ pub const CachedHybridRuntime = struct {
     }
 
     pub fn call(comptime handler: anytype, ctx: anytype) !void {
-        incLua(&lua_stats.stats.lua_handler_calls);
         const vtable = globalVtable(@TypeOf(ctx.*));
         try init();
         try refreshIfStale();
@@ -525,69 +574,24 @@ pub const CachedHybridRuntime = struct {
         const idx = comptime routeIndexCached(handler.id);
         _ = c.lua_rawgeti(L2, c.LUA_REGISTRYINDEX, refs[idx]);
 
-        c.lua_newtable(L2);
-        pushMethod(L2, "text", l_text);
-        pushMethod(L2, "json", l_json);
-        pushMethod(L2, "bytes", l_bytes);
-        pushMethod(L2, "body", l_body);
-        pushMethod(L2, "param", l_param);
-        pushMethod(L2, "query", l_query);
-        pushMethod(L2, "header", l_header);
-        pushMethod(L2, "http", l_http);
-        pushMethod(L2, "auth", l_auth);
-        pushMethod(L2, "zig", l_zig);
-        pushMethod(L2, "get", l_get);
-        pushMethod(L2, "set", l_set);
-        pushMethod(L2, "debug", l_debug);
-        pushMethod(L2, "shared_counter", l_shared_counter);
-        pushMethod(L2, "worker_counter", l_worker_counter);
-
-        if (@hasField(@TypeOf(ctx.*), "captures")) {
-            c.lua_newtable(L2);
-            const captures = ctx.captures;
-            for (captures.items[0..captures.len]) |item| {
-                _ = c.lua_pushlstring(L2, @ptrCast(item.value.ptr), item.value.len);
-                c.lua_setfield(L2, -2, @ptrCast(item.name.ptr));
-            }
-            c.lua_setfield(L2, -2, "params");
-        }
-
-        if (@hasField(@TypeOf(ctx.*), "route") and @hasField(@TypeOf(ctx.route), "query")) {
-            c.lua_newtable(L2);
-            const query_specs = ctx.route.query;
-            for (query_specs) |spec| {
-                if (vtable.query(ctx, spec.name)) |value| {
-                    _ = c.lua_pushlstring(L2, @ptrCast(value.ptr), value.len);
-                    c.lua_setfield(L2, -2, @ptrCast(spec.name.ptr));
-                }
-            }
-            c.lua_setfield(L2, -2, "query");
-        }
-
-        c.lua_newtable(L2);
-        c.lua_setfield(L2, -2, "state");
-
-        if (@hasField(@TypeOf(ctx.*), "route") and @hasField(@TypeOf(ctx.route), "scope")) {
-            c.lua_newtable(L2);
-            for (ctx.route.scope.context) |ref| {
-                _ = c.lua_pushlstring(L2, @ptrCast(ref.value.ptr), ref.value.len);
-                c.lua_setfield(L2, -2, @ptrCast(ref.key.ptr));
-            }
-            c.lua_setfield(L2, -2, "scope");
-        }
+        const nargs = pushHandlerArgs(handler, L2, ctx, vtable);
 
         lua_vtable.current_ctx = ctx;
         lua_vtable.current_vtable = vtable;
-        defer {
-            lua_vtable.current_ctx = null;
-            lua_vtable.current_vtable = null;
-        }
+        lua_vtable.current_responded = false;
+        defer lua_vtable.resetCurrent();
 
-        if (pcall(L2, 1, 1, 0) != LUA_OK) {
+        if (@hasField(@TypeOf(handler), "bench_route")) lua_bench_stats.incLuaPcallByPath(handler.bench_route);
+        if (pcall(L2, nargs, 1, 0) != LUA_OK) {
             const err = c.lua_tolstring(L2, -1, null);
             std.log.err("cached handler {s}: {s}", .{ handler.id, err });
             incLua(&lua_stats.stats.lua_errors);
             return error.LuaRuntimeError;
+        }
+
+        if (lua_vtable.current_responded) {
+            c.lua_pop(L2, 1);
+            return;
         }
 
         if (c.lua_istable(L2, -1)) {
@@ -626,7 +630,6 @@ pub const CachedHybridRuntime = struct {
     }
 
     pub fn callPlugin(comptime handler: anytype, ctx: anytype) !bool {
-        incLua(&lua_stats.stats.lua_handler_calls);
         const vtable = globalVtable(@TypeOf(ctx.*));
         try init();
         const L2 = L.?;

@@ -1,0 +1,30 @@
+[package]
+name = "bench-pegasus"
+version = "0.1.0"
+kind = "bin"
+
+[interpreter]
+name = "lua"
+version = "5.4"
+abi = "5.4"
+
+[[dependencies]]
+name = "pegasus"
+constraint = "rocks:pegasus@*"
+role = "runtime"
+
+[[dependencies]]
+name = "luasql-sqlite3"
+constraint = "^2.8.0-1"
+resolver = "rocks"
+role = "runtime"
+
+[[dependencies]]
+name = "etlua"
+constraint = "rocks:etlua@*"
+role = "runtime"
+
+[[dependencies]]
+name = "lua-cjson"
+constraint = "rocks:lua-cjson@*"
+role = "runtime"

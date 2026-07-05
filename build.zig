@@ -170,6 +170,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const bridge_bench_stats_module = b.createModule(.{
+        .root_source_file = b.path("zig/bridge/lua_bench_stats.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
     const bridge_vtable_module = b.createModule(.{
         .root_source_file = b.path("zig/bridge/lua_vtable.zig"),
         .target = target,
@@ -197,6 +202,7 @@ const meteorite_module = b.createModule(.{
     meteorite_module.addImport("meteorite_protocol", protocol_module);
     meteorite_module.addImport("server/signals", signals_module);
     meteorite_module.addImport("server/http_date", http_date_module);
+    meteorite_module.addImport("bridge/lua_bench_stats", bridge_bench_stats_module);
 
     const server_validators_module = b.createModule(.{
         .root_source_file = b.path("zig/server/validators.zig"),
@@ -252,10 +258,12 @@ const meteorite_module = b.createModule(.{
     graph_module.addImport("meteorite_validators", validators_module);
     addZigFileImports(b, graph_module, project_graph_output, target, optimize);
     handlers_module.addImport("meteorite_graph", ctx_module);
+    handlers_module.addImport("bridge/lua_bench_stats", bridge_bench_stats_module);
     bridge_module.addImport("meteorite_graph", graph_module);
     bridge_module.addImport("meteorite_protocol", protocol_module);
     bridge_module.addImport("server/http_date", http_date_module);
     bridge_module.addImport("bridge/lua_stats", bridge_stats_module);
+    bridge_module.addImport("bridge/lua_bench_stats", bridge_bench_stats_module);
     bridge_module.addImport("bridge/lua_vtable", bridge_vtable_module);
     bridge_module.addImport("bridge/lua_json", bridge_json_module);
     bridge_module.addImport("bridge/lua_http", bridge_http_module);

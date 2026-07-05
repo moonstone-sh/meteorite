@@ -20,15 +20,20 @@ const AtomicCounters = proto.AtomicCounters;
 var counters = AtomicCounters{};
 
 pub fn snapshotCounters() Counters {
-    return proto.snapshotCounters(&counters);
+    var c = proto.snapshotCounters(&counters);
+    c.budget_capacity = queue_limit;
+    return c;
 }
 
 pub fn connectionStarted() void { proto.connectionStarted(&counters); }
 pub fn connectionEnded() void { proto.connectionEnded(&counters); }
+pub fn requestStarted() void { proto.requestStarted(&counters); }
+pub fn requestCompleted() void { proto.requestCompleted(&counters); }
 pub fn threadSpawned() void { proto.threadSpawned(&counters); }
 pub fn connectionError() void { proto.connectionError(&counters); }
 pub fn droppedConnection() void { proto.droppedConnection(&counters); }
 pub fn setQueueDepth(value: u64) void { proto.setQueueDepth(&counters, value); }
+pub fn resetAuditCounters() void { proto.resetAuditCounters(&counters); }
 
 pub const ListenConfig = struct {
     host: []const u8 = "127.0.0.1",

@@ -45,19 +45,29 @@ pub fn pushMethod(L: ?*c.lua_State, name: [*c]const u8, func: c.lua_CFunction) v
     c.lua_setfield(L, -2, name);
 }
 
+pub fn installGlobalResponseHelpers(L: ?*c.lua_State) void {
+    c.lua_pushcfunction(L, l_text);
+    c.lua_setglobal(L, "text");
+    c.lua_pushcfunction(L, l_json);
+    c.lua_setglobal(L, "json");
+    c.lua_pushcfunction(L, l_bytes);
+    c.lua_setglobal(L, "bytes");
+}
+
 pub fn l_text(L: ?*c.lua_State) callconv(.c) c_int {
     const nargs = c.lua_gettop(L);
     var status: u16 = 200;
-    var body_arg: c_int = 2;
-    if (nargs >= 3 and c.lua_isinteger(L, 2) != 0) {
-        status = @intCast(c.lua_tointegerx(L, 2, @as([*c]c_int, null)));
-        body_arg = 3;
-    } else if (nargs < 2) {
-        return pushResponse(L, status, "text/plain; charset=utf-8", "");
+    const offset: c_int = if (nargs >= 2 and c.lua_istable(L, 1)) @as(c_int, 1) else @as(c_int, 0);
+    var body_arg: c_int = offset + 1;
+    if (nargs >= offset + 2 and c.lua_isinteger(L, offset + 1) != 0) {
+        status = @intCast(c.lua_tointegerx(L, offset + 1, @as([*c]c_int, null)));
+        body_arg = offset + 2;
+    } else if (nargs < offset + 1) {
+        return directText(L, status, "");
     }
     var body_len: usize = 0;
     const body_ptr = c.lua_tolstring(L, body_arg, &body_len);
-    return pushResponse(L, status, "text/plain; charset=utf-8", body_ptr[0..body_len]);
+    return directText(L, status, body_ptr[0..body_len]);
 }
 
 pub fn l_json(L: ?*c.lua_State) callconv(.c) c_int {
@@ -65,12 +75,13 @@ pub fn l_json(L: ?*c.lua_State) callconv(.c) c_int {
     const ctx = lua_vtable.current_ctx.?;
     const nargs = c.lua_gettop(L);
     var status: u16 = 200;
-    var value_idx: c_int = 2;
-    if (nargs >= 3 and c.lua_isinteger(L, 2) != 0) {
-        status = @intCast(c.lua_tointegerx(L, 2, @as([*c]c_int, null)));
-        value_idx = 3;
-    } else if (nargs < 2) {
-        return pushResponse(L, status, "application/json", "{}");
+    const offset: c_int = if (nargs >= 2 and c.lua_istable(L, 1)) @as(c_int, 1) else @as(c_int, 0);
+    var value_idx: c_int = offset + 1;
+    if (nargs >= offset + 2 and c.lua_isinteger(L, offset + 1) != 0) {
+        status = @intCast(c.lua_tointegerx(L, offset + 1, @as([*c]c_int, null)));
+        value_idx = offset + 2;
+    } else if (nargs < offset + 1) {
+        return directJson(L, status, "{}");
     }
 
     var list: std.ArrayListUnmanaged(u8) = .empty;
@@ -81,26 +92,58 @@ pub fn l_json(L: ?*c.lua_State) callconv(.c) c_int {
         unreachable;
     };
 
-    return pushResponse(L, status, "application/json", list.items);
+    return directJson(L, status, list.items);
 }
 
 pub fn l_bytes(L: ?*c.lua_State) callconv(.c) c_int {
     const nargs = c.lua_gettop(L);
     var status: u16 = 200;
-    var content_type_arg: c_int = 2;
-    var body_arg: c_int = 3;
-    if (nargs >= 4 and c.lua_isinteger(L, 2) != 0) {
-        status = @intCast(c.lua_tointegerx(L, 2, @as([*c]c_int, null)));
-        content_type_arg = 3;
-        body_arg = 4;
-    } else if (nargs < 3) {
-        return pushResponse(L, status, "application/octet-stream", "");
+    const offset: c_int = if (nargs >= 3 and c.lua_istable(L, 1)) @as(c_int, 1) else @as(c_int, 0);
+    var content_type_arg: c_int = offset + 1;
+    var body_arg: c_int = offset + 2;
+    if (nargs >= offset + 3 and c.lua_isinteger(L, offset + 1) != 0) {
+        status = @intCast(c.lua_tointegerx(L, offset + 1, @as([*c]c_int, null)));
+        content_type_arg = offset + 2;
+        body_arg = offset + 3;
+    } else if (nargs < offset + 2) {
+        return directBytes(L, status, "application/octet-stream", "");
     }
     var ct_len: usize = 0;
     const ct_ptr = c.lua_tolstring(L, content_type_arg, &ct_len);
     var body_len: usize = 0;
     const body_ptr = c.lua_tolstring(L, body_arg, &body_len);
-    return pushResponse(L, status, ct_ptr[0..ct_len], body_ptr[0..body_len]);
+    return directBytes(L, status, ct_ptr[0..ct_len], body_ptr[0..body_len]);
+}
+
+fn directText(L: ?*c.lua_State, status: u16, body: []const u8) c_int {
+    const rt = lua_vtable.current_vtable orelse return pushResponse(L, status, "text/plain; charset=utf-8", body);
+    const ctx = lua_vtable.current_ctx orelse return pushResponse(L, status, "text/plain; charset=utf-8", body);
+    rt.text(ctx, status, body) catch |err| return luaError(L, "text response failed: {s}", .{@errorName(err)});
+    lua_vtable.markResponded();
+    return 0;
+}
+
+fn directJson(L: ?*c.lua_State, status: u16, body: []const u8) c_int {
+    const rt = lua_vtable.current_vtable orelse return pushResponse(L, status, "application/json", body);
+    const ctx = lua_vtable.current_ctx orelse return pushResponse(L, status, "application/json", body);
+    rt.json(ctx, status, body) catch |err| return luaError(L, "json response failed: {s}", .{@errorName(err)});
+    lua_vtable.markResponded();
+    return 0;
+}
+
+fn directBytes(L: ?*c.lua_State, status: u16, content_type: []const u8, body: []const u8) c_int {
+    const rt = lua_vtable.current_vtable orelse return pushResponse(L, status, content_type, body);
+    const ctx = lua_vtable.current_ctx orelse return pushResponse(L, status, content_type, body);
+    rt.bytes(ctx, status, content_type, body) catch |err| return luaError(L, "bytes response failed: {s}", .{@errorName(err)});
+    lua_vtable.markResponded();
+    return 0;
+}
+
+fn luaError(L: ?*c.lua_State, comptime fmt: []const u8, args: anytype) c_int {
+    var buf: [256]u8 = undefined;
+    const msg = std.fmt.bufPrintZ(&buf, fmt, args) catch "lua bridge error";
+    _ = c.luaL_error(L, msg.ptr);
+    unreachable;
 }
 
 pub fn l_body(L: ?*c.lua_State) callconv(.c) c_int {

@@ -12,8 +12,12 @@ pub const Header = struct {
 
 pub const Counters = struct {
     active_connections: u64 = 0,
+    inflight_current: u64 = 0,
+    inflight_max: u64 = 0,
     total_connections: u64 = 0,
     accepted_connections: u64 = 0,
+    accepted_total: u64 = 0,
+    completed_total: u64 = 0,
     threads_spawned: u64 = 0,
     requests_served: u64 = 0,
     requests_per_connection: u64 = 0,
@@ -25,6 +29,10 @@ pub const Counters = struct {
     max_active_connections: u64 = 0,
     queue_depth: u64 = 0,
     max_queue_depth: u64 = 0,
+    worker_queue_depth_max: u64 = 0,
+    budget_capacity: u64 = 0,
+    budget_rejections_total: u64 = 0,
+    backpressure_total: u64 = 0,
     dropped_connections: u64 = 0,
 };
 
@@ -32,7 +40,10 @@ pub const AtomicCounter = std.atomic.Value(u64);
 
 pub const AtomicCounters = struct {
     active_connections: AtomicCounter = AtomicCounter.init(0),
+    inflight_current: AtomicCounter = AtomicCounter.init(0),
+    inflight_max: AtomicCounter = AtomicCounter.init(0),
     total_connections: AtomicCounter = AtomicCounter.init(0),
+    completed_total: AtomicCounter = AtomicCounter.init(0),
     threads_spawned: AtomicCounter = AtomicCounter.init(0),
     requests_served: AtomicCounter = AtomicCounter.init(0),
     keepalive_reuse_count: AtomicCounter = AtomicCounter.init(0),
@@ -43,6 +54,8 @@ pub const AtomicCounters = struct {
     max_active_connections: AtomicCounter = AtomicCounter.init(0),
     queue_depth: AtomicCounter = AtomicCounter.init(0),
     max_queue_depth: AtomicCounter = AtomicCounter.init(0),
+    budget_rejections_total: AtomicCounter = AtomicCounter.init(0),
+    backpressure_total: AtomicCounter = AtomicCounter.init(0),
     dropped_connections: AtomicCounter = AtomicCounter.init(0),
 };
 
@@ -70,8 +83,12 @@ pub fn snapshotCounters(c: *const AtomicCounters) Counters {
     const served = c.requests_served.load(.monotonic);
     return .{
         .active_connections = c.active_connections.load(.monotonic),
+        .inflight_current = c.inflight_current.load(.monotonic),
+        .inflight_max = c.inflight_max.load(.monotonic),
         .total_connections = total,
         .accepted_connections = total,
+        .accepted_total = total,
+        .completed_total = c.completed_total.load(.monotonic),
         .threads_spawned = c.threads_spawned.load(.monotonic),
         .requests_served = served,
         .requests_per_connection = if (total == 0) 0 else served / total,
@@ -83,6 +100,9 @@ pub fn snapshotCounters(c: *const AtomicCounters) Counters {
         .max_active_connections = c.max_active_connections.load(.monotonic),
         .queue_depth = c.queue_depth.load(.monotonic),
         .max_queue_depth = c.max_queue_depth.load(.monotonic),
+        .worker_queue_depth_max = c.max_queue_depth.load(.monotonic),
+        .budget_rejections_total = c.budget_rejections_total.load(.monotonic),
+        .backpressure_total = c.backpressure_total.load(.monotonic),
         .dropped_connections = c.dropped_connections.load(.monotonic),
     };
 }
@@ -96,6 +116,26 @@ pub fn connectionEnded(c: *AtomicCounters) void {
     dec(&c.active_connections);
 }
 
+pub fn requestStarted(c: *AtomicCounters) void {
+    const active = c.inflight_current.fetchAdd(1, .monotonic) + 1;
+    maxCounter(&c.inflight_max, active);
+}
+
+pub fn requestCompleted(c: *AtomicCounters) void {
+    inc(&c.completed_total);
+    dec(&c.inflight_current);
+}
+
+pub fn resetAuditCounters(c: *AtomicCounters) void {
+    const current = c.inflight_current.load(.monotonic);
+    c.inflight_max.store(current, .monotonic);
+    c.completed_total.store(0, .monotonic);
+    c.queue_depth.store(0, .monotonic);
+    c.max_queue_depth.store(0, .monotonic);
+    c.budget_rejections_total.store(0, .monotonic);
+    c.backpressure_total.store(0, .monotonic);
+}
+
 pub fn threadSpawned(c: *AtomicCounters) void {
     inc(&c.threads_spawned);
 }
@@ -106,6 +146,8 @@ pub fn connectionError(c: *AtomicCounters) void {
 
 pub fn droppedConnection(c: *AtomicCounters) void {
     inc(&c.dropped_connections);
+    inc(&c.budget_rejections_total);
+    inc(&c.backpressure_total);
 }
 
 pub fn setQueueDepth(c: *AtomicCounters, value: u64) void {

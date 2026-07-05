@@ -64,6 +64,19 @@ port_pids() {
   fi
 }
 
+child_pids() {
+  pid="$1"
+  ps -axo pid=,ppid= 2>/dev/null | awk -v parent="$pid" '$2 == parent { print $1 }' || true
+}
+
+descendant_pids() {
+  pid="$1"
+  for child in $(child_pids "$pid"); do
+    descendant_pids "$child"
+    echo "$child"
+  done
+}
+
 dev_session_pids() {
   exclude="${METEORITE_GUARD_EXCLUDE_PID:-}"
   ps -axo pid=,ppid=,command= 2>/dev/null | awk \
@@ -97,6 +110,9 @@ terminate_pid() {
     return 1
   fi
   echo "guard: stopping Meteorite dev server pid=$pid" >&2
+  for child in $(descendant_pids "$pid"); do
+    kill "$child" 2>/dev/null || true
+  done
   kill "$pid" 2>/dev/null || true
   i=0
   while is_running "$pid" && [ "$i" -lt 20 ]; do
@@ -105,6 +121,9 @@ terminate_pid() {
   done
   if is_running "$pid"; then
     echo "guard: force stopping Meteorite dev server pid=$pid" >&2
+    for child in $(descendant_pids "$pid"); do
+      kill -KILL "$child" 2>/dev/null || true
+    done
     kill -KILL "$pid" 2>/dev/null || true
   fi
 }
@@ -153,7 +172,20 @@ cleanup_sessions() {
   for pid in $(dev_session_pids); do
     if is_running "$pid"; then
       echo "guard: stopping stale Meteorite dev session pid=$pid cmd=$(command_for_pid "$pid")" >&2
+      for child in $(descendant_pids "$pid"); do
+        kill "$child" 2>/dev/null || true
+      done
       kill "$pid" 2>/dev/null || true
+    fi
+  done
+  sleep 0.2
+  for pid in $(dev_session_pids); do
+    if is_running "$pid"; then
+      echo "guard: force stopping stale Meteorite dev session pid=$pid cmd=$(command_for_pid "$pid")" >&2
+      for child in $(descendant_pids "$pid"); do
+        kill -KILL "$child" 2>/dev/null || true
+      done
+      kill -KILL "$pid" 2>/dev/null || true
     fi
   done
 }

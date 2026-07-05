@@ -414,7 +414,8 @@ function graph_emit.param_pattern_zig(param)
 end
 
 function graph_emit.route_handler_zig(route)
-  local handler = ".{ .inline_lua = .{ .id = " .. helpers.zig_string(route.id) .. ", .chunk_path = " .. helpers.zig_string((route.handler.lifted or {}).chunk_path or "") .. ", .source_file = " .. helpers.zig_string((route.handler.lifted or {}).source_file or tostring(route.source.file)) .. ", .source_line = " .. tostring((route.handler.lifted or {}).source_line or route.source.line or 0) .. ", .source_column = " .. tostring((route.handler.lifted or {}).source_column or route.source.column or 1) .. " } }"
+  local lifted = route.handler.lifted or {}
+  local handler = ".{ .inline_lua = .{ .id = " .. helpers.zig_string(route.id) .. ", .chunk_path = " .. helpers.zig_string(lifted.chunk_path or "") .. ", .source_file = " .. helpers.zig_string(lifted.source_file or tostring(route.source.file)) .. ", .source_line = " .. tostring(lifted.source_line or route.source.line or 0) .. ", .source_column = " .. tostring(lifted.source_column or route.source.column or 1) .. ", .nparams = " .. tostring(lifted.nparams or 1) .. ", .arg_mode = ." .. tostring(lifted.arg_mode or "request_table") .. " } }"
   if route.handler.kind == "zig" then handler = ".{ .zig_symbol = .{ .id = ." .. route.handler.symbol .. ", .symbol = " .. helpers.zig_string(route.handler.import or route.handler.symbol) .. " } }" end
   if route.handler.kind == "zig_file" then handler = ".{ .zig_file = .{ .id = " .. helpers.zig_string(route.handler.symbol) .. ", .path = " .. helpers.zig_string(route.handler.path) .. ", .decl = " .. helpers.zig_string(route.handler.decl or "handle") .. " } }" end
   if route.handler.kind == "lua" then handler = ".{ .lua_file = .{ .id = " .. helpers.zig_string(route.id) .. ", .path = " .. helpers.zig_string(route.handler.path or route.handler.module) .. " } }" end
@@ -449,7 +450,7 @@ end
 function graph_emit.plugin_handler_zig(plugin)
   local handler = plugin.handler or {}
   if handler.kind == "inline_lua" then
-    return ".{ .inline_lua = .{ .id = " .. helpers.zig_string(plugin.id) .. ", .chunk_path = " .. helpers.zig_string((handler.lifted or {}).chunk_path or "") .. ", .source_file = " .. helpers.zig_string((handler.lifted or {}).source_file or "") .. ", .source_line = " .. tostring((handler.lifted or {}).source_line or 0) .. ", .source_column = " .. tostring((handler.lifted or {}).source_column or 1) .. " } }"
+    return ".{ .inline_lua = .{ .id = " .. helpers.zig_string(plugin.id) .. ", .chunk_path = " .. helpers.zig_string((handler.lifted or {}).chunk_path or "") .. ", .source_file = " .. helpers.zig_string((handler.lifted or {}).source_file or "") .. ", .source_line = " .. tostring((handler.lifted or {}).source_line or 0) .. ", .source_column = " .. tostring((handler.lifted or {}).source_column or 1) .. ", .nparams = " .. tostring((handler.lifted or {}).nparams or 1) .. ", .arg_mode = ." .. tostring((handler.lifted or {}).arg_mode or "request_table") .. " } }"
   elseif handler.kind == "lua" then
     return ".{ .lua_file = .{ .id = " .. helpers.zig_string(plugin.id) .. ", .path = " .. helpers.zig_string(handler.path or handler.module) .. " } }"
   elseif handler.kind == "zig" then
@@ -609,7 +610,8 @@ function graph_emit.emit_graph_zig(graph, output)
     "pub const ZigSymbolHandler = struct { id: bindings.HandlerId, symbol: []const u8 };",
     "pub const ZigFileHandler = struct { id: []const u8, path: []const u8, decl: []const u8 = \"handle\" };",
     "pub const LuaFileHandler = struct { id: []const u8, path: []const u8 };",
-    "pub const InlineLuaHandler = struct { id: []const u8, chunk_path: []const u8, source_file: []const u8, source_line: u32, source_column: u32 };",
+    "pub const LuaArgMode = enum { request_table, lazy_context, direct_params, no_args };",
+    "pub const InlineLuaHandler = struct { id: []const u8, chunk_path: []const u8, source_file: []const u8, source_line: u32, source_column: u32, nparams: u8 = 1, arg_mode: LuaArgMode = .request_table };",
     "pub const FileHandler = struct { artifact_path: []const u8, content_type: []const u8, content_length: u64, etag: []const u8, cache_control: []const u8, only_accept: ?[]const u8 = null };",
     "pub const StaticAsset = struct { request_path: []const u8, artifact_path: []const u8, content_type: []const u8, content_length: u64, etag: []const u8, cache_control: []const u8, compressed_br_path: ?[]const u8 = null, compressed_br_length: u64 = 0, compressed_br_etag: ?[]const u8 = null, compressed_gzip_path: ?[]const u8 = null, compressed_gzip_length: u64 = 0, compressed_gzip_etag: ?[]const u8 = null };",
     "pub const DirHandler = struct { mount_root: []const u8, param_name: []const u8, manifest: []const StaticAsset, cache_control: []const u8, immutable: bool = false };",

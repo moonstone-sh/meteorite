@@ -59,7 +59,7 @@ local function find_function_literal(text)
     else
       local word, next_index = token_at(text, index)
       if word then
-        if word == "function" or word == "if" or word == "do" or word == "for" or word == "while" then
+        if word == "function" or word == "if" or word == "for" or word == "while" then
           depth = depth + 1
         elseif word == "end" then
           depth = depth - 1
@@ -74,6 +74,22 @@ local function find_function_literal(text)
     end
   end
   return nil, "could not find matching end for inline function"
+end
+
+local function parse_function_params(literal)
+  local params_src = literal:match("^%s*function%s*%((.-)%)") or ""
+  local params = {}
+  for name in params_src:gmatch("[%a_][%w_]*") do params[#params + 1] = name end
+  return params
+end
+
+local function arg_mode_for(route, params)
+  if #params == 0 then return "no_args" end
+  local first = params[1]
+  if first == "ctx" or first == "c" then return "lazy_context" end
+  if first == "req" or first == "request" then return "request_table" end
+  if #(route.params or {}) > 0 and #params == #(route.params or {}) then return "direct_params" end
+  return "request_table"
 end
 
 local function check_upvalues(route, fn)
@@ -136,6 +152,7 @@ function lifter.lift(route, opts)
       "  use a direct inline function literal or move the handler to m.lua(...).",
     }, "\n"))
   end
+  local arg_names = parse_function_params(literal)
   local chunk = "return " .. literal .. "\n"
   local out_dir = opts.out_dir or ((opts.output or ".meteorite/graph/current") .. "/../../lua/inline")
   mkdir_p(out_dir)
@@ -151,6 +168,8 @@ function lifter.lift(route, opts)
     source_file = source,
     source_line = first,
     source_column = 1,
+    nparams = #arg_names,
+    arg_mode = arg_mode_for(route, arg_names),
   }
 end
 

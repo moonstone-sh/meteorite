@@ -28,10 +28,13 @@ pub fn snapshotCounters() Counters {
 
 pub fn connectionStarted() void { proto.connectionStarted(&counters); }
 pub fn connectionEnded() void { proto.connectionEnded(&counters); }
+pub fn requestStarted() void { proto.requestStarted(&counters); }
+pub fn requestCompleted() void { proto.requestCompleted(&counters); }
 pub fn threadSpawned() void { proto.threadSpawned(&counters); }
 pub fn connectionError() void { proto.connectionError(&counters); }
-pub fn droppedConnection() void { proto.connectionError(&counters); }
+pub fn droppedConnection() void { proto.droppedConnection(&counters); }
 pub fn setQueueDepth(_: u64) void {}
+pub fn resetAuditCounters() void { proto.resetAuditCounters(&counters); }
 
 pub const ListenConfig = struct {
     host: []const u8 = "127.0.0.1",

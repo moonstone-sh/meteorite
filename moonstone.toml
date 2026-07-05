@@ -4,14 +4,30 @@ version = "0.1.0"
 kind = "bin"
 description = "Moonstone-zig service compiler prototype"
 
-[runtime]
+[interpreter]
 name = "lua"
 version = "5.4"
 abi = "5.4"
 
+[[dependencies]]
+name = "lua-cjson"
+constraint = "rocks:lua-cjson@^2.1.0.10-1"
+role = "runtime"
+
+[[dependencies]]
+name = "etlua"
+constraint = "rocks:etlua@^1.3.0-1"
+role = "runtime"
+
+[[dependencies]]
+name = "luasql-sqlite3"
+constraint = "^2.8.0-1"
+resolver = "rocks"
+role = "runtime"
+
 [scripts]
 "graph" = "lua src/cli/main.lua graph fixtures/apps/showcase-service/src/main.lua .meteorite/graph/current release-static"
-"dev" = "sh -c 'METEORITE_GUARD_EXCLUDE_PID=$$ scripts/guard.sh handoff; trap \"scripts/guard.sh cleanup >/dev/null 2>&1 || true\" EXIT INT TERM; lua src/cli/dev.lua fixtures/apps/showcase-service/src/main.lua .meteorite/graph/current hybrid_dev'"
+"dev" = "sh -c 'METEORITE_GUARD_EXCLUDE_PID=$$ scripts/guard.sh handoff; trap \"scripts/guard.sh cleanup >/dev/null 2>&1 || true\" EXIT; trap \"scripts/guard.sh cleanup >/dev/null 2>&1 || true; scripts/guard.sh cleanup-sessions >/dev/null 2>&1 || true; exit 130\" INT TERM HUP; lua src/cli/dev.lua fixtures/apps/showcase-service/src/main.lua .meteorite/graph/current hybrid_dev'"
 "build" = "zig build install-server"
 "run" = "zig build run"
 "test-fixture" = "LUA_PATH='src/?.lua;src/?/init.lua;../ballad/.moonstone/env/share/lua/5.1/?.lua;../ballad/.moonstone/env/share/lua/5.1/?/init.lua;../ballad/src/?.lua;../ballad/src/?/init.lua;;' luajit ../ballad/src/main.lua play fixtures/apps/basic-service/partiture.lua"
@@ -19,8 +35,29 @@ abi = "5.4"
 "test-release-smoke" = "bash fixtures/tests/release-smoke.sh"
 "test-all" = "bash tests/run-all.sh"
 "test-cross-target" = "METEORITE_LUA_SOURCE=../moonstone-tools/scripts/runtime/src/lua-5.4.7.tar.gz bash fixtures/tests/cross-target.sh"
-"bench" = "bash bench/run.sh --duration 10s --concurrency 1,16,64"
-"bench:matrix" = "bash bench/run-fast-http-matrix.sh"
-"bench:hybrid" = "bash bench/run-hybrid-ladder.sh"
-"bench:lua-stability" = "bash bench/run-lua-stability.sh"
-"bench:fair-matchup" = "bash bench/run-fair-matchup.sh"
+"bench:smoke" = "bash bench/run.sh --mode=smoke \"$@\""
+"bench:public" = "bash bench/run.sh --mode=public \"$@\""
+"bench:work" = "bash bench/run.sh --mode=work \"$@\""
+"bench:meteorite-app" = "bash bench/run.sh --mode=meteorite-app \"$@\""
+"bench:lua-bridge" = "bash bench/run.sh --mode=lua-bridge \"$@\""
+"bench:lua-bridge-smoke" = "bash bench/run.sh --mode=lua-bridge-smoke \"$@\""
+
+[[orbits.member]]
+name = "lapis-cqueues"
+path = "bench/competitors/lapis-cqueues"
+
+[[orbits.member]]
+name = "openresty"
+path = "bench/competitors/openresty"
+
+[[orbits.member]]
+name = "turbo"
+path = "bench/competitors/turbo"
+
+[[orbits.member]]
+name = "lapis-openresty"
+path = "bench/competitors/lapis-openresty"
+
+[[orbits.member]]
+name = "pegasus"
+path = "bench/competitors/pegasus"

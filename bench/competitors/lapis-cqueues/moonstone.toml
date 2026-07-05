@@ -1,0 +1,40 @@
+[package]
+name = "bench-lapis-cqueues"
+version = "0.1.0"
+kind = "bin"
+
+[interpreter]
+name = "lua"
+version = "5.1"
+abi = "5.1"
+
+[[dependencies]]
+name = "lapis"
+constraint = "rocks:lapis@*"
+role = "runtime"
+
+[[dependencies]]
+name = "cqueues"
+constraint = "rocks:cqueues@*"
+role = "runtime"
+
+[[dependencies]]
+name = "lua-http"
+constraint = "rocks:http@*"
+role = "runtime"
+
+[[dependencies]]
+name = "lua-cjson"
+constraint = "rocks:lua-cjson@*"
+role = "runtime"
+
+[[dependencies]]
+name = "etlua"
+constraint = "rocks:etlua@*"
+role = "runtime"
+
+[[dependencies]]
+name = "luasql-sqlite3"
+constraint = "^2.8.0-1"
+resolver = "rocks"
+role = "runtime"
