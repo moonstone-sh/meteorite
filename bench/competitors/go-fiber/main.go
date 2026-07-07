@@ -47,6 +47,11 @@ func sendBytes(c *fiber.Ctx, status int, contentType string, body []byte) error 
 }
 
 func main() {
+	// Explicitly set GOMAXPROCS to match available CPUs for benchmark fairness.
+	if n := runtime.NumCPU(); n > 0 {
+		runtime.GOMAXPROCS(n)
+	}
+
 	port := "8080"
 	for _, arg := range os.Args[1:] {
 		if strings.HasPrefix(arg, "--port=") {

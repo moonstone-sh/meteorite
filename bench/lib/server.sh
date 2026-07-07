@@ -7,7 +7,7 @@ now_ns() {
 
 
 wait_for_server() {
-  for _ in $(seq 1 100); do
+  for _ in $(seq 1 600); do
     if curl -fsS "http://$HOST:$PORT/health" >/dev/null 2>&1; then
       return 0
     fi
@@ -165,7 +165,7 @@ start_rust_actix() {
 start_openresty() {
   local label="openresty"
   echo "Starting OpenResty..."
-  (cd "$BENCH_DIR/competitors/openresty" && /Users/extrordinaire/Workbench/user/moonstone/zig-out/bin/moon orbit exec openresty -- bash run.sh) >"$OUT/${label}.log" 2>&1 &
+  /Users/extrordinaire/Workbench/user/moonstone/zig-out/bin/moon orbit exec openresty -- bash run.sh >"$OUT/${label}.log" 2>&1 &
   SERVER_PID=$!
   register_pid "$SERVER_PID"
   wait_for_server
@@ -176,7 +176,7 @@ start_openresty() {
 start_lapis_openresty() {
   local label="lapis-openresty"
   echo "Starting Lapis OpenResty..."
-  (cd "$BENCH_DIR/competitors/lapis-openresty" && /Users/extrordinaire/Workbench/user/moonstone/zig-out/bin/moon orbit exec lapis-openresty -- bash run.sh) >"$OUT/${label}.log" 2>&1 &
+  /Users/extrordinaire/Workbench/user/moonstone/zig-out/bin/moon orbit exec lapis-openresty -- bash run.sh >"$OUT/${label}.log" 2>&1 &
   SERVER_PID=$!
   register_pid "$SERVER_PID"
   wait_for_server
@@ -187,7 +187,7 @@ start_lapis_openresty() {
 start_lapis_cqueues() {
   local label="lapis-cqueues"
   echo "Starting Lapis cqueues..."
-  (cd "$BENCH_DIR/competitors/lapis-cqueues" && /Users/extrordinaire/Workbench/user/moonstone/zig-out/bin/moon orbit exec lapis-cqueues -- bash run.sh) >"$OUT/${label}.log" 2>&1 &
+  /Users/extrordinaire/Workbench/user/moonstone/zig-out/bin/moon orbit exec lapis-cqueues -- bash run.sh >"$OUT/${label}.log" 2>&1 &
   SERVER_PID=$!
   register_pid "$SERVER_PID"
   wait_for_server
@@ -198,7 +198,7 @@ start_lapis_cqueues() {
 start_turbo() {
   local label="turbo"
   echo "Starting Turbo..."
-  (cd "$BENCH_DIR/competitors/turbo" && /Users/extrordinaire/Workbench/user/moonstone/zig-out/bin/moon orbit exec turbo -- bash run.sh) >"$OUT/${label}.log" 2>&1 &
+  /Users/extrordinaire/Workbench/user/moonstone/zig-out/bin/moon orbit exec turbo -- bash run.sh >"$OUT/${label}.log" 2>&1 &
   SERVER_PID=$!
   register_pid "$SERVER_PID"
   wait_for_server
@@ -209,7 +209,7 @@ start_turbo() {
 start_pegasus() {
   local label="pegasus"
   echo "Starting Pegasus..."
-  (cd "$BENCH_DIR/competitors/pegasus" && /Users/extrordinaire/Workbench/user/moonstone/zig-out/bin/moon orbit exec pegasus -- bash run.sh) >"$OUT/${label}.log" 2>&1 &
+  /Users/extrordinaire/Workbench/user/moonstone/zig-out/bin/moon orbit exec pegasus -- bash run.sh >"$OUT/${label}.log" 2>&1 &
   SERVER_PID=$!
   register_pid "$SERVER_PID"
   wait_for_server

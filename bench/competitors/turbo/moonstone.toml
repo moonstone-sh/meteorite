@@ -14,6 +14,11 @@ constraint = "rocks:turbo@*"
 role = "runtime"
 
 [[dependencies]]
+name = "luasocket"
+constraint = "rocks:luasocket@*"
+role = "runtime"
+
+[[dependencies]]
 name = "lua-cjson"
 constraint = "rocks:lua-cjson@*"
 role = "runtime"
@@ -28,3 +33,10 @@ name = "luasql-sqlite3"
 constraint = "^2.8.0-1"
 resolver = "rocks"
 role = "runtime"
+
+[build.env]
+OPENSSL_DIR = "/opt/homebrew/opt/openssl@3"
+CRYPTO_DIR = "/opt/homebrew/opt/openssl@3"
+CFLAGS = "-I/opt/homebrew/opt/openssl@3/include"
+CPPFLAGS = "-I/opt/homebrew/opt/openssl@3/include"
+LDFLAGS = "-L/opt/homebrew/opt/openssl@3/lib"
