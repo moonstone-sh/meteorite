@@ -16,6 +16,7 @@ OHA_LATENCY_CORRECTION=0
 TARGET_QPS=""
 ENV_POLICY=""
 OUT=""
+BENCH_METEORITE_BUILD_MODE="${BENCH_METEORITE_BUILD_MODE:-release-hybrid}"
 # shellcheck disable=SC2034
 RESUME=0
 ONLY_VARIANT=""
@@ -67,6 +68,14 @@ while [[ $# -gt 0 ]]; do
     ENV_POLICY="${2:?missing value for --env-policy}"
     shift 2
     ;;
+  --meteorite-build-mode=*)
+    BENCH_METEORITE_BUILD_MODE="${1#--meteorite-build-mode=}"
+    shift
+    ;;
+  --meteorite-build-mode)
+    BENCH_METEORITE_BUILD_MODE="${2:?missing value for --meteorite-build-mode}"
+    shift 2
+    ;;
   --out=*)
     OUT="${1#--out=}"
     RESUME=1
@@ -107,14 +116,14 @@ while [[ $# -gt 0 ]]; do
   "") shift ;;
   *)
     echo "unknown option: $1" >&2
-    echo "Usage: ./bench/run.sh --mode=public|smoke|work|meteorite-app|lua-bridge|lua-bridge-smoke [--loadgen=wrk|oha|both] [--oha-latency-correction] [--target-qps N] [--env-policy=strict|warn|off] [--variant LABEL] [--resume DIR]" >&2
+    echo "Usage: ./bench/run.sh --mode=public|smoke|work|meteorite-app|lua-bridge|lua-bridge-smoke [--loadgen=wrk|oha|both] [--oha-latency-correction] [--target-qps N] [--env-policy=strict|warn|off] [--meteorite-build-mode=release-static|release-hybrid] [--variant LABEL] [--resume DIR]" >&2
     exit 2
     ;;
   esac
 done
 
 if [[ -z "$MODE" ]]; then
-  echo "Usage: ./bench/run.sh --mode=public|smoke|work|meteorite-app|lua-bridge|lua-bridge-smoke [--loadgen=wrk|oha|both] [--oha-latency-correction] [--target-qps N] [--env-policy=strict|warn|off] [--variant LABEL] [--resume DIR]" >&2
+  echo "Usage: ./bench/run.sh --mode=public|smoke|work|meteorite-app|lua-bridge|lua-bridge-smoke [--loadgen=wrk|oha|both] [--oha-latency-correction] [--target-qps N] [--env-policy=strict|warn|off] [--meteorite-build-mode=release-static|release-hybrid] [--variant LABEL] [--resume DIR]" >&2
   exit 2
 fi
 
@@ -144,6 +153,20 @@ case "$ENV_POLICY" in
   exit 2
   ;;
 esac
+
+case "$BENCH_METEORITE_BUILD_MODE" in
+release-static | release-hybrid) ;;
+*)
+  echo "INVALID --meteorite-build-mode=$BENCH_METEORITE_BUILD_MODE" >&2
+  echo "expected one of: release-static, release-hybrid" >&2
+  exit 2
+  ;;
+esac
+
+if [[ "$BENCH_METEORITE_BUILD_MODE" == "release-static" && ("$MODE" == "--mode=lua-bridge" || "$MODE" == "--mode=lua-bridge-smoke" || "$MODE" == "--mode=meteorite-app") ]]; then
+  echo "INVALID --meteorite-build-mode=release-static for ${MODE#--mode=}; Lua-runtime benchmark modes require release-hybrid" >&2
+  exit 2
+fi
 
 if [[ "$LOADGEN_REQUEST" == "both" ]]; then
   echo "Running comparative loadgen audit: wrk then oha"
@@ -179,6 +202,7 @@ if [[ "$LOADGEN_REQUEST" == "both" ]]; then
     if [[ -n "$ENV_POLICY" ]]; then
       args+=(--env-policy "$ENV_POLICY")
     fi
+    args+=(--meteorite-build-mode "$BENCH_METEORITE_BUILD_MODE")
     if [[ -n "$resume_dir" ]]; then
       args+=(--resume "$resume_dir")
     fi
@@ -416,6 +440,7 @@ run_environment_preflight "$OUT/system.env"
   printf 'oha_latency_correction=%s\n' "$OHA_LATENCY_CORRECTION"
   printf 'target_qps=%s\n' "${TARGET_QPS:-none}"
   printf 'env_policy=%s\n' "$ENV_POLICY"
+  printf 'meteorite_build_mode=%s\n' "$BENCH_METEORITE_BUILD_MODE"
   printf 'variant=%s\n' "${ONLY_VARIANT:-all}"
   printf 'result_subdir=%s\n' "$(basename "$OUT")"
 } >"$RUN_ROOT/run-info.txt"
@@ -489,9 +514,14 @@ echo "=== Validation Matrix Complete ==="
     printf '%s\n' "${METEORITE_ONLY_SCENARIOS[@]}"
   fi
 } >"$OUT/scenarios.txt"
-BENCH_OUT="$OUT" BENCH_MODE="$MODE" BENCH_REPS="$REPS" BENCH_CONCURRENCY="$CONCURRENCY" BENCH_SCENARIOS_FILE="$OUT/scenarios.txt" BENCH_LOADGEN="$LOADGEN_LABEL" BENCH_LATENCY_CORRECTION="$OHA_LATENCY_CORRECTION" python3 "$BENCH_DIR/report/summary.py" | tee "$OUT/summary.md"
+BENCH_OUT="$OUT" BENCH_MODE="$MODE" BENCH_REPS="$REPS" BENCH_CONCURRENCY="$CONCURRENCY" BENCH_SCENARIOS_FILE="$OUT/scenarios.txt" BENCH_LOADGEN="$LOADGEN_LABEL" BENCH_LATENCY_CORRECTION="$OHA_LATENCY_CORRECTION" BENCH_METEORITE_BUILD_MODE="$BENCH_METEORITE_BUILD_MODE" python3 "$BENCH_DIR/report/summary.py" | tee "$OUT/summary.md"
+if [[ -f "$OUT/summary.json" ]]; then
+  python3 "$BENCH_DIR/profile-costs.py" "$OUT/summary.json" --variant meteorite-1worker --concurrency 1 --loadgen "$LOADGEN_LABEL" >/dev/null || true
+fi
 sanitize_text_file "$OUT/summary.md"
 sanitize_text_file "$OUT/summary.json"
+if [[ -f "$OUT/profile-costs.md" ]]; then sanitize_text_file "$OUT/profile-costs.md"; fi
+if [[ -f "$OUT/profile-costs.json" ]]; then sanitize_text_file "$OUT/profile-costs.json"; fi
 if [[ -n "${BENCH_RESULT_MARKER_FILE:-}" ]]; then
   printf '%s=%s\n' "$LOADGEN_LABEL" "$OUT" >>"$BENCH_RESULT_MARKER_FILE"
 fi

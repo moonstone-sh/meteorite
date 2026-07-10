@@ -92,7 +92,15 @@ local function arg_mode_for(route, params)
   return "request_table"
 end
 
-local function check_upvalues(route, fn)
+local function route_location(route)
+  return tostring(route.source.file) .. ":" .. tostring(route.source.line or 0) .. ":" .. tostring(route.source.column or 1)
+end
+
+local function route_mode(opts)
+  return tostring((opts and opts.mode) or "hybrid")
+end
+
+local function check_upvalues(route, fn, opts)
   local index = 1
   while true do
     local name = debug.getupvalue(fn, index)
@@ -101,16 +109,22 @@ local function check_upvalues(route, fn)
       error(table.concat({
         "inline Lua handler captures outer local `" .. tostring(name) .. "`",
         "",
+        "mode:",
+        "  " .. route_mode(opts),
+        "",
+        "route id:",
+        "  " .. tostring(route.id),
+        "",
         "route:",
         "  " .. route.method .. " " .. route.raw_path,
         "",
         "declared at:",
-        "  " .. tostring(route.source.file) .. ":" .. tostring(route.source.line or 0) .. ":" .. tostring(route.source.column or 1),
+        "  " .. route_location(route),
         "",
         "hybrid inline handlers must be source-liftable.",
         "",
-        "hint:",
-        "  move requires and mutable values inside the handler body.",
+        "remediation:",
+        "  move requires and mutable values inside the handler body, pass data through ctx.state/scope, or move the handler to a Lua module with m.lua(...).",
       }, "\n"))
     end
     index = index + 1
@@ -120,12 +134,29 @@ end
 function lifter.lift(route, opts)
   opts = opts or {}
   local fn = assert(route.handler.value, "inline Lua handler is missing function value")
-  check_upvalues(route, fn)
+  check_upvalues(route, fn, opts)
   local info = debug.getinfo(fn, "Slu") or {}
   local source = info.source or route.source.file
   if source:sub(1, 1) == "@" then source = source:sub(2) end
   if source:sub(1, 1) ~= "/" and source:match("^%[") then
-    error("inline Lua handler is not backed by a source file for " .. route.method .. " " .. route.raw_path)
+    error(table.concat({
+      "inline Lua handler is not backed by a source file",
+      "",
+      "mode:",
+      "  " .. route_mode(opts),
+      "",
+      "route id:",
+      "  " .. tostring(route.id),
+      "",
+      "route:",
+      "  " .. route.method .. " " .. route.raw_path,
+      "",
+      "declared at:",
+      "  " .. route_location(route),
+      "",
+      "remediation:",
+      "  define inline handlers in a source file or move the handler to m.lua(...).",
+    }, "\n"))
   end
   local content, err = read_file(source)
   if not content then error("cannot read inline Lua source " .. tostring(source) .. ": " .. tostring(err)) end
@@ -139,16 +170,22 @@ function lifter.lift(route, opts)
     error(table.concat({
       "inline Lua handler cannot be source-lifted with the restricted scanner",
       "",
+      "mode:",
+      "  " .. route_mode(opts),
+      "",
+      "route id:",
+      "  " .. tostring(route.id),
+      "",
       "route:",
       "  " .. route.method .. " " .. route.raw_path,
       "",
       "declared at:",
-      "  " .. tostring(route.source.file) .. ":" .. tostring(route.source.line or 0) .. ":" .. tostring(route.source.column or 1),
+      "  " .. route_location(route),
       "",
       "reason:",
       "  " .. tostring(scan_err),
       "",
-      "hint:",
+      "remediation:",
       "  use a direct inline function literal or move the handler to m.lua(...).",
     }, "\n"))
   end

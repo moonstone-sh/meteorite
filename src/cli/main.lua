@@ -79,6 +79,44 @@ if command == "help" or command == "--help" or command == "-h" then
   return
 end
 
+local function parse_header_arg(value)
+  local name, header_value = tostring(value or ""):match("^([^:]+):%s*(.*)$")
+  if not name or name == "" then error("invoke header must use 'Name: value' syntax") end
+  return name, header_value or ""
+end
+
+local function parse_invoke_args()
+  local opts = { input = "src/main.lua", method = "GET", path = "/", body = "", json = false, headers = {} }
+  local positional = {}
+  local i = 2
+  while i <= #arg do
+    local value = arg[i]
+    if value == "--json" then
+      opts.json = true
+    elseif value == "--header" or value == "-H" then
+      i = i + 1
+      local name, header_value = parse_header_arg(arg[i])
+      opts.headers[name] = header_value
+    elseif value and value:match("^%-%-header=") then
+      local name, header_value = parse_header_arg(value:match("^%-%-header=(.*)$"))
+      opts.headers[name] = header_value
+    elseif value == "--body" then
+      i = i + 1
+      opts.body = arg[i] or ""
+    elseif value and value:match("^%-%-body=") then
+      opts.body = value:match("^%-%-body=(.*)$") or ""
+    else
+      positional[#positional + 1] = value
+    end
+    i = i + 1
+  end
+  opts.input = positional[1] or opts.input
+  opts.method = positional[2] or opts.method
+  opts.path = positional[3] or opts.path
+  if positional[4] ~= nil then opts.body = positional[4] end
+  return opts
+end
+
 local function write_file(path, content, force)
   local existing = read_file(path)
   if existing ~= nil and not force then return false end
@@ -180,8 +218,17 @@ local function init_project()
   local name = opts.name or project_name_from_path(target)
   local lua_ver = "5.4"
   local template_name = ({ minimal = "project" })[opts.template] or opts.template or "project"
-  if template_name ~= "project" and template_name ~= "static" and template_name ~= "hybrid" then
-    error("unknown Meteorite template `" .. tostring(opts.template) .. "`; expected minimal, static, or hybrid")
+  local known_templates = {
+    project = true,
+    static = true,
+    hybrid = true,
+    middleware = true,
+    cors = true,
+    ["json-api"] = true,
+    ["static-site"] = true,
+  }
+  if not known_templates[template_name] then
+    error("unknown Meteorite template `" .. tostring(opts.template) .. "`; expected minimal, static, hybrid, middleware, cors, json-api, or static-site")
   end
   _G.METEORITE_INIT_BUILD_MODE = template_name == "static" and "release-static" or "hybrid"
   local root = template_root(template_name)
@@ -367,16 +414,79 @@ local function doctor_project()
     checks[#checks + 1] = { status = status, label = label, detail = detail }
     if status == "fail" then failed = true end
   end
+  local function exists(path)
+    return read_file(path) ~= nil or run_command("test -e " .. shell_quote(path) .. " >/dev/null 2>&1")
+  end
+  local function dir_exists(path)
+    return run_command("test -d " .. shell_quote(path) .. " >/dev/null 2>&1")
+  end
+  local function graph_file(name)
+    return read_file(path_join(".meteorite/graph/current", name)) ~= nil
+  end
+  local function load_app_for_doctor()
+    local input = "src/main.lua"
+    if not read_file(input) then return nil, "src/main.lua missing" end
+    local input_dir = input:match("^(.*[/\\])") or ""
+    if input_dir ~= "" then package.path = input_dir .. "?.lua;" .. input_dir .. "?/init.lua;" .. package.path end
+    local chunk, err = loadfile(input)
+    if not chunk then return nil, err end
+    local ok, app_or_err = pcall(chunk)
+    if not ok then return nil, app_or_err end
+    local app = app_or_err
+    if type(app) ~= "table" or not app.__meteorite_app then return nil, "src/main.lua must return a Meteorite app" end
+    return app, nil
+  end
+  local function lua_runtime_nodes(graph)
+    local count = 0
+    for _, route in ipairs((graph and graph.routes) or {}) do
+      if route.runtime and route.runtime.requires_lua then count = count + 1 end
+    end
+    return count
+  end
 
-  add(read_file("moonstone.toml") and "ok" or "fail", "moonstone.toml", read_file("moonstone.toml") and "found" or "run from a Moonstone project root")
-  add(read_file("src/main.lua") and "ok" or "fail", "src/main.lua", read_file("src/main.lua") and "found" or "Meteorite apps default to src/main.lua")
-  add(read_file(".moonstone/env/bin/lua") and "ok" or "warn", "Moonstone Lua", read_file(".moonstone/env/bin/lua") and ".moonstone/env/bin/lua" or "run moon sync")
+  local has_manifest = read_file("moonstone.toml") ~= nil
+  local has_app = read_file("src/main.lua") ~= nil
+  local has_moon_env = dir_exists(".moonstone/env")
+  local has_moon_lua = read_file(".moonstone/env/bin/lua") ~= nil
+  add(has_manifest and "ok" or "fail", "moonstone.toml", has_manifest and "found" or "run from a Moonstone project root")
+  add(has_app and "ok" or "fail", "src/main.lua", has_app and "found" or "Meteorite apps default to src/main.lua")
+  add(has_moon_env and "ok" or "warn", "Moonstone env", has_moon_env and ".moonstone/env" or "run moon sync")
+  add(has_moon_lua and "ok" or "warn", "Lua runtime", has_moon_lua and ".moonstone/env/bin/lua" or "run moon sync")
   local cli_ok, cli_path = pcall(package_cli_file)
   add(cli_ok and read_file(cli_path) and "ok" or "fail", "Meteorite CLI", cli_ok and cli_path or tostring(cli_path))
   local zig_ok = run_command("command -v zig >/dev/null 2>&1")
-  add(zig_ok and "ok" or "fail", "Zig", zig_ok and (capture_command("zig version 2>/dev/null"):gsub("%s+$", "")) or "zig not found on PATH")
-  add(read_file(".meteorite/graph/current/graph.zig") and "ok" or "warn", "graph", read_file(".meteorite/graph/current/graph.zig") and ".meteorite/graph/current" or "run meteorite graph or meteorite dev")
+  local zig_version = zig_ok and (capture_command("zig version 2>/dev/null"):gsub("%s+$", "")) or nil
+  add(zig_ok and "ok" or "fail", "Zig", zig_ok and zig_version or "zig not found on PATH")
+  local ballad_plugin_path = candidate_file({
+    "src/meteorite/ballad.lua",
+    module_root .. "meteorite/ballad.lua",
+    install_root .. "src/meteorite/ballad.lua",
+    share_root and (share_root .. "/meteorite/ballad.lua") or nil,
+  })
+  add(ballad_plugin_path and "ok" or "fail", "Ballad plugin", ballad_plugin_path or "meteorite.ballad source not found")
+  local ballad_core_path = candidate_file({
+    ".moonstone/env/share/lua/5.4/ballad/graph.lua",
+    ".moonstone/env/share/lua/5.1/ballad/graph.lua",
+    "../ballad/src/ballad/graph.lua",
+  })
+  add(ballad_core_path and "ok" or "warn", "Ballad core", ballad_core_path or "Ballad runtime not on local Lua path; release partiture may need moon sync")
+  local graph_ready = graph_file("graph.zig") and graph_file("routes.zon") and graph_file("build-report.txt")
+  add(graph_ready and "ok" or "warn", "generated graph", graph_ready and ".meteorite/graph/current" or "run meteorite graph or meteorite dev")
   add(read_file(".meteorite/aids/lua/meteorite.lua") and "ok" or "warn", "LuaLS aids", read_file(".meteorite/aids/lua/meteorite.lua") and ".meteorite/aids/lua" or "generated on graph build")
+  local app, app_err = load_app_for_doctor()
+  if app then
+    local ok, graph_or_err = pcall(function() return app:normalize({ mode = "dev" }) end)
+    if ok then
+      local retained_lua = lua_runtime_nodes(graph_or_err)
+      add(retained_lua == 0 and "ok" or "warn", "static release readiness", retained_lua == 0 and "no retained Lua runtime nodes" or (tostring(retained_lua) .. " retained Lua route(s); use hybrid mode or Zig handlers"))
+      add(has_moon_lua and "ok" or "warn", "hybrid release readiness", has_moon_lua and "Lua runtime available for hybrid packaging" or "run moon sync before hybrid release")
+    else
+      add("warn", "release readiness", tostring(graph_or_err))
+    end
+  else
+    add("warn", "release readiness", tostring(app_err))
+  end
+  add(exists("partiture.lua") and "ok" or "warn", "release partiture", exists("partiture.lua") and "partiture.lua" or "add partiture.lua for Ballad release exports")
   local port = os.getenv("METEORITE_DEV_PORT") or "8080"
   local listener = capture_command("lsof -tiTCP:" .. port .. " -sTCP:LISTEN 2>/dev/null | head -n 1")
   add(listener ~= "" and "warn" or "ok", "dev port " .. port, listener ~= "" and ("listener pid " .. listener:gsub("%s+$", "")) or "free")
@@ -427,7 +537,49 @@ if command == "routes" then
   local route_mod = require("core.route")
   local normalized = route_mod.normalize_app(app, { mode = "dev" })
   if show_graph then
+    local function schema_list(items)
+      local out = {}
+      for _, item in ipairs(items or {}) do
+        out[#out + 1] = {
+          name = item.name,
+          type = item.type or item.kind or "string",
+          optional = item.optional == true,
+          max_len = item.max_len,
+          exact_len = item.exact_len,
+          pattern_id = item.pattern_id,
+        }
+      end
+      return out
+    end
+    local function validation_map(validation)
+      validation = validation or {}
+      return {
+        headers = schema_list(validation.headers),
+        cookies = schema_list(validation.cookies),
+        json_body = schema_list(validation.json_body),
+        form_body = schema_list(validation.form_body),
+      }
+    end
+    local function response_keys(responses)
+      local keys = {}
+      for status, _ in pairs(responses or {}) do keys[#keys + 1] = tostring(status) end
+      table.sort(keys)
+      return keys
+    end
+    local function scope_summary(scope)
+      local plugins = {}
+      for _, plugin in ipairs((scope and scope.plugins) or {}) do
+        if type(plugin) == "table" then
+          plugins[#plugins + 1] = plugin.id or plugin.name or "plugin"
+        else
+          plugins[#plugins + 1] = tostring(plugin)
+        end
+      end
+      table.sort(plugins)
+      return { id = scope and scope.id or "root", plugins = plugins }
+    end
     print(json.encode({
+      format = "meteorite.routes.v0",
       routes = (function()
         local out = {}
         for _, r in ipairs(normalized.routes) do
@@ -436,6 +588,12 @@ if command == "routes" then
             method = r.method,
             path = r.raw_path,
             handler_kind = r.handler.kind,
+            params = schema_list(r.params),
+            query = schema_list(r.query),
+            validation = validation_map(r.validation),
+            responses = response_keys(r.responses),
+            runtime = r.runtime,
+            scope = scope_summary(r.scope),
             source_form = r.source_form or "legacy",
             has_pipeline = r.pipeline ~= nil,
             pipeline = r.pipeline and (function()
@@ -484,8 +642,9 @@ end
 if command ~= "graph" and command ~= "invoke" then
   error("unknown meteorite command: " .. tostring(command) .. "\n\nRun:\n  meteorite help")
 end
-local input = arg[2] or "src/main.lua"
-local mode = arg[4] or "release-static"
+local invoke_opts = command == "invoke" and parse_invoke_args() or nil
+local input = invoke_opts and invoke_opts.input or arg[2] or "src/main.lua"
+local mode = command == "invoke" and "dev" or arg[4] or "release-static"
 _G.METEORITE_BUILD_MODE = mode
 local input_dir = input:match("^(.*[/\\])") or ""
 if input_dir ~= "" then
@@ -548,9 +707,29 @@ if command == "graph" then
   end
 else
   local hybrid = require("cli.hybrid")
-  local method = arg[3] or "GET"
-  local path = arg[4] or "/"
-  local body = arg[5] or ""
-  local response = hybrid.invoke(app, { method = method, path = path, body = body }, { mode = "dev" })
-  io.write(tostring(response.status), "\t", response.content_type or "", "\t", response.body or "", "\n")
+  local response = hybrid.invoke(app, {
+    method = invoke_opts.method,
+    path = invoke_opts.path,
+    body = invoke_opts.body,
+    headers = invoke_opts.headers,
+  }, { mode = "dev" })
+  if invoke_opts.json then
+    local json = require("utils.json")
+    print(json.encode({
+      format = "meteorite.invoke.v0",
+      request = {
+        method = invoke_opts.method,
+        path = invoke_opts.path,
+        headers = invoke_opts.headers,
+      },
+      response = {
+        status = response.status,
+        content_type = response.content_type or "",
+        headers = response.headers or {},
+        body = response.body or "",
+      },
+    }))
+  else
+    io.write(tostring(response.status), "\t", response.content_type or "", "\t", response.body or "", "\n")
+  end
 end

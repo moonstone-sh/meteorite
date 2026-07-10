@@ -133,6 +133,7 @@ return {
     local cmodule_task_sets = release_tasks.rebuild_lua_cmodules(ctx, root, opts, target_lua, lua_root, plugin_root())
 
     local result = emitter.emit(app, { output = graph_output, mode = mode })
+    if release_mode == "static" then release_contract.assert_static_graph(ctx, result.graph) end
     local task_assets = ctx:native_task({
       tool = opts.tool or "zig",
       args = release_tasks.build_args_for(mode, { output = output, build_file = plugin_build_file(), project_root = ".", meteorite_cli = plugin_cli_file(), graph_input = opts.input or "src/main.lua", graph_output = opts.graph_output or ".meteorite/graph/current", backend = opts.backend, hybrid_profile = opts.hybrid_profile, ["hybrid-profile"] = opts["hybrid-profile"], router_dispatch = opts.router_dispatch, ["router-dispatch"] = opts["router-dispatch"], optimize = opts.optimize, target = opts.target, lua_root = lua_root }),
@@ -164,7 +165,7 @@ return {
     assets:add(ctx.graph:add_asset({
       kind = "meteorite_release_manifest",
       virtual_path = "meteorite-release.json",
-      content = release_manifest.build(result, release_mode, opts.bin or "bin/server", contract, target_lua),
+      content = release_manifest.build(result, release_mode, opts.bin or "bin/server", contract, target_lua, opts),
       generated = true,
       metadata = { mode = release_mode, graph_hash = result.graph_hash, contract = contract.format },
     }))
@@ -175,6 +176,7 @@ return {
       release_assets.add_package_assets(ctx, assets, opts.packages, { target = target_lua and target_lua.target or release_contract.target_from_opts(opts) })
       release_assets.add_runtime_source_asset(ctx, assets, root, target_lua)
     end
+    if release_mode == "static" then release_assets.assert_static_release_assets(ctx, assets) end
     return assets
   end,
 }

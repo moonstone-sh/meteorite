@@ -1,4 +1,5 @@
 const std = @import("std");
+const Header = @import("meteorite_protocol").Header;
 
 /// Virtual table for dispatching context method calls from Lua C bindings
 /// to the compile-time-generated Context type in meteorite.zig.
@@ -8,11 +9,15 @@ pub const VTable = struct {
     text: *const fn (ctx: *anyopaque, status: u16, body: []const u8) anyerror!void,
     json: *const fn (ctx: *anyopaque, status: u16, body: []const u8) anyerror!void,
     bytes: *const fn (ctx: *anyopaque, status: u16, content_type: []const u8, body: []const u8) anyerror!void,
+    bytes_with_headers: *const fn (ctx: *anyopaque, status: u16, content_type: []const u8, body: []const u8, headers: []const Header) anyerror!void,
     body: *const fn (ctx: *anyopaque) anyerror![]const u8,
     param: *const fn (ctx: *anyopaque, name: []const u8) ?[]const u8,
     param_at: *const fn (ctx: *anyopaque, index: usize) ?[]const u8,
     query: *const fn (ctx: *anyopaque, name: []const u8) ?[]const u8,
     header: *const fn (ctx: *anyopaque, name: []const u8) ?[]const u8,
+    request_id: *const fn (ctx: *anyopaque) anyerror![]const u8,
+    state_get: *const fn (ctx: *anyopaque, key: []const u8) ?[]const u8,
+    state_set: *const fn (ctx: *anyopaque, key: []const u8, value: []const u8) anyerror!void,
     allocator: *const fn (ctx: *anyopaque) std.mem.Allocator,
     io: *const fn (ctx: *anyopaque) std.Io,
     run: *const fn (ctx: *anyopaque, allocator: std.mem.Allocator, argv: []const []const u8) anyerror![]const u8,
@@ -36,6 +41,12 @@ pub fn makeVTable(comptime Ctx: type) VTable {
             fn f(ptr: *anyopaque, status: u16, content_type: []const u8, body: []const u8) !void {
                 const typed: *Ctx = @ptrCast(@alignCast(ptr));
                 return typed.bytes(status, content_type, body);
+            }
+        }.f,
+        .bytes_with_headers = struct {
+            fn f(ptr: *anyopaque, status: u16, content_type: []const u8, body: []const u8, headers: []const Header) !void {
+                const typed: *Ctx = @ptrCast(@alignCast(ptr));
+                return typed.bytesWithHeaders(status, content_type, body, headers);
             }
         }.f,
         .body = struct {
@@ -66,6 +77,24 @@ pub fn makeVTable(comptime Ctx: type) VTable {
             fn f(ptr: *anyopaque, name: []const u8) ?[]const u8 {
                 const typed: *Ctx = @ptrCast(@alignCast(ptr));
                 return typed.header(name);
+            }
+        }.f,
+        .request_id = struct {
+            fn f(ptr: *anyopaque) ![]const u8 {
+                const typed: *Ctx = @ptrCast(@alignCast(ptr));
+                return typed.requestId();
+            }
+        }.f,
+        .state_get = struct {
+            fn f(ptr: *anyopaque, key: []const u8) ?[]const u8 {
+                const typed: *Ctx = @ptrCast(@alignCast(ptr));
+                return typed.stateGet(key);
+            }
+        }.f,
+        .state_set = struct {
+            fn f(ptr: *anyopaque, key: []const u8, value: []const u8) !void {
+                const typed: *Ctx = @ptrCast(@alignCast(ptr));
+                return typed.stateSet(key, value);
             }
         }.f,
         .allocator = struct {

@@ -54,14 +54,29 @@ expected_content_type_for_scenario() {
 }
 
 
+expected_response_header_for_scenario() {
+  local name="$1"
+  case "$name" in
+  app-pipeline-cors | app-pipeline-cors-json-template) printf 'access-control-allow-origin=*' ;;
+  *) return 1 ;;
+  esac
+}
+
+
 tier_for_scenario() {
   local name="$1"
+  local meteorite_build_mode="${2:-release-hybrid}"
+  if [[ "$meteorite_build_mode" == "release-static" ]]; then
+    case "$name" in
+    app-* | lua-* | plain_text_hybrid | typed_param_hybrid | echo_small_hybrid | work-* | zig-static | plain_text | typed_param | echo_small) printf 'static' ; return ;;
+    esac
+  fi
   case "$name" in
   work-cpu-*) printf 'work-cpu' ;;
   work-sleep-*) printf 'work-sleep' ;;
   app-*) printf 'lua-app' ;;
-  zig-static) printf 'native' ;;
-  plain_text | typed_param | echo_small) printf 'native' ;;
+  zig-static) printf 'static' ;;
+  plain_text | typed_param | echo_small) printf 'static' ;;
   plain_text_hybrid | typed_param_hybrid | echo_small_hybrid) printf 'lua-direct-response' ;;
   lua-empty) printf 'lua-empty' ;;
   lua-return-string) printf 'lua-string-return' ;;
@@ -80,13 +95,27 @@ tier_for_scenario() {
 }
 
 
+claim_class_for_scenario() {
+  local name="$1"
+  local meteorite_build_mode="${2:-release-hybrid}"
+  if [[ "$meteorite_build_mode" == "release-static" ]]; then
+    printf 'static'
+    return
+  fi
+  case "$name" in
+  app-* | plain_text_hybrid | typed_param_hybrid | echo_small_hybrid | lua-*) printf 'hybrid(lua-runtime)' ;;
+  *) printf 'static' ;;
+  esac
+}
+
+
 validation_for_scenario() {
   local name="$1" tier="$2"
   case "$name" in
   lua-sleep-1s) printf 'pcall_at_least,latency_floor' ;;
   *)
     case "$tier" in
-    native) printf 'native_no_lua' ;;
+    static) printf 'static_no_lua' ;;
     external) printf 'not_applicable' ;;
     *) printf 'pcall_exact' ;;
     esac
@@ -129,5 +158,3 @@ service_time_seconds_for_scenario() {
 is_lua_bench_scenario() {
   case "$1" in lua-*) return 0 ;; *) return 1 ;; esac
 }
-
-

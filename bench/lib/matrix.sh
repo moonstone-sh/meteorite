@@ -5,15 +5,18 @@ run_scenario() {
   check_interrupted
 
   local name="$1" method="$2" path="$3" label="$4" c="$5" rep="$6"
-  local tier validation_modes compare proof_only latency_floor_us
-  tier="$(tier_for_scenario "$name")"
+  local tier claim_class validation_modes compare proof_only latency_floor_us
+  tier="$(tier_for_scenario "$name" "${BENCH_METEORITE_BUILD_MODE:-release-hybrid}")"
+  claim_class="$(claim_class_for_scenario "$name" "${BENCH_METEORITE_BUILD_MODE:-release-hybrid}")"
   validation_modes="$(validation_for_scenario "$name" "$tier")"
   if [[ "$label" != meteorite-* ]]; then
+    claim_class="framework-parity"
     validation_modes="not_applicable"
   fi
   compare="$(compare_for_scenario "$name")"
   proof_only=0
   if [[ "$compare" == "0" ]]; then proof_only=1; fi
+  if [[ "$proof_only" == "1" ]]; then claim_class="proof-only"; fi
   latency_floor_us="$(latency_floor_us_for_scenario "$name")"
   local url="http://$HOST:$PORT$path"
   local raw_ext="out"
@@ -52,6 +55,8 @@ run_scenario() {
   echo "loadgen_version=$(loadgen_version)" >>"$meta_file"
   echo "loadgen_raw_file=$out_file" >>"$meta_file"
   echo "scenario=$name" >>"$meta_file"
+  echo "meteorite_build_mode=${BENCH_METEORITE_BUILD_MODE:-release-hybrid}" >>"$meta_file"
+  echo "claim_class=$claim_class" >>"$meta_file"
   echo "tier=$tier" >>"$meta_file"
   echo "validation=$validation_modes" >>"$meta_file"
   echo "compare=$compare" >>"$meta_file"
@@ -262,7 +267,7 @@ run_scenario() {
   accepted_delta=$(python3 -c 'import sys; print(max(0, int(float(sys.argv[2])) - int(float(sys.argv[1]))))' "$accepted_before" "$accepted_after")
   completed_delta=$(python3 -c 'import sys; print(max(0, int(float(sys.argv[2])) - int(float(sys.argv[1]))))' "$completed_before" "$completed_after")
 
-  local rps p50 p99 p50_us p75_us p90_us p99_us latency_avg_us latency_stdev_us latency_max_us requests socket_errors non2xx lg_cpu invalid_reason lua_after native_after lua_delta native_delta lua_per_request
+  local rps p50 p99 p50_us p75_us p90_us p99_us latency_avg_us latency_stdev_us latency_max_us requests socket_connect_errors socket_read_errors socket_write_errors socket_timeout_errors socket_errors non2xx lg_cpu invalid_reason lua_after native_after lua_delta native_delta lua_per_request
 
   if [[ "$LOADGEN" == "wrk" ]]; then
     rps=$(awk '/^Requests\/sec:/ { print $2; exit }' "$out_file" 2>/dev/null)
@@ -285,7 +290,18 @@ run_scenario() {
     latency_stdev_us="$(latency_to_us "${latency_stdev_raw:-0}")"
     latency_max_raw="$(awk '/^[[:space:]]*Latency[[:space:]]/ { print $4; exit }' "$out_file" 2>/dev/null)"
     latency_max_us="$(latency_to_us "${latency_max_raw:-0}")"
-    socket_errors=$(awk '/Socket errors:/ { total = 0; for (i = 1; i <= NF; i++) { gsub(",", "", $i); if ($i ~ /^[0-9]+$/) total += $i } print total; exit }' "$out_file" 2>/dev/null)
+    socket_connect_errors=$(awk '/Socket errors:/ { for (i = 1; i <= NF; i++) { if ($i == "connect") { gsub(",", "", $(i + 1)); print $(i + 1); exit } } }' "$out_file" 2>/dev/null)
+    socket_read_errors=$(awk '/Socket errors:/ { for (i = 1; i <= NF; i++) { if ($i == "read") { gsub(",", "", $(i + 1)); print $(i + 1); exit } } }' "$out_file" 2>/dev/null)
+    socket_write_errors=$(awk '/Socket errors:/ { for (i = 1; i <= NF; i++) { if ($i == "write") { gsub(",", "", $(i + 1)); print $(i + 1); exit } } }' "$out_file" 2>/dev/null)
+    socket_timeout_errors=$(awk '/Socket errors:/ { for (i = 1; i <= NF; i++) { if ($i == "timeout") { gsub(",", "", $(i + 1)); print $(i + 1); exit } } }' "$out_file" 2>/dev/null)
+    socket_connect_errors="${socket_connect_errors:-0}"
+    socket_read_errors="${socket_read_errors:-0}"
+    socket_write_errors="${socket_write_errors:-0}"
+    socket_timeout_errors="${socket_timeout_errors:-0}"
+    socket_errors=$((socket_connect_errors + socket_read_errors + socket_write_errors + socket_timeout_errors))
+    if [[ "$socket_errors" == "0" ]]; then
+      socket_errors=$(awk '/Socket errors:/ { total = 0; for (i = 1; i <= NF; i++) { gsub(",", "", $i); if ($i ~ /^[0-9]+$/) total += $i } print total; exit }' "$out_file" 2>/dev/null)
+    fi
     socket_errors="${socket_errors:-0}"
     non2xx=$(awk '/Non-2xx or 3xx responses:/ { print $NF; exit }' "$out_file" 2>/dev/null)
     non2xx="${non2xx:-0}"
@@ -299,6 +315,10 @@ run_scenario() {
     p75_us=0
     p90_us=0
     p99_us=0
+    socket_connect_errors=0
+    socket_read_errors=0
+    socket_write_errors=0
+    socket_timeout_errors=0
     socket_errors=0
     non2xx=0
     while IFS='=' read -r key value; do
@@ -312,6 +332,10 @@ run_scenario() {
       p75_us) p75_us="$value" ;;
       p90_us) p90_us="$value" ;;
       p99_us) p99_us="$value" ;;
+      socket_connect_errors) socket_connect_errors="$value" ;;
+      socket_read_errors) socket_read_errors="$value" ;;
+      socket_write_errors) socket_write_errors="$value" ;;
+      socket_timeout_errors) socket_timeout_errors="$value" ;;
       socket_errors) socket_errors="$value" ;;
       non2xx) non2xx="$value" ;;
       esac
@@ -354,8 +378,8 @@ run_scenario() {
     invalid_reason="non2xx-$non2xx"
   elif grep -q '^server_alive_after=0$' "$meta_file"; then
     invalid_reason="server-dead-after"
-  elif [[ "$stats_supported" == "1" && "$validation_modes" == *native_no_lua* && "$lua_delta" != "0" ]]; then
-    invalid_reason="native-called-lua"
+  elif [[ "$stats_supported" == "1" && "$validation_modes" == *static_no_lua* && "$lua_delta" != "0" ]]; then
+    invalid_reason="static-called-lua"
   elif [[ "$stats_supported" == "1" && "$validation_modes" == *pcall_exact* ]]; then
     tolerance=$(python3 -c 'import sys; n=int(float(sys.argv[1])); print(max(10, int(n * 0.005)))' "$requests")
     diff=$((lua_delta > requests ? lua_delta - requests : requests - lua_delta))
@@ -410,6 +434,10 @@ run_scenario() {
   echo "p75_us=$p75_us" >>"$meta_file"
   echo "p90_us=$p90_us" >>"$meta_file"
   echo "p99_us=$p99_us" >>"$meta_file"
+  echo "socket_connect_errors=$socket_connect_errors" >>"$meta_file"
+  echo "socket_read_errors=$socket_read_errors" >>"$meta_file"
+  echo "socket_write_errors=$socket_write_errors" >>"$meta_file"
+  echo "socket_timeout_errors=$socket_timeout_errors" >>"$meta_file"
   echo "socket_errors=$socket_errors" >>"$meta_file"
   echo "non2xx=$non2xx" >>"$meta_file"
   echo "lua_pcalls_after=$lua_after" >>"$meta_file"
@@ -471,5 +499,3 @@ run_selected_variant() {
   "$starter" "$@"
   run_matrix_for_variant "$label"
 }
-
-

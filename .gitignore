@@ -12,6 +12,15 @@ zig-out/
 # Benchmarks
 bench/results/*
 !bench/results/.gitkeep
+bench/competitors/*/logs/
+bench/competitors/*/*.pid
+bench/competitors/*/sync*.log
+bench/competitors/*/nginx.conf
+bench/competitors/*/nginx.conf.compiled
+bench/competitors/moonstone-test-env/
+
+# Dev build outputs
+dist/server
 
 # OS
 .DS_Store

@@ -39,6 +39,7 @@
 --- @field source? table  Source location info
 
 local contract = {}
+local hooks = require("core.hooks")
 
 --- @class StageContract
 --- @field id? string  Stage identifier (must be unique within route)
@@ -91,6 +92,18 @@ contract.valid_phases = {
   pre_tree = true,
   post_match = true,
   pre_handler = true,
+  post_handler = true,
+  observe = true,
+  error = true,
+}
+
+local before_handle_phases = {
+  pre_tree = true,
+  post_match = true,
+  pre_handler = true,
+}
+
+local after_handle_phases = {
   post_handler = true,
   observe = true,
   error = true,
@@ -196,7 +209,12 @@ local function PipelineBuilder(route_id)
       error("invalid stage strategy: " .. tostring(strat) .. " (expected inline_lua, lua, zig, or rust)")
     end
 
-    -- Validate hook phase
+    -- Set default may_short_circuit before phase-specific validation.
+    if stage.may_short_circuit == nil then
+      stage.may_short_circuit = (kind == "handle" or kind == "transform")
+    end
+
+    -- Validate hook phase and resource permissions.
     if kind == "hook" then
       if not stage.phase then
         error("hook stage requires a 'phase' field (pre_tree, post_match, pre_handler, post_handler, observe, error)")
@@ -204,11 +222,8 @@ local function PipelineBuilder(route_id)
       if not contract.valid_phases[stage.phase] then
         error("invalid hook phase: " .. tostring(stage.phase) .. " (expected pre_tree, post_match, pre_handler, post_handler, observe, error)")
       end
-    end
-
-    -- Set default may_short_circuit
-    if stage.may_short_circuit == nil then
-      stage.may_short_circuit = (kind == "handle" or kind == "transform")
+      local hook_error = hooks.validate(stage)
+      if hook_error then error(hook_error) end
     end
 
     return stage
@@ -273,6 +288,9 @@ local function PipelineBuilder(route_id)
     if not contract.valid_phases[phase] then
       error("invalid hook phase: " .. tostring(phase))
     end
+    if stage.may_short_circuit == nil then stage.may_short_circuit = false end
+    local hook_error = hooks.validate(stage)
+    if hook_error then error(hook_error) end
     self.stages[#self.stages + 1] = stage
     return self
   end
@@ -563,6 +581,42 @@ function contract.build(method, decl, scope)
           }, "\n"))
         end
         seen_ids[stage.id] = true
+      end
+    end
+
+    -- Validate deterministic hook ordering around the response producer.
+    local first_handle_position = nil
+    for index, stage in ipairs(route_contract.pipeline) do
+      if stage.kind == "handle" and not first_handle_position then
+        first_handle_position = index
+      end
+    end
+    if first_handle_position then
+      for index, stage in ipairs(route_contract.pipeline) do
+        if stage.kind == "hook" then
+          if before_handle_phases[stage.phase] and index > first_handle_position then
+            error(table.concat({
+              "invalid hook ordering in pipeline",
+              "",
+              "route: " .. (route_contract.id or route_contract.route),
+              "hook phase: " .. tostring(stage.phase),
+              "stage id: " .. tostring(stage.id or "<anonymous>"),
+              "",
+              "hint: pre_tree, post_match, and pre_handler hooks must appear before the handle stage",
+            }, "\n"))
+          end
+          if after_handle_phases[stage.phase] and index < first_handle_position then
+            error(table.concat({
+              "invalid hook ordering in pipeline",
+              "",
+              "route: " .. (route_contract.id or route_contract.route),
+              "hook phase: " .. tostring(stage.phase),
+              "stage id: " .. tostring(stage.id or "<anonymous>"),
+              "",
+              "hint: post_handler, observe, and error hooks must appear after the handle stage",
+            }, "\n"))
+          end
+        end
       end
     end
 

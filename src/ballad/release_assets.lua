@@ -49,6 +49,52 @@ local function lua_file_path(handler)
   return "src/" .. module:gsub("%.", "/") .. ".lua"
 end
 
+local function read_file(file_path)
+  local file = io.open(file_path, "rb")
+  if not file then return nil end
+  local data = file:read("*a")
+  file:close()
+  return data
+end
+
+local function project_lua_candidates(module)
+  if not module or module == "" then return {} end
+  local rel = tostring(module):gsub("%.", "/")
+  return {
+    "src/" .. rel .. ".lua",
+    "src/" .. rel .. "/init.lua",
+  }
+end
+
+local function scan_requires(source)
+  local modules = {}
+  source = tostring(source or "")
+  for quote, module in source:gmatch("require%s*%(%s*(['\"])([%w_%.%-]+)%1%s*%)") do
+    if quote and module then modules[#modules + 1] = module end
+  end
+  for quote, module in source:gmatch("require%s+(['\"])([%w_%.%-]+)%1") do
+    if quote and module then modules[#modules + 1] = module end
+  end
+  return modules
+end
+
+local function add_project_lua_file(ctx, assets, root, rel_path, kind, metadata, seen)
+  if not rel_path or rel_path == "" then return end
+  if rel_path:sub(1, 1) == "/" then return end
+  if not rel_path:match("%.lua$") then return end
+  if seen[rel_path] then return end
+  local full = join(root, rel_path)
+  if not file_exists(full) then return end
+  seen[rel_path] = true
+  add_file_asset(ctx, assets, root, rel_path, rel_path, kind, metadata)
+  local source = read_file(full)
+  for _, module in ipairs(scan_requires(source)) do
+    for _, candidate in ipairs(project_lua_candidates(module)) do
+      add_project_lua_file(ctx, assets, root, candidate, "meteorite_lua_module", { required_by = rel_path, module = module }, seen)
+    end
+  end
+end
+
 function assets_mod.package_is_lua_cmodule(package)
   local kind = package.kind or ""
   if kind == "lua_cmodule" or kind == "cmodule" or kind == "native" then return true end
@@ -69,18 +115,23 @@ local function is_cross_target(target)
 end
 
 function assets_mod.add_hybrid_lua_assets(ctx, assets, root, graph)
-  copy_tree_assets(ctx, assets, root, ".meteorite/lua/inline", ".meteorite/lua/inline", "meteorite_lua_chunk")
-  copy_tree_assets(ctx, assets, root, "src", "src", "meteorite_lua_source")
+  local seen = {}
   for _, route in ipairs(graph.routes or {}) do
-    if route.handler and route.handler.kind == "lua" then
+    if route.handler and route.handler.kind == "inline_lua" then
+      local chunk_path = route.handler.lifted and route.handler.lifted.chunk_path
+      add_project_lua_file(ctx, assets, root, chunk_path, "meteorite_lua_chunk", { route = route.id }, seen)
+    elseif route.handler and route.handler.kind == "lua" then
       local route_path = lua_file_path(route.handler)
-      add_file_asset(ctx, assets, root, route_path, route_path, "meteorite_lua_handler", { route = route.id })
+      add_project_lua_file(ctx, assets, root, route_path, "meteorite_lua_handler", { route = route.id }, seen)
     end
   end
   for _, plugin in ipairs(graph.plugins or {}) do
-    if plugin.handler and plugin.handler.kind == "lua" then
+    if plugin.handler and plugin.handler.kind == "inline_lua" then
+      local chunk_path = plugin.handler.lifted and plugin.handler.lifted.chunk_path
+      add_project_lua_file(ctx, assets, root, chunk_path, "meteorite_lua_chunk", { plugin = plugin.id }, seen)
+    elseif plugin.handler and plugin.handler.kind == "lua" then
       local plugin_path = lua_file_path(plugin.handler)
-      add_file_asset(ctx, assets, root, plugin_path, plugin_path, "meteorite_lua_plugin", { plugin = plugin.id })
+      add_project_lua_file(ctx, assets, root, plugin_path, "meteorite_lua_plugin", { plugin = plugin.id }, seen)
     end
   end
 end
@@ -148,6 +199,44 @@ end
 
 function assets_mod.add_graph_assets(ctx, assets, root, source_dir, dest_dir)
   copy_tree_assets(ctx, assets, root or ".", source_dir, dest_dir or source_dir, "meteorite_graph")
+end
+
+function assets_mod.assert_static_release_assets(ctx, assets)
+  local forbidden_kinds = {
+    lua_runtime = true,
+    lua_runtime_source = true,
+    lua_module = true,
+    lua_cmodule = true,
+    meteorite_lua_chunk = true,
+    meteorite_lua_handler = true,
+    meteorite_lua_module = true,
+    meteorite_lua_plugin = true,
+    meteorite_lua_source = true,
+  }
+  local found = {}
+  for _, asset in ipairs((assets and assets.assets) or {}) do
+    local kind = asset.kind or ""
+    local virtual_path = asset.virtual_path or asset.dest or ""
+    if forbidden_kinds[kind]
+      or tostring(virtual_path):match("^runtime/lua/")
+      or tostring(virtual_path):match("^runtime/source/")
+      or tostring(virtual_path):match("^%.meteorite/lua/")
+      or tostring(virtual_path):match("^lua/")
+      or tostring(virtual_path):match("^lib/%d") then
+      found[#found + 1] = tostring(kind) .. " " .. tostring(virtual_path)
+    end
+  end
+  if #found == 0 then return end
+  table.sort(found)
+  local lines = {
+    "meteorite.release({ mode = 'static' }) attempted to package Lua runtime artifacts.",
+    "",
+    "Forbidden assets:",
+  }
+  for _, item in ipairs(found) do lines[#lines + 1] = "  - " .. item end
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = "Remediation: only package these assets for hybrid releases, or remove retained Lua runtime nodes from the static graph."
+  ctx.fail(table.concat(lines, "\n"))
 end
 
 function assets_mod.new_set()

@@ -108,7 +108,7 @@ end
 
 local function source_fingerprint()
   local command = table.concat({
-    "{ find src zig -type f 2>/dev/null; test -f build.zig && echo build.zig; test -f moonstone.toml && echo moonstone.toml; }",
+    "{ find src zig public static site assets -type f 2>/dev/null; test -f build.zig && echo build.zig; test -f moonstone.toml && echo moonstone.toml; }",
     "| sort",
     "| while IFS= read -r f; do stat -f '%m %z %N' \"$f\" 2>/dev/null || stat -c '%Y %s %n' \"$f\" 2>/dev/null; done"
   }, " ")
@@ -149,15 +149,28 @@ end
 local function classify_changes(changes, force_build)
   if force_build then return "rebuild", "zig/build input changed" end
   if #changes == 0 then return "none", "no graph partition changes" end
-  local only_lua_chunks = true
+  local counts = {}
+  for _, change in ipairs(changes) do counts[change.kind] = (counts[change.kind] or 0) + 1 end
+  local function has(kind) return counts[kind] ~= nil end
+  local function only(allowed)
+    for kind, _ in pairs(counts) do
+      if not allowed[kind] then return false end
+    end
+    return true
+  end
+  if only({ lua_chunk = true, lua_chunks = true }) then return "reload", "Lua-only handler chunks changed" end
+  if has("route_graph") or has("route") or has("patterns") or has("pattern") or has("plugins") or has("plugin") or has("capabilities") or has("runtime") then
+    return "rebuild", "graph-shape partitions changed"
+  end
+  if has("static_asset") and only({ static_asset = true, handlers = true, handler = true }) then
+    return "rebuild", "static asset partitions changed"
+  end
   for _, change in ipairs(changes) do
-    if change.kind ~= "lua_chunk" and change.kind ~= "lua_chunks" then
-      only_lua_chunks = false
-      break
+    if change.kind == "handler" or change.kind == "handlers" then
+      return "rebuild", "Zig/file handler partitions changed"
     end
   end
-  if only_lua_chunks then return "reload", "Lua chunk changes only" end
-  return "rebuild", "graph/zig-affecting partitions changed"
+  return "rebuild", "graph-affecting partitions changed"
 end
 
 local function reload_lua()
@@ -190,6 +203,15 @@ local function changed_zig_or_build(previous, current)
     return table.concat(out, "\n")
   end
   return filter(previous) ~= filter(current)
+end
+
+if input == "--classify-partitions" then
+  output = arg[2] or output
+  local force_build = arg[3] == "true" or arg[3] == "1" or arg[3] == "force"
+  local changes = parse_partition_changes()
+  local action, reason = classify_changes(changes, force_build)
+  io.write(action, "\t", reason, "\n")
+  return
 end
 
 mkdir_p(state_dir)

@@ -15,6 +15,7 @@ function partitions.rows(snapshot)
   for _, route in ipairs(snapshot.routes or {}) do add("route", route.id, route.hash) end
   for _, handler in ipairs(snapshot.handlers or {}) do add("handler", handler.id, handler.hash) end
   for _, chunk in ipairs(snapshot.lua_chunks or {}) do add("lua_chunk", chunk.id, chunk.hash) end
+  for _, asset in ipairs(snapshot.static_assets or {}) do add("static_asset", asset.id, asset.hash) end
   for _, plugin in ipairs(snapshot.plugins or {}) do add("plugin", plugin.id, plugin.hash) end
   for _, pattern in ipairs(snapshot.patterns or {}) do add("pattern", pattern.id, pattern.hash) end
   table.sort(rows, function(a, b) return a.key < b.key end)

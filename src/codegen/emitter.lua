@@ -166,6 +166,7 @@ local function build_partitions(graph, routes_text, graph_hash, mode)
   local routes = {}
   local handlers = {}
   local lua_chunks = {}
+  local static_assets = {}
   for _, route in ipairs(graph.routes or {}) do
     local shape = route_shape_descriptor(route)
     local handler = handler_descriptor(route)
@@ -175,6 +176,10 @@ local function build_partitions(graph, routes_text, graph_hash, mode)
       lua_chunks[#lua_chunks + 1] = { id = route.id, path = handler.chunk_path, hash = helpers.hash_text(read_file(handler.chunk_path) or "") }
     elseif handler.kind == "lua" then
       lua_chunks[#lua_chunks + 1] = { id = route.id, path = handler.path, hash = helpers.hash_text(read_file(handler.path) or "") }
+    elseif handler.kind == "file" then
+      static_assets[#static_assets + 1] = { id = route.id, kind = "file", path = handler.artifact_path or handler.path or route.raw_path, hash = helpers.hash_zon(handler) }
+    elseif handler.kind == "dir" then
+      static_assets[#static_assets + 1] = { id = route.id, kind = "dir", path = route.raw_path, hash = helpers.hash_zon(handler.manifest or {}) }
     end
   end
   local patterns = {}
@@ -220,6 +225,7 @@ local function build_partitions(graph, routes_text, graph_hash, mode)
     handlers = handlers,
     patterns = patterns,
     lua_chunks = lua_chunks,
+    static_assets = static_assets,
     plugins = plugin_list,
     runtime = runtime,
   }
@@ -252,12 +258,16 @@ function emitter.emit(app, opts)
   local routes_zon = {}
   for _, route in ipairs(graph.routes) do routes_zon[#routes_zon + 1] = report.route_to_zon(route) end
   local routes_text = zon.encode(routes_zon)
+  local schemas_text = zon.encode(report.schema_ir(graph))
+  local openapi_plan_text = zon.encode(report.openapi_plan(graph))
   graph.memory_report = report.memory_report(graph, routes_text)
   local graph_hash = helpers.hash_text(routes_text)
   local partitions = build_partitions(graph, routes_text, graph_hash, mode)
   local previous_partitions = read_file(output .. "/partition-hashes.tsv")
   local partition_changes = partition_diff.diagnostics(previous_partitions, partitions)
   helpers.write_file(output .. "/routes.zon", routes_text)
+  helpers.write_file(output .. "/schemas.zon", schemas_text)
+  helpers.write_file(output .. "/openapi-plan.zon", openapi_plan_text)
   helpers.write_file(output .. "/manifest.zon", zon.encode({ format = "meteorite.graph.v0", meteorite_version = "0.1.0", graph_hash = graph_hash, mode = helpers.mode_enum(mode), partitions = { route_graph = partitions.route_graph_hash, handlers = partitions.handler_hash, patterns = partitions.pattern_hash, lua_chunks = partitions.lua_chunk_hash, capabilities = partitions.capability_hash, runtime = partitions.runtime_hash } }))
   helpers.write_file(output .. "/partitions.zon", zon.encode(partitions))
   helpers.write_file(output .. "/partition-hashes.tsv", partition_diff.encode_tsv(partitions))

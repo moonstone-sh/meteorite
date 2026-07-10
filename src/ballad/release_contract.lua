@@ -100,6 +100,26 @@ function contract_mod.fail_static_lua(ctx, refs)
   ctx.fail(table.concat(lines, "\n"))
 end
 
+function contract_mod.assert_static_graph(ctx, graph)
+  local refs = lua_references(graph or {})
+  if #refs == 0 then return end
+  local lines = {
+    "meteorite.release({ mode = 'static' }) produced a graph with Lua runtime execution nodes after emission.",
+    "",
+    "This violates the static release contract and would require a Lua runtime at request time.",
+    "",
+    "Lua runtime nodes found:",
+  }
+  for _, ref in ipairs(refs) do
+    lines[#lines + 1] = "  - " .. ref.kind .. ": " .. ref.label
+    lines[#lines + 1] = "    at: " .. ref.source
+    lines[#lines + 1] = "    hint: " .. ref.hint
+  end
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = "Remediation: build hybrid or replace retained Lua handlers/plugins with Zig/static graph nodes."
+  ctx.fail(table.concat(lines, "\n"))
+end
+
 local function runtime_source_from_opts(opts)
   local runtime = opts.runtime or {}
   if opts.lua_source then return opts.lua_source, opts.lua_source_kind end
@@ -141,8 +161,12 @@ function contract_mod.validate_target_lua(ctx, root, contract, opts)
       "",
       "Hybrid mode may retain Lua runtime execution nodes, but cross-target release must materialize target Lua and target Lua modules.",
       "",
+      "Target ABI:",
+      "  " .. tostring(target),
+      "",
       "Missing:",
       "  source_payload_path",
+      "  source_kind/source provenance for the Lua runtime",
       "",
       "Lua runtime nodes found:",
     }
@@ -151,7 +175,7 @@ function contract_mod.validate_target_lua(ctx, root, contract, opts)
       lines[#lines + 1] = "    at: " .. ref.source
     end
     lines[#lines + 1] = ""
-    lines[#lines + 1] = "Hint: pass runtime = { source_payload_path = ... } from the Moonstone/Ballad plugin, set lua_source/runtime_source, or build static after replacing Lua runtime handlers/plugins."
+    lines[#lines + 1] = "Remediation: pass runtime = { source_payload_path = ..., source_kind = 'puc_lua_source' } from Moonstone/Ballad, set lua_source/runtime_source to an upstream Lua source archive, or build static after replacing Lua runtime handlers/plugins."
     ctx.fail(table.concat(lines, "\n"))
   end
 
@@ -162,11 +186,12 @@ function contract_mod.validate_target_lua(ctx, root, contract, opts)
       "Runtime payload:",
       "  source_payload_path: " .. tostring(source),
       "  source_kind: " .. tostring(source_kind),
+      "  target_abi: " .. tostring(target),
       "",
       "Expected:",
       "  an upstream PUC Lua source archive, not a prebuilt Moonstone runtime artifact.",
       "",
-      "Fix:",
+      "Remediation:",
       "  pass meteorite.release({ runtime_source = <lua-source.tar.gz>, target = '" .. tostring(target) .. "' }) or publish Moonstone Lua runtime packages with source provenance.",
     }, "\n"))
   end
@@ -188,10 +213,24 @@ function contract_mod.validate_packages(ctx, contract, opts)
   for _, package in ipairs(opts.packages or {}) do
     if release_assets.package_is_lua_cmodule(package) then
       if not package.source_payload_path or package.source_payload_path == "" then
-        ctx.fail("meteorite.release({ mode = 'hybrid', target = '" .. tostring(target) .. "' }) cannot rebuild Lua C module `" .. tostring(package.name) .. "`: missing source_payload_path")
+        ctx.fail(table.concat({
+          "meteorite.release({ mode = 'hybrid', target = '" .. tostring(target) .. "' }) cannot rebuild Lua C module `" .. tostring(package.name) .. "`.",
+          "",
+          "Missing:",
+          "  package.source_payload_path",
+          "",
+          "Remediation: provide source provenance for this Lua C module package or remove it from the cross-target hybrid release.",
+        }, "\n"))
       end
       if not package.rockspec_payload_path or package.rockspec_payload_path == "" then
-        ctx.fail("meteorite.release({ mode = 'hybrid', target = '" .. tostring(target) .. "' }) cannot rebuild Lua C module `" .. tostring(package.name) .. "`: missing rockspec_payload_path")
+        ctx.fail(table.concat({
+          "meteorite.release({ mode = 'hybrid', target = '" .. tostring(target) .. "' }) cannot rebuild Lua C module `" .. tostring(package.name) .. "`.",
+          "",
+          "Missing:",
+          "  package.rockspec_payload_path",
+          "",
+          "Remediation: provide the package rockspec provenance so Meteorite can rebuild the module for " .. tostring(target) .. ".",
+        }, "\n"))
       end
     end
   end

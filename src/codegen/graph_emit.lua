@@ -79,7 +79,7 @@ function graph_emit.prepare_graph(graph, output, mode)
     end
     static_compiler.prepare_route(route, output, mode)
     if route.handler.kind == "inline_lua" then
-      local lifted = lifter.lift(route, { output = output })
+      local lifted = lifter.lift(route, { output = output, mode = mode })
       route.handler.lifted = lifted
       local file = io.open(lifted.chunk_path, "rb")
       local source = file and file:read("*a") or ""
@@ -107,20 +107,34 @@ end
 
 function graph_emit.sorted_handler_infos(routes)
   local infos, seen = {}, {}
+  local function add(symbol, import, method, path, source)
+    if not symbol or symbol == "" or seen[symbol] then return end
+    seen[symbol] = true
+    infos[#infos + 1] = {
+      symbol = symbol,
+      import = import or ("handlers." .. symbol),
+      method = method,
+      path = path,
+      source = source,
+    }
+  end
   for _, route in ipairs(routes) do
-    if route.handler.kind == "zig" and not seen[route.handler.symbol] then
-      seen[route.handler.symbol] = true
-      infos[#infos + 1] = {
-        symbol = route.handler.symbol,
-        import = route.handler.import or ("handlers." .. route.handler.symbol),
-        method = route.method,
-        path = route.raw_path,
-        source = route.source,
-      }
+    if route.handler.kind == "zig" then
+      add(route.handler.symbol, route.handler.import, route.method, route.raw_path, route.source)
+    end
+    for _, stage in ipairs(route.pipeline or {}) do
+      if stage.strat == "zig" and stage.symbol then
+        add(stage.symbol, stage.import, route.method, route.raw_path, stage.source or route.source)
+      end
     end
   end
   table.sort(infos, function(a, b) return a.symbol < b.symbol end)
   return infos
+end
+
+local function hook_phase_zig(phase)
+  if phase == "error" then return '.@"error"' end
+  return "." .. phase
 end
 
 function graph_emit.sorted_route_handler_infos(routes)
@@ -208,6 +222,14 @@ function graph_emit.emit_bindings(graph, output)
   lines[#lines + 1] = "    return switch (id) {"
   for _, info in ipairs(infos) do lines[#lines + 1] = "        ." .. info.symbol .. " => handlers." .. info.symbol .. "(ctx)," end
   lines[#lines + 1] = "    };"
+  lines[#lines + 1] = "}"
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = "pub fn callHandlerBySymbol(comptime symbol: []const u8, ctx: anytype) !void {"
+  if #infos == 0 then lines[#lines + 1] = "    _ = ctx;" end
+  for _, info in ipairs(infos) do
+    lines[#lines + 1] = "    if (comptime std.mem.eql(u8, symbol, " .. helpers.zig_string(info.symbol) .. ")) return handlers." .. info.symbol .. "(ctx);"
+  end
+  lines[#lines + 1] = "    @compileError(\"missing generated handler binding for symbol `\" ++ symbol ++ \"`\");"
   lines[#lines + 1] = "}"
   lines[#lines + 1] = ""
   lines[#lines + 1] = "pub fn callRoute(comptime route_id: []const u8, raw_ctx: anytype) !void {"
@@ -481,24 +503,27 @@ function graph_emit.route_module_content(route)
     "    const data = struct {",
     "        const segments = [_]graph.Segment{",
   }
+  local function emit_param_specs(name, specs)
+    lines[#lines + 1] = "        const " .. name .. " = [_]graph.ParamSpec{"
+    for _, spec in ipairs(specs or {}) do
+      local kind, pattern = graph_emit.param_pattern_zig(spec)
+      lines[#lines + 1] = "            .{ .name = " .. helpers.zig_string(spec.name) .. ", .kind = ." .. kind .. ", .max_len = " .. tostring(spec.max_len or 0) .. ", .exact_len = " .. tostring(spec.exact_len or 0) .. ", .optional = " .. tostring(spec.optional == true) .. ", .pattern = " .. pattern .. " },"
+    end
+    lines[#lines + 1] = "        };"
+  end
   for _, segment in ipairs(route.path.segments) do
     if segment.kind == "literal" then lines[#lines + 1] = "            .{ .literal = " .. helpers.zig_string(segment.value) .. " },"
     elseif segment.catch_all then lines[#lines + 1] = "            .{ .catch_all_param = " .. helpers.zig_string(segment.name) .. " },"
     else lines[#lines + 1] = "            .{ .param = " .. helpers.zig_string(segment.name) .. " }," end
   end
   lines[#lines + 1] = "        };"
-  lines[#lines + 1] = "        const query = [_]graph.ParamSpec{"
-  for _, query in ipairs(route.query or {}) do
-    local kind, pattern = graph_emit.param_pattern_zig(query)
-    lines[#lines + 1] = "            .{ .name = " .. helpers.zig_string(query.name) .. ", .kind = ." .. kind .. ", .max_len = " .. tostring(query.max_len or 0) .. ", .exact_len = " .. tostring(query.exact_len or 0) .. ", .optional = " .. tostring(query.optional == true) .. ", .pattern = " .. pattern .. " },"
-  end
-  lines[#lines + 1] = "        };"
-  lines[#lines + 1] = "        const params = [_]graph.ParamSpec{"
-  for _, param in ipairs(route.params) do
-    local kind, pattern = graph_emit.param_pattern_zig(param)
-    lines[#lines + 1] = "            .{ .name = " .. helpers.zig_string(param.name) .. ", .kind = ." .. kind .. ", .max_len = " .. tostring(param.max_len or 0) .. ", .exact_len = " .. tostring(param.exact_len or 0) .. ", .optional = " .. tostring(param.optional == true) .. ", .pattern = " .. pattern .. " },"
-  end
-  lines[#lines + 1] = "        };"
+  emit_param_specs("query", route.query)
+  emit_param_specs("params", route.params)
+  local validation = route.validation or {}
+  emit_param_specs("validation_headers", validation.headers)
+  emit_param_specs("validation_cookies", validation.cookies)
+  emit_param_specs("validation_json_body", validation.json_body)
+  emit_param_specs("validation_form_body", validation.form_body)
   lines[#lines + 1] = "        const capabilities = [_]graph.CapabilityRef{"
   for _, ref in ipairs(route.capabilities or {}) do
     lines[#lines + 1] = "            .{ ." .. ref.kind .. " = " .. helpers.zig_string(ref.name) .. " },"
@@ -531,6 +556,7 @@ function graph_emit.route_module_content(route)
     for _, stage in ipairs(route.pipeline) do
       local stage_fields = { '.id = ' .. helpers.zig_string(stage.id or "") }
       stage_fields[#stage_fields + 1] = '.kind = .' .. (stage.kind or "handle")
+      if stage.phase then stage_fields[#stage_fields + 1] = '.phase = ' .. hook_phase_zig(stage.phase) end
       stage_fields[#stage_fields + 1] = '.strat = .' .. (stage.strat or "inline_lua")
       if stage.path then stage_fields[#stage_fields + 1] = '.path = ' .. helpers.zig_string(stage.path) end
       if stage.symbol then stage_fields[#stage_fields + 1] = '.symbol = ' .. helpers.zig_string(stage.symbol) end
@@ -554,15 +580,16 @@ function graph_emit.route_module_content(route)
         ".strat = ." .. (stage.strat or "inline_lua"),
         ".may_short_circuit = " .. tostring(stage.may_short_circuit ~= false),
       }
+      if stage.phase then stage_fields[#stage_fields + 1] = ".phase = " .. hook_phase_zig(stage.phase) end
       if stage.path then stage_fields[#stage_fields + 1] = ".path = " .. helpers.zig_string(stage.path) end
-      if stage.symbol then stage_fields[#stage.fields or {}] = ".symbol = " .. helpers.zig_string(stage.symbol) end
+      if stage.symbol then stage_fields[#stage_fields + 1] = ".symbol = " .. helpers.zig_string(stage.symbol) end
       if stage.owner then stage_fields[#stage_fields + 1] = ".owner = " .. helpers.zig_string(stage.owner) end
       stage_lines[#stage_lines + 1] = "        .{ " .. table.concat(stage_fields, ", ") .. " },"
     end
     stage_lines[#stage_lines + 1] = "    }"
     pipeline_zig = table.concat(stage_lines, "\n")
   end
-  lines[#lines + 1] = "    return .{ .id = " .. helpers.zig_string(route.id) .. ", .method = ." .. route.method .. ", .raw_path = " .. helpers.zig_string(route.raw_path) .. ", .path = &data.segments, .params = &data.params, .query = &data.query, .memory = " .. graph_emit.route_memory_zig(route) .. ", .max_body_bytes = " .. route.memory.max_body_bytes .. ", .request_arena_bytes = " .. route.memory.request_arena_bytes .. ", .handler = " .. graph_emit.route_handler_zig(route) .. ", .pipeline = &data.pipeline, .runtime = " .. graph_emit.route_runtime_zig(route) .. ", .execution = " .. graph_emit.route_execution_zig(route) .. ", .capabilities = &data.capabilities, .scope = " .. scope_zig .. " };"
+  lines[#lines + 1] = "    return .{ .id = " .. helpers.zig_string(route.id) .. ", .method = ." .. route.method .. ", .raw_path = " .. helpers.zig_string(route.raw_path) .. ", .path = &data.segments, .params = &data.params, .query = &data.query, .validation = .{ .headers = &data.validation_headers, .cookies = &data.validation_cookies, .json_body = &data.validation_json_body, .form_body = &data.validation_form_body }, .memory = " .. graph_emit.route_memory_zig(route) .. ", .max_body_bytes = " .. route.memory.max_body_bytes .. ", .request_arena_bytes = " .. route.memory.request_arena_bytes .. ", .handler = " .. graph_emit.route_handler_zig(route) .. ", .pipeline = &data.pipeline, .runtime = " .. graph_emit.route_runtime_zig(route) .. ", .execution = " .. graph_emit.route_execution_zig(route) .. ", .capabilities = &data.capabilities, .scope = " .. scope_zig .. " };"
   lines[#lines + 1] = "}"
   return table.concat(lines, "\n") .. "\n"
 end
@@ -605,7 +632,7 @@ function graph_emit.emit_graph_zig(graph, output)
     "pub const max_query_bytes = " .. tostring(max_query) .. ";",
     "pub const max_query_pairs = " .. tostring(max_query_pairs) .. ";",
     "pub const max_path_segments = " .. tostring(max_path_segments) .. ";",
-    "pub const Method = enum { GET, HEAD, POST, PUT, PATCH, DELETE, OTHER };",
+    "pub const Method = enum { GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS, OTHER };",
     "pub const Segment = union(enum) { literal: []const u8, param: []const u8, catch_all_param: []const u8 };",
     "pub const ZigSymbolHandler = struct { id: bindings.HandlerId, symbol: []const u8 };",
     "pub const ZigFileHandler = struct { id: []const u8, path: []const u8, decl: []const u8 = \"handle\" };",
@@ -617,8 +644,9 @@ function graph_emit.emit_graph_zig(graph, output)
     "pub const DirHandler = struct { mount_root: []const u8, param_name: []const u8, manifest: []const StaticAsset, cache_control: []const u8, immutable: bool = false };",
     "pub const Handler = union(enum) { zig_symbol: ZigSymbolHandler, zig_file: ZigFileHandler, lua_file: LuaFileHandler, inline_lua: InlineLuaHandler, file: FileHandler, dir: DirHandler };",
     "pub const StageKind = enum { transform, handle, hook };",
+    "pub const HookPhase = enum { pre_tree, post_match, pre_handler, post_handler, observe, @\"error\" };",
     "pub const StageStrat = enum { inline_lua, lua, zig, rust };",
-    "pub const PipelineStage = struct { id: []const u8 = \"\", kind: StageKind = .handle, strat: StageStrat = .inline_lua, path: []const u8 = \"\", symbol: []const u8 = \"\", may_short_circuit: bool = true, owner: []const u8 = \"\" };",
+    "pub const PipelineStage = struct { id: []const u8 = \"\", kind: StageKind = .handle, phase: HookPhase = .pre_handler, strat: StageStrat = .inline_lua, path: []const u8 = \"\", symbol: []const u8 = \"\", may_short_circuit: bool = true, owner: []const u8 = \"\" };",
     "pub const ExecutionClass = enum { default, lua, blocking_io, cpu };",
     "pub const RouteRuntime = struct { requires_lua: bool = false, requires_http: bool = false, requires_auth: bool = false, requires_zig_capability: bool = false, execution_class: ExecutionClass = .default };",
     "pub const RouteExecution = struct { class: ExecutionClass = .default, may_block: bool = false, requires_lua: bool = false, requires_worker_pool: bool = false };",
@@ -631,12 +659,13 @@ function graph_emit.emit_graph_zig(graph, output)
     "pub const RouteMemory = struct { profile_name: []const u8, request_arena_bytes: usize, max_body_bytes: usize, max_uri_bytes: usize, max_path_bytes: usize, max_query_bytes: usize, max_query_pairs: usize, max_path_segments: usize, max_response_bytes: usize, max_capability_response_bytes: usize, lua_heap_bytes: usize, estimated_peak_bytes: usize };",
     "pub const ParamKind = enum { string, slug, u64, i32, uuid, hex, email, token, bool, pattern };",
     "pub const ParamSpec = struct { name: []const u8, kind: ParamKind = .string, max_len: usize = 0, exact_len: usize = 0, optional: bool = false, pattern: ?PatternId = null };",
+    "pub const ValidationSpec = struct { headers: []const ParamSpec = &.{}, cookies: []const ParamSpec = &.{}, json_body: []const ParamSpec = &.{}, form_body: []const ParamSpec = &.{} };",
     "pub const ScopeRef = struct { id: []const u8, path_prefix: []const u8 };",
     "pub const ScopeContextRef = struct { key: []const u8, value: []const u8 };",
     "pub const RouteScope = struct { id: []const u8 = \"root\", parent: []const u8 = \"\", path_prefix: []const u8 = \"\", chain: []const ScopeRef = &.{}, plugins: []const []const u8 = &.{}, context: []const ScopeContextRef = &.{} };",
     "pub const PluginHandler = union(enum) { inline_lua: InlineLuaHandler, lua_file: LuaFileHandler, zig_symbol: ZigSymbolHandler, none };",
     "pub const PluginDescriptor = struct { id: []const u8, kind: []const u8, handler: PluginHandler = .none };",
-    "pub const Route = struct { id: []const u8, method: Method, raw_path: []const u8, path: []const Segment, params: []const ParamSpec, query: []const ParamSpec, memory: RouteMemory, max_body_bytes: usize, request_arena_bytes: usize, handler: Handler, pipeline: []const PipelineStage = &.{}, runtime: RouteRuntime = .{}, execution: RouteExecution = .{}, capabilities: []const CapabilityRef = &.{}, scope: RouteScope = .{} };",
+    "pub const Route = struct { id: []const u8, method: Method, raw_path: []const u8, path: []const Segment, params: []const ParamSpec, query: []const ParamSpec, validation: ValidationSpec = .{}, memory: RouteMemory, max_body_bytes: usize, request_arena_bytes: usize, handler: Handler, pipeline: []const PipelineStage = &.{}, runtime: RouteRuntime = .{}, execution: RouteExecution = .{}, capabilities: []const CapabilityRef = &.{}, scope: RouteScope = .{} };",
     "",
   }
   graph_emit.emit_pattern_tables(graph, lines, output)
@@ -670,18 +699,18 @@ function graph_emit.emit_graph_zig(graph, output)
   end
   lines[#lines + 1] = "};"
   lines[#lines + 1] = ""
-  local method_buckets = { GET = {}, HEAD = {}, POST = {}, PUT = {}, PATCH = {}, DELETE = {}, OTHER = {} }
+  local method_buckets = { GET = {}, HEAD = {}, POST = {}, PUT = {}, PATCH = {}, DELETE = {}, OPTIONS = {}, OTHER = {} }
   for i, route in ipairs(graph.routes) do method_buckets[route.method][#method_buckets[route.method] + 1] = i - 1 end
   local explicit_head = {}
   for _, route in ipairs(graph.routes) do
     if route.method == "HEAD" then explicit_head[route.raw_path] = true end
   end
   for i, route in ipairs(graph.routes) do
-    if route.method == "GET" and (route.handler.kind == "file" or route.handler.kind == "dir") and not explicit_head[route.raw_path] then
+    if route.method == "GET" and not explicit_head[route.raw_path] then
       method_buckets.HEAD[#method_buckets.HEAD + 1] = i - 1
     end
   end
-  local method_names = { "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OTHER" }
+  local method_names = { "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "OTHER" }
   for _, method in ipairs(method_names) do
     lines[#lines + 1] = "pub const " .. method:lower() .. "_routes = [_]Route{"
     for _, route_index in ipairs(method_buckets[method]) do

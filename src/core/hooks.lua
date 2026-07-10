@@ -8,6 +8,15 @@
 
 local hooks = {}
 
+hooks.resources = {
+  request = "request.method, request.path, request.query, request.headers",
+  route = "route.params, route.policy, route.scope",
+  state = "state.*",
+  response = "response.status, response.headers, response.body",
+  body = "body",
+  error = "error",
+}
+
 --- Phase permissions
 ---@type table<string, table>
 hooks.phases = {
@@ -43,6 +52,29 @@ hooks.phases = {
   },
 }
 
+local function list_contains(list, value)
+  for _, item in ipairs(list or {}) do
+    if item == value then return true end
+  end
+  return false
+end
+
+local function touches(entries, needle)
+  for _, entry in ipairs(entries or {}) do
+    if type(entry) == "string" and entry:find(needle, 1, true) then return true end
+  end
+  return false
+end
+
+local function validate_access_list(stage, field)
+  if stage[field] == nil then return nil end
+  if type(stage[field]) ~= "table" then return field .. " must be an array of resource names" end
+  for _, entry in ipairs(stage[field]) do
+    if type(entry) ~= "string" or entry == "" then return field .. " entries must be non-empty strings" end
+  end
+  return nil
+end
+
 --- Validate a hook stage's phase usage.
 ---@param stage table  The hook stage to validate
 ---@param route? table  The route it's attached to (nil for global)
@@ -65,27 +97,19 @@ function hooks.validate(stage, route)
       " (expected: pre_tree, post_match, pre_handler, post_handler, observe, error)"
   end
 
-  -- Check observe hooks cannot short-circuit
-  if phase == "observe" and stage.may_short_circuit then
-    return "observe hooks must not short-circuit (may_short_circuit must be false)"
+  local err = validate_access_list(stage, "reads") or validate_access_list(stage, "writes")
+  if err then return err end
+
+  if list_contains(phase_def.must_not, "short_circuit") and stage.may_short_circuit then
+    return phase .. " hooks must not short-circuit (may_short_circuit must be false)"
   end
 
-  -- Check observe hooks cannot mutate
-  if phase == "observe" and stage.writes then
-    for _, w in ipairs(stage.writes) do
-      if w:find("response", 1, true) then
-        return "observe hooks must not write to response"
-      end
-    end
+  if list_contains(phase_def.must_not, "mutate_response") and touches(stage.writes, "response") then
+    return phase .. " hooks must not write to response"
   end
 
-  -- Check pre_tree hooks must not require route params
-  if phase == "pre_tree" and stage.reads then
-    for _, r in ipairs(stage.reads) do
-      if r:find("route_param", 1, true) or r:find("param", 1, true) then
-        return "pre_tree hooks must not read route params (route not matched yet)"
-      end
-    end
+  if list_contains(phase_def.must_not, "require_route_params") and (touches(stage.reads, "route_param") or touches(stage.reads, "param")) then
+    return phase .. " hooks must not read route params (route not matched yet)"
   end
 
   return nil

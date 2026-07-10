@@ -1,6 +1,6 @@
 const std = @import("std");
 const Io = std.Io;
-const proto = @import("protocol.zig");
+const proto = @import("meteorite_protocol");
 const http_date = @import("../server/http_date.zig");
 
 pub const name = "std_http";
@@ -12,6 +12,7 @@ pub const configured_workers: u16 = 0;
 pub const queue_limit: usize = 0;
 
 pub const Method = proto.Method;
+pub const Header = proto.Header;
 pub const Counters = proto.Counters;
 
 const AtomicCounters = proto.AtomicCounters;
@@ -26,15 +27,31 @@ pub fn snapshotCounters() Counters {
     return c;
 }
 
-pub fn connectionStarted() void { proto.connectionStarted(&counters); }
-pub fn connectionEnded() void { proto.connectionEnded(&counters); }
-pub fn requestStarted() void { proto.requestStarted(&counters); }
-pub fn requestCompleted() void { proto.requestCompleted(&counters); }
-pub fn threadSpawned() void { proto.threadSpawned(&counters); }
-pub fn connectionError() void { proto.connectionError(&counters); }
-pub fn droppedConnection() void { proto.droppedConnection(&counters); }
+pub fn connectionStarted() void {
+    proto.connectionStarted(&counters);
+}
+pub fn connectionEnded() void {
+    proto.connectionEnded(&counters);
+}
+pub fn requestStarted() void {
+    proto.requestStarted(&counters);
+}
+pub fn requestCompleted() void {
+    proto.requestCompleted(&counters);
+}
+pub fn threadSpawned() void {
+    proto.threadSpawned(&counters);
+}
+pub fn connectionError() void {
+    proto.connectionError(&counters);
+}
+pub fn droppedConnection() void {
+    proto.droppedConnection(&counters);
+}
 pub fn setQueueDepth(_: u64) void {}
-pub fn resetAuditCounters() void { proto.resetAuditCounters(&counters); }
+pub fn resetAuditCounters() void {
+    proto.resetAuditCounters(&counters);
+}
 
 pub const ListenConfig = struct {
     host: []const u8 = "127.0.0.1",
@@ -123,8 +140,20 @@ pub fn method(req: *Request) Method {
         .PUT => .PUT,
         .PATCH => .PATCH,
         .DELETE => .DELETE,
+        .OPTIONS => .OPTIONS,
         else => .OTHER,
     };
+}
+
+pub fn respondParseError(req: *Request, status: u16, body: []const u8) void {
+    const reason = proto.reasonPhrase(status);
+    var response_buffer: [512]u8 = undefined;
+    const bytes = std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {s}\r\ncontent-type: text/plain; charset=utf-8\r\ncontent-length: {d}\r\nconnection: close\r\n\r\n{s}", .{ reason, body.len, body }) catch return;
+    req.writer.interface.writeAll(bytes) catch return;
+    req.writer.interface.flush() catch return;
+    proto.inc(&counters.requests_served);
+    proto.add(&counters.bytes_written, bytes.len);
+    req.close_after_response = true;
 }
 
 pub fn path(req: *Request) []const u8 {
@@ -166,21 +195,39 @@ pub fn readBody(req: *Request, allocator: std.mem.Allocator, max_bytes: usize) !
 }
 
 pub fn respondText(req: *Request, status: u16, body: []const u8) !void {
-    if (status == 200 and std.mem.eql(u8, body, "ok")) return respondRawOk(req);
+    if (method(req) != .HEAD and status == 200 and std.mem.eql(u8, body, "ok")) return respondRawOk(req);
     try respondBytes(req, status, "text/plain; charset=utf-8", body);
 }
 
+pub fn respondTextWithHeaders(req: *Request, status: u16, body: []const u8, extra_headers: []const proto.Header) !void {
+    try respondBytesWithHeaders(req, status, "text/plain; charset=utf-8", body, extra_headers);
+}
+
 pub fn respondBytes(req: *Request, status: u16, content_type: []const u8, body: []const u8) !void {
+    try respondBytesWithHeaders(req, status, content_type, body, &.{});
+}
+
+pub fn respondBytesWithHeaders(req: *Request, status: u16, content_type: []const u8, body: []const u8, extra_headers: []const proto.Header) !void {
     if (std.mem.eql(u8, content_type, "text/plain; charset=utf-8") and body.len <= 4096) {
-        return respondSmall(req, reasonFromCode(status), content_type, body);
+        if (extra_headers.len == 0) return respondSmall(req, reasonFromCode(status), content_type, body);
     }
-    try req.inner.respond(body, .{
-        .status = statusFromCode(status),
-        .keep_alive = req.inner.head.keep_alive,
-        .extra_headers = &.{ .{ .name = "content-type", .value = content_type } },
-    });
+    const reason = reasonFromCode(status);
+    const connection = if (req.inner.head.keep_alive) "keep-alive" else "close";
+    const date = http_date.formatHttpDate(req.date_seconds);
+    var header_buffer: [4096]u8 = undefined;
+    var stream = std.Io.Writer.fixed(&header_buffer);
+    try stream.print("HTTP/1.1 {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\nconnection: {s}\r\ndate: {s}\r\n", .{ reason, content_type, body.len, connection, date });
+    for (extra_headers) |header_item| {
+        try stream.print("{s}: {s}\r\n", .{ header_item.name, header_item.value });
+    }
+    try stream.writeAll("\r\n");
+    const headers = stream.buffered();
+    const head_only = method(req) == .HEAD;
+    try req.writer.interface.writeAll(headers);
+    if (!head_only and body.len > 0) try req.writer.interface.writeAll(body);
+    try req.writer.interface.flush();
     proto.inc(&counters.requests_served);
-    proto.add(&counters.bytes_written, estimateResponseBytes(content_type, body));
+    proto.add(&counters.bytes_written, headers.len + if (head_only) 0 else body.len);
     req.close_after_response = !req.inner.head.keep_alive;
 }
 
@@ -190,11 +237,11 @@ pub fn respondStatic(req: *Request, status: u16, content_type: []const u8, conte
     const reason = reasonFromCode(status);
     const date = http_date.formatHttpDate(req.date_seconds);
     const response = if (status == 304 and content_encoding != null)
-        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 304 Not Modified\r\ncache-control: {s}\r\netag: {s}\r\nvary: Accept-Encoding\r\nconnection: {s}\r\n\r\n", .{ cache_control, etag, if (req.inner.head.keep_alive) "keep-alive" else "close" })
+        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 304 Not Modified\r\ncache-control: {s}\r\netag: {s}\r\nvary: Accept-Encoding\r\nconnection: {s}\r\ndate: {s}\r\n\r\n", .{ cache_control, etag, if (req.inner.head.keep_alive) "keep-alive" else "close", date })
     else if (status == 304)
-        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 304 Not Modified\r\ncache-control: {s}\r\netag: {s}\r\nconnection: {s}\r\n\r\n", .{ cache_control, etag, if (req.inner.head.keep_alive) "keep-alive" else "close" })
+        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 304 Not Modified\r\ncache-control: {s}\r\netag: {s}\r\nconnection: {s}\r\ndate: {s}\r\n\r\n", .{ cache_control, etag, if (req.inner.head.keep_alive) "keep-alive" else "close", date })
     else if (content_encoding != null)
-        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\ncache-control: {s}\r\netag: {s}\r\ncontent-encoding: {s}\r\nvary: Accept-Encoding\r\nconnection: {s}\r\n\r\n", .{ reason, content_type, content_length, cache_control, etag, encoding, if (req.inner.head.keep_alive) "keep-alive" else "close" })
+        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\ncache-control: {s}\r\netag: {s}\r\ncontent-encoding: {s}\r\nvary: Accept-Encoding\r\nconnection: {s}\r\ndate: {s}\r\n\r\n", .{ reason, content_type, content_length, cache_control, etag, encoding, if (req.inner.head.keep_alive) "keep-alive" else "close", date })
     else
         try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\ncache-control: {s}\r\netag: {s}\r\nconnection: {s}\r\ndate: {s}\r\n\r\n", .{ reason, content_type, content_length, cache_control, etag, if (req.inner.head.keep_alive) "keep-alive" else "close", date });
     try req.writer.interface.writeAll(response);
@@ -206,7 +253,10 @@ pub fn respondStatic(req: *Request, status: u16, content_type: []const u8, conte
 }
 
 pub fn respondRawOk(req: *Request) !void {
-    const bytes = if (req.inner.head.keep_alive) raw_ok_keepalive else raw_ok_close;
+    var response_buffer: [256]u8 = undefined;
+    const connection = if (req.inner.head.keep_alive) "keep-alive" else "close";
+    const date = http_date.formatHttpDate(req.date_seconds);
+    const bytes = try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 200 OK\r\ncontent-type: text/plain; charset=utf-8\r\ncontent-length: 2\r\nconnection: {s}\r\ndate: {s}\r\n\r\nok", .{ connection, date });
     try writeRaw(req, bytes);
 }
 
@@ -221,14 +271,14 @@ pub fn writeRaw(req: *Request, bytes: []const u8) !void {
 pub fn finish(_: *Request) !void {}
 
 
-const raw_ok_keepalive = "HTTP/1.1 200 OK\r\ncontent-type: text/plain; charset=utf-8\r\ncontent-length: 2\r\nconnection: keep-alive\r\n\r\nok";
-const raw_ok_close = "HTTP/1.1 200 OK\r\ncontent-type: text/plain; charset=utf-8\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok";
-
 fn respondSmall(req: *Request, reason: []const u8, content_type: []const u8, body: []const u8) !void {
     var response_buffer: [8192]u8 = undefined;
     const connection = if (req.inner.head.keep_alive) "keep-alive" else "close";
     const date = http_date.formatHttpDate(req.date_seconds);
-    const response = try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\nconnection: {s}\r\ndate: {s}\r\n\r\n{s}", .{ reason, content_type, body.len, connection, date, body });
+    const response = if (method(req) == .HEAD)
+        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\nconnection: {s}\r\ndate: {s}\r\n\r\n", .{ reason, content_type, body.len, connection, date })
+    else
+        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\nconnection: {s}\r\ndate: {s}\r\n\r\n{s}", .{ reason, content_type, body.len, connection, date, body });
     try writeRaw(req, response);
 }
 
@@ -248,7 +298,16 @@ fn estimateResponseBytes(content_type: []const u8, body: []const u8) u64 {
 fn statusFromCode(code: u16) std.http.Status {
     return switch (code) {
         200 => .ok,
+        204 => .no_content,
+        301 => .moved_permanently,
+        302 => .found,
+        303 => .see_other,
+        304 => .not_modified,
+        307 => .temporary_redirect,
+        308 => .permanent_redirect,
         400 => .bad_request,
+        401 => .unauthorized,
+        403 => .forbidden,
         404 => .not_found,
         405 => .method_not_allowed,
         413 => .payload_too_large,
@@ -262,7 +321,16 @@ fn statusFromCode(code: u16) std.http.Status {
 fn reasonFromCode(code: u16) []const u8 {
     return switch (code) {
         200 => "200 OK",
+        204 => "204 No Content",
+        301 => "301 Moved Permanently",
+        302 => "302 Found",
+        303 => "303 See Other",
+        304 => "304 Not Modified",
+        307 => "307 Temporary Redirect",
+        308 => "308 Permanent Redirect",
         400 => "400 Bad Request",
+        401 => "401 Unauthorized",
+        403 => "403 Forbidden",
         404 => "404 Not Found",
         405 => "405 Method Not Allowed",
         413 => "413 Payload Too Large",

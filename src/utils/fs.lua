@@ -50,16 +50,14 @@ function fs.is_dir(path)
   if has_lfs then
     return lfs.attributes(path, "mode") == "directory"
   end
-  local f = io.open(path, "rb")
-  if f then f:close(); return false end
-  -- If we can't open it as a file, it might be a dir
-  local ok = pcall(function()
+  local ok, result = pcall(function()
     local pipe = io.popen("test -d " .. fs.shell_quote(path) .. " 2>/dev/null && echo yes")
+    if not pipe then return false end
     local result = pipe:read("*l")
     pipe:close()
     return result == "yes"
   end)
-  return ok
+  return ok and result == true
 end
 
 --- List all files (not directories) under root, returning relative paths.

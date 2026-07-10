@@ -161,6 +161,66 @@ test "hook with inline function" (function()
   test.assert_eq(rc.pipeline[1].strat, "inline_lua")
 end)
 
+test "hook phase permissions reject impossible reads and writes" (function()
+  test.assert_error(function()
+    contract.build("GET", {
+      route = "/test/:id",
+      pipeline = function(ctx)
+        ctx:hook("pre_tree", { strat = "lua", path = "x.lua", reads = { "route_param.id" } })
+      end,
+    })
+  end, "must not read route params")
+
+  test.assert_error(function()
+    contract.build("GET", {
+      route = "/test",
+      pipeline = function(ctx)
+        ctx:hook("observe", { strat = "lua", path = "x.lua", writes = { "response.headers" } })
+      end,
+    })
+  end, "must not write to response")
+end)
+
+test "all hook phases can declare valid resource access" (function()
+  local rc = contract.build("GET", {
+    route = "/test/:id",
+    pipeline = function(ctx)
+      ctx:hook("pre_tree", { id = "pre_tree", strat = "lua", path = "pre_tree.lua", reads = { "request.path" } })
+      ctx:hook("post_match", { id = "post_match", strat = "lua", path = "post_match.lua", reads = { "route.params" } })
+      ctx:hook("pre_handler", { id = "pre_handler", strat = "lua", path = "pre_handler.lua", writes = { "state.auth" } })
+      ctx:handle({ id = "handle", strat = "lua", path = "handle.lua" })
+      ctx:hook("post_handler", { id = "post_handler", strat = "lua", path = "post_handler.lua", writes = { "response.headers" } })
+      ctx:hook("observe", { id = "observe", strat = "lua", path = "observe.lua", reads = { "response.status" }, may_short_circuit = false })
+      ctx:hook("error", { id = "error", strat = "lua", path = "error.lua", reads = { "error" }, writes = { "response.body" } })
+    end,
+  })
+  test.assert_eq(#rc.pipeline, 7)
+  test.assert_eq(rc.pipeline[1].phase, "pre_tree")
+  test.assert_eq(rc.pipeline[7].phase, "error")
+end)
+
+test "hook ordering is deterministic around handle stage" (function()
+  test.assert_error(function()
+    contract.build("GET", {
+      route = "/test",
+      pipeline = function(ctx)
+        ctx:handle({ id = "handle", strat = "lua", path = "handle.lua" })
+        ctx:hook("pre_handler", { id = "too_late", strat = "lua", path = "pre.lua" })
+      end,
+    })
+  end, "invalid hook ordering")
+
+  test.assert_error(function()
+    contract.build("GET", {
+      route = "/test",
+      pipeline = function(ctx)
+        ctx:hook("post_handler", { id = "too_early", strat = "lua", path = "post.lua" })
+        ctx:handle({ id = "handle", strat = "lua", path = "handle.lua" })
+      end,
+    })
+  end, "invalid hook ordering")
+end)
+
 test "pipeline builder records stages in order" (function()
   local rc = contract.build("GET", {
     route = "/test",

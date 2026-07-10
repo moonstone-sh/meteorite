@@ -81,6 +81,11 @@ function route.declare(method, path, options, handler)
     path = { segments = parse_path(path) },
     params = options.params or {},
     query = options.query or {},
+    headers = options.headers or {},
+    cookies = options.cookies or {},
+    json_body = options.json or options.json_body or (options.body and options.body.json) or {},
+    form_body = options.form or options.form_body or (options.body and options.body.form) or {},
+    responses = options.responses or {},
     memory = memory,
     capabilities = options.capabilities or {},
     scope = options.scope or root_scope(),
@@ -125,6 +130,15 @@ local function normalize_schema_map(map)
   return out
 end
 
+local function normalize_validation_contract(declaration)
+  return {
+    headers = normalize_schema_map(declaration.headers),
+    cookies = normalize_schema_map(declaration.cookies),
+    json_body = normalize_schema_map(declaration.json_body),
+    form_body = normalize_schema_map(declaration.form_body),
+  }
+end
+
 local function symbol_id(symbol)
   return tostring(symbol):match("([%w_]+)$") or tostring(symbol):gsub("%W", "_")
 end
@@ -145,9 +159,16 @@ local function normalize_handler(handler)
   return { kind = "inline_lua", value = handler.value }
 end
 
-local function static_lua_error(key, declaration)
+local function static_lua_error(key, declaration, route_id, handler)
+  local handler_kind = handler and handler.kind or "inline_lua"
   error(table.concat({
-    "static build cannot include inline Lua handler",
+    "static build cannot include " .. (handler_kind == "lua" and "Lua handler" or "inline Lua handler"),
+    "",
+    "mode:",
+    "  release-static",
+    "",
+    "route id:",
+    "  " .. tostring(route_id),
     "",
     "route:",
     "  " .. key,
@@ -155,12 +176,12 @@ local function static_lua_error(key, declaration)
     "declared at:",
     "  " .. tostring(declaration.source.file) .. ":" .. tostring(declaration.source.line or 0) .. ":" .. tostring(declaration.source.column or 1),
     "",
-    "hint:",
-    "  build hybrid:",
-    "    moon build --mode hybrid",
+    "remediation:",
+    "  build hybrid when this route must execute Lua at request time:",
+    "    meteorite build --mode hybrid",
     "",
-    "  or move this route to a Zig handler:",
-    "    app:get(\"/\", \"handlers.index\")",
+    "  or replace this route with a static-safe Zig/file handler before release-static:",
+    "    app:get(\"" .. tostring(declaration.raw_path or "/") .. "\", \"handlers." .. tostring(route_id):gsub("^route_", "route_") .. "\")",
   }, "\n"))
 end
 
@@ -278,7 +299,7 @@ function route.normalize_app(app, opts)
 
     local handler = normalize_handler(declaration.handler)
     if mode == "release-static" and handler.kind ~= "zig" and handler.kind ~= "zig_file" and handler.kind ~= "file" and handler.kind ~= "dir" then
-      static_lua_error(key, declaration)
+      static_lua_error(key, declaration, "route_" .. tostring(index), handler)
     end
 
     if handler.kind == "dir" then
@@ -308,6 +329,8 @@ function route.normalize_app(app, opts)
       path = declaration.path,
       params = normalize_schema_map(declaration.params),
       query = normalize_schema_map(declaration.query),
+      validation = normalize_validation_contract(declaration),
+      responses = declaration.responses or {},
       handler = handler,
       runtime = {
         requires_lua = handler.kind == "inline_lua" or handler.kind == "lua",

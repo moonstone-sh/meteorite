@@ -6,6 +6,113 @@ local zon = require("codegen.zon")
 local fs = require("utils.fs")
 
 local report = {}
+
+local function json_schema_for(item)
+  local kind = item.type or item.kind or "string"
+  local out = { type = "string" }
+  if kind == "u64" or kind == "i32" then
+    out.type = "integer"
+    if kind == "u64" then out.minimum = 0 end
+  elseif kind == "bool" then
+    out.type = "boolean"
+  elseif kind == "uuid" then
+    out.format = "uuid"
+  elseif kind == "email" then
+    out.format = "email"
+  elseif kind == "hex" then
+    out.pattern = "^[0-9A-Fa-f]+$"
+  elseif kind == "slug" then
+    out.pattern = "^[A-Za-z0-9_-]+$"
+  elseif kind == "token" then
+    out.pattern = "^[A-Za-z0-9._~-]+$"
+  elseif kind == "pattern" then
+    out["x-meteorite-pattern-id"] = item.pattern_id or item.id
+  end
+  if item.max_len then out.maxLength = item.max_len end
+  if item.exact_len then
+    out.minLength = item.exact_len
+    out.maxLength = item.exact_len
+  end
+  if item.min then out.minimum = item.min end
+  if item.max then out.maximum = item.max end
+  return out
+end
+
+local function object_schema(items)
+  local properties = {}
+  local required = {}
+  for _, item in ipairs(items or {}) do
+    properties[item.name] = json_schema_for(item)
+    if item.optional ~= true then required[#required + 1] = item.name end
+  end
+  table.sort(required)
+  local out = { type = "object", properties = properties, additionalProperties = false }
+  if #required > 0 then out.required = required end
+  return out
+end
+
+local function response_schemas(responses)
+  local out = {}
+  for status, spec in pairs(responses or {}) do
+    local key = tostring(status)
+    if type(spec) == "table" then
+      if spec.schema then out[key] = spec.schema
+      elseif spec.json then out[key] = object_schema(spec.json)
+      elseif spec.body then out[key] = object_schema(spec.body)
+      else out[key] = spec end
+    end
+  end
+  return out
+end
+
+local function response_count(responses)
+  local count = 0
+  for _, _ in pairs(responses or {}) do count = count + 1 end
+  return count
+end
+
+local function has_fields(schema)
+  local props = schema and schema.properties or {}
+  for _, _ in pairs(props) do return true end
+  return false
+end
+
+local function path_template(raw_path)
+  return tostring(raw_path or ""):gsub(":([%a_][%w_]*)%*", "{%1}"):gsub(":([%a_][%w_]*)", "{%1}")
+end
+
+local function parameter_list(location, items)
+  local parameters = {}
+  for _, item in ipairs(items or {}) do
+    parameters[#parameters + 1] = {
+      name = item.name,
+      in_ = location,
+      required = location == "path" or item.optional ~= true,
+      schema = json_schema_for(item),
+    }
+  end
+  return parameters
+end
+
+local function append_all(target, source)
+  for _, item in ipairs(source or {}) do target[#target + 1] = item end
+end
+
+local function security_schemes(route)
+  local schemes = {}
+  local validation = route.validation or {}
+  for _, item in ipairs(validation.headers or {}) do
+    local name = tostring(item.name or "")
+    local lowered = name:lower()
+    if lowered == "authorization" then schemes[#schemes + 1] = "authorization-header"
+    elseif lowered:find("token", 1, true) or lowered:find("api%-key") then schemes[#schemes + 1] = name end
+  end
+  for _, item in ipairs(validation.cookies or {}) do schemes[#schemes + 1] = "cookie:" .. tostring(item.name) end
+  if route.runtime and route.runtime.requires_auth then schemes[#schemes + 1] = "meteorite-auth-capability" end
+  table.sort(schemes)
+  return schemes
+end
+
 function report.schema_to_zon(item)
   if item.kind == "pattern" then
     return { name = item.name, kind = "pattern", pattern_id = item.pattern_id or item.id }
@@ -17,6 +124,67 @@ function report.schema_to_zon(item)
   if item.decode then out.decode = true end
   if item.pattern_id then out.pattern_id = item.pattern_id end
   return out
+end
+
+function report.schema_ir(graph)
+  local routes = {}
+  for _, route in ipairs(graph.routes or {}) do
+    local validation = route.validation or {}
+    routes[#routes + 1] = {
+      id = route.id,
+      method = helpers.method_enum(route.method),
+      path = route.raw_path,
+      params = object_schema(route.params),
+      query = object_schema(route.query),
+      headers = object_schema(validation.headers),
+      cookies = object_schema(validation.cookies),
+      json_body = object_schema(validation.json_body),
+      form_body = object_schema(validation.form_body),
+      responses = response_schemas(route.responses),
+    }
+  end
+  return {
+    format = "meteorite.schema-ir.v0",
+    routes = routes,
+  }
+end
+
+function report.openapi_plan(graph)
+  local routes = {}
+  for _, route in ipairs(graph.routes or {}) do
+    local validation = route.validation or {}
+    local json_body = object_schema(validation.json_body)
+    local form_body = object_schema(validation.form_body)
+    local request_body = {}
+    if has_fields(json_body) then request_body["application/json"] = json_body end
+    if has_fields(form_body) then request_body["application/x-www-form-urlencoded"] = form_body end
+    local parameters = {}
+    append_all(parameters, parameter_list("path", route.params))
+    append_all(parameters, parameter_list("query", route.query))
+    append_all(parameters, parameter_list("header", validation.headers))
+    append_all(parameters, parameter_list("cookie", validation.cookies))
+    routes[#routes + 1] = {
+      id = route.id,
+      method = helpers.method_enum(route.method),
+      path = route.raw_path,
+      template = path_template(route.raw_path),
+      operationId = route.id,
+      parameters = parameters,
+      requestBody = request_body,
+      responses = response_count(route.responses) > 0 and response_schemas(route.responses) or {
+        default = {
+          description = "Meteorite route response schema not declared",
+          missing_schema = true,
+        },
+      },
+      security = security_schemes(route),
+    }
+  end
+  return {
+    format = "meteorite.openapi-plan.v0",
+    openapi = "3.1.0",
+    routes = routes,
+  }
 end
 
 function report.route_to_zon(route)
@@ -34,6 +202,11 @@ function report.route_to_zon(route)
   end
   local query = {}
   for _, item in ipairs(route.query) do query[#query + 1] = report.schema_to_zon(item) end
+  local validation = { headers = {}, cookies = {}, json_body = {}, form_body = {} }
+  for domain, items in pairs(route.validation or {}) do
+    validation[domain] = {}
+    for _, item in ipairs(items) do validation[domain][#validation[domain] + 1] = report.schema_to_zon(item) end
+  end
   local handler
   if route.handler.kind == "zig" then handler = { zig_symbol = { id = route.handler.symbol, symbol = route.handler.import or route.handler.symbol } }
   elseif route.handler.kind == "zig_file" then handler = { zig_file = { id = route.handler.symbol, path = route.handler.path, decl = route.handler.decl or "handle" } }
@@ -62,6 +235,8 @@ function report.route_to_zon(route)
     raw_path = route.raw_path,
     path = { segments = segments },
     query = query,
+    validation = validation,
+    responses = response_schemas(route.responses),
     handler = handler,
     runtime = runtime,
     execution = execution,
@@ -128,9 +303,19 @@ end
 
 function report.emit_build_report(graph, output, mode)
   local inline, zig = 0, 0
+  local validation_counts = { params = 0, query = 0, headers = 0, cookies = 0, json_body = 0, form_body = 0 }
+  local missing_response_schemas = 0
   for _, route in ipairs(graph.routes) do
     if route.handler.kind == "inline_lua" then inline = inline + 1 end
     if route.handler.kind == "zig" or route.handler.kind == "zig_file" then zig = zig + 1 end
+    validation_counts.params = validation_counts.params + #(route.params or {})
+    validation_counts.query = validation_counts.query + #(route.query or {})
+    local validation = route.validation or {}
+    validation_counts.headers = validation_counts.headers + #(validation.headers or {})
+    validation_counts.cookies = validation_counts.cookies + #(validation.cookies or {})
+    validation_counts.json_body = validation_counts.json_body + #(validation.json_body or {})
+    validation_counts.form_body = validation_counts.form_body + #(validation.form_body or {})
+    if response_count(route.responses) == 0 then missing_response_schemas = missing_response_schemas + 1 end
   end
   local memory = graph.memory_report or report.memory_report(graph)
   local lines = {
@@ -146,6 +331,8 @@ function report.emit_build_report(graph, output, mode)
     "  Auth capabilities: " .. (#report.capability_names(graph.capabilities, "auth") > 0 and table.concat(report.capability_names(graph.capabilities, "auth"), ", ") or "none"),
     "  Zig capabilities: " .. (#report.capability_names(graph.capabilities, "zig") > 0 and table.concat(report.capability_names(graph.capabilities, "zig"), ", ") or "none"),
     "  patterns: " .. tostring(#graph.patterns),
+    "  validators: params=" .. tostring(validation_counts.params) .. " query=" .. tostring(validation_counts.query) .. " headers=" .. tostring(validation_counts.headers) .. " cookies=" .. tostring(validation_counts.cookies) .. " json=" .. tostring(validation_counts.json_body) .. " form=" .. tostring(validation_counts.form_body),
+    "  response schemas: declared=" .. tostring(#graph.routes - missing_response_schemas) .. " missing=" .. tostring(missing_response_schemas),
     "  memory profile: " .. tostring(memory.profile),
     "  peak route memory: " .. report.format_bytes(memory.estimated_peak_bytes) .. " (" .. tostring(memory.peak_route) .. ")",
     "  max URI: " .. report.format_bytes(memory.max_uri_bytes),
@@ -189,6 +376,13 @@ function report.emit_luals_aids(graph, output)
     "---@class MeteoriteRouteOptions",
     "---@field params? table<string, MeteoriteSchemaValue>",
     "---@field query? table<string, MeteoriteSchemaValue>",
+    "---@field headers? table<string, MeteoriteSchemaValue>",
+    "---@field cookies? table<string, MeteoriteSchemaValue>",
+    "---@field json? table<string, MeteoriteSchemaValue>",
+    "---@field json_body? table<string, MeteoriteSchemaValue>",
+    "---@field form? table<string, MeteoriteSchemaValue>",
+    "---@field form_body? table<string, MeteoriteSchemaValue>",
+    "---@field responses? table<string|integer, table>",
     "---@field body? {max?: number|string, [string]: any}",
     "---@field memory? {max_body?: number|string, request_arena?: number|string}",
     "---@field capabilities? table<string, any>",
@@ -258,19 +452,92 @@ function report.emit_luals_aids(graph, output)
     "local Context = {}",
     "",
     "---@param body string",
+    "---@param opts? {headers?: table<string, string>}",
     "function Context:text(body) end",
     "",
     "---@param value table|string|number|boolean",
-    "---@param opts? {status?: integer}",
+    "---@param opts? {status?: integer, headers?: table<string, string>}",
     "function Context:json(value, opts) end",
     "",
     "---@param status integer",
     "---@param content_type string",
     "---@param body string",
+    "---@param opts? {headers?: table<string, string>}",
     "function Context:bytes(status, content_type, body) end",
     "",
     "---@return string",
     "function Context:body() end",
+    "",
+    "---@return table|nil value",
+    "---@return string|nil err",
+    "function Context:json_body() end",
+    "",
+    "---@return table|nil value",
+    "---@return string|nil err",
+    "function Context:form_body() end",
+    "",
+    "---@param opts? {csp?: string, hsts?: boolean|table, frame_options?: string|false, referrer_policy?: string|false, coop?: string|false, permissions_policy?: string, nosniff?: boolean, extra?: table<string, string>}",
+    "---@return table<string, string>",
+    "function Context:secure_headers(opts) end",
+    "",
+    "---@param opts? {origin?: string, origins?: string|string[], methods?: string|string[], headers?: string|string[], credentials?: boolean, max_age?: integer, maxAge?: integer, expose_headers?: string|string[], exposeHeaders?: string|string[]}",
+    "---@return table<string, string>",
+    "function Context:cors_headers(opts) end",
+    "",
+    "---@param metrics table[]|table<string, number|table>",
+    "---@return table<string, string>",
+    "function Context:server_timing(metrics) end",
+    "",
+    "---@param metrics table[]",
+    "---@param name string",
+    "---@param fn function",
+    "---@param opts? {desc?: string, description?: string}",
+    "---@return any",
+    "function Context:timing_stage(metrics, name, fn, opts) end",
+    "",
+    "---@param left string",
+    "---@param right string",
+    "---@return boolean",
+    "function Context:constant_time_equal(left, right) end",
+    "",
+    "---@return string|nil username",
+    "---@return string|nil password",
+    "function Context:basic_auth() end",
+    "",
+    "---@return string|nil",
+    "function Context:bearer_token() end",
+    "",
+    "---@param name string",
+    "---@return string|nil",
+    "function Context:safe_header(name) end",
+    "",
+    "---@param names string[]",
+    "---@return table<string, string>",
+    "function Context:safe_headers(names) end",
+    "",
+    "---@param level string|table",
+    "---@param message? string|table",
+    "---@param fields? table",
+    "---@param opts? {format?: 'json'|'plain'}",
+    "---@return table",
+    "function Context:log(level, message, fields, opts) end",
+    "",
+    "---@param name string",
+    "---@return string|nil",
+    "function Context:header(name) end",
+    "",
+    "---@return string",
+    "function Context:request_id() end",
+    "",
+    "---@param name string",
+    "---@return string|nil",
+    "function Context:cookie(name) end",
+    "",
+    "---@param name string",
+    "---@param value string",
+    "---@param opts? {path?: string, domain?: string, max_age?: integer, expires?: string, secure?: boolean, http_only?: boolean, same_site?: 'Lax'|'Strict'|'None'|'lax'|'strict'|'none'}",
+    "---@return string",
+    "function Context:set_cookie(name, value, opts) end",
     "",
     "---@param name string",
     "---@return MeteoriteHttpClient",

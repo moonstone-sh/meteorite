@@ -181,6 +181,7 @@ end
 ---@field patch fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table
 ---@field delete fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table
 ---@field delete fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table
+---@field route fun(self: MeteoriteApp, method: string, path: string, options_or_handler?: MeteoriteRouteOptions|MeteoriteHandler, maybe_handler?: MeteoriteHandler): table
 ---@field use fun(self: MeteoriteApp, plugin_or_middleware: table|function, options?: table): MeteoriteApp
 ---@field mount fun(self: MeteoriteApp, prefix: string, options_or_fn?: table|function, maybe_fn?: function): MeteoriteApp
 ---@field scope fun(self: MeteoriteApp, prefix: string, options_or_fn?: table|function, maybe_fn?: function): MeteoriteApp
@@ -235,6 +236,23 @@ end
 ---@return table
 function App:delete(path, options, handler)
   return add_route(self, "DELETE", path, options, handler)
+end
+
+---@param method string
+---@param path string
+---@param options_or_handler? MeteoriteRouteOptions|MeteoriteHandler
+---@param maybe_handler? MeteoriteHandler
+---@return table
+function App:route(method, path, options_or_handler, maybe_handler)
+  return add_route(self, string.upper(method), path, options_or_handler, maybe_handler)
+end
+
+---@param path string
+---@param options? MeteoriteRouteOptions
+---@param handler MeteoriteHandler
+---@return table
+function App:options(path, options, handler)
+  return add_route(self, "OPTIONS", path, options, handler)
 end
 
 ---@param plugin_or_middleware table|function

@@ -20,6 +20,7 @@ Fixtures are small, purpose-built Meteorite apps used for demos, acceptance test
 - `apps/scoped-plugins` isolates scoped mounts, plugins, and request-local state.
 - `apps/static-site` exercises `m.file`, `m.dir`, `m.site`, and static release packaging.
 - `apps/bench-service` contains benchmark-only endpoints consumed by `bench/run.sh` and related benchmark scripts.
+- `apps/web-standards` exercises HTTP standards behavior such as response headers, CORS headers, redirect headers, and Lua response helper parity.
 
 ## Publication Rule
 

@@ -36,7 +36,7 @@ Flags:
   --minimal             Create the default Lua-first hybrid app
   --static              Create a pure Zig-handler app; build mode release-static
   --hybrid              Create a mixed Lua + Zig handler app
-  --template <name>     One of: minimal, static, hybrid
+  --template <name>     One of: minimal, static, hybrid, middleware, cors, json-api, static-site
   --with-zig            Add central zig/handlers.zig and zig/validators.zig scaffolding
   --name <name>         Override package/app name
   --force               Overwrite generated files
@@ -98,18 +98,21 @@ Usage:
 Checks:
   - Moonstone project shape
   - src/main.lua
-  - Moonstone Lua environment
+  - Moonstone env and Lua runtime
   - Meteorite CLI visibility
   - Zig availability
+  - Ballad plugin visibility
   - generated graph/aids presence
+  - static/hybrid release readiness
   - dev port listener state]]
 
 help.invoke = [[Meteorite invoke
 
 Usage:
-  meteorite invoke [input] [method] [path] [body]
+  meteorite invoke [--json] [-H "Name: value"] [input] [method] [path] [body]
 
 Example:
-  meteorite invoke src/main.lua GET /health]]
+  meteorite invoke src/main.lua GET /health
+  meteorite invoke --json -H "Origin: https://app.example" src/main.lua GET /security/cors]]
 
 return help

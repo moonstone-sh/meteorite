@@ -114,6 +114,9 @@ terminate_pid() {
     kill "$child" 2>/dev/null || true
   done
   kill "$pid" 2>/dev/null || true
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsS --max-time 1 "http://127.0.0.1:$port/__meteorite/info" >/dev/null 2>&1 || true
+  fi
   i=0
   while is_running "$pid" && [ "$i" -lt 20 ]; do
     sleep 0.1
@@ -146,14 +149,12 @@ status() {
 }
 
 cleanup() {
-  failed=0
   for pid in $(candidate_pids); do
     if is_running "$pid"; then
-      terminate_pid "$pid" || failed=1
+      terminate_pid "$pid" || true
     fi
   done
   rm -f "$pid_file"
-  return "$failed"
 }
 
 assert_free() {

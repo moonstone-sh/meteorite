@@ -78,7 +78,7 @@ start_meteorite() {
     zig build install-server \
     -Dgraph-input="fixtures/apps/bench-service/src/main.lua" \
     -Dgraph-output=".meteorite/graph/bench" \
-    -Dmode=release-hybrid \
+    -Dmode="$BENCH_METEORITE_BUILD_MODE" \
     -Dhybrid-profile=optimized \
     -Dfast-http-strategy=pool \
     -Dfast-http-workers="$workers" \
@@ -216,5 +216,4 @@ start_pegasus() {
   SERVER_STATS_FILE="$OUT/${label}-stats.log"
   start_stats_tracker "$SERVER_PID" "$SERVER_STATS_FILE"
 }
-
 

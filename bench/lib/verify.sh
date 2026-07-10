@@ -47,6 +47,35 @@ print(f"  OK      worker config fast_http_workers={configured} runtime_workers={
 }
 
 
+verify_meteorite_build_mode() {
+  local label="$1"
+  local expected_mode="${BENCH_METEORITE_BUILD_MODE:-release-hybrid}"
+  local meta
+  meta="$(curl -fsS "http://$HOST:$PORT/__bench/meta" 2>/dev/null)" || {
+    echo "error: $label missing /__bench/meta build-mode metadata" >&2
+    return 1
+  }
+
+  printf '%s' "$meta" | python3 -c '
+import json, sys
+label = sys.argv[1]
+expected_mode = sys.argv[2]
+data = json.load(sys.stdin)
+mode = data.get("meteorite_mode")
+lua_runtime = data.get("lua_runtime")
+expected_lua = expected_mode != "release-static"
+if mode != expected_mode:
+    raise SystemExit(f"{label} meteorite_mode={mode}, expected {expected_mode}")
+if bool(lua_runtime) != expected_lua:
+    raise SystemExit(f"{label} lua_runtime={lua_runtime}, expected {expected_lua} for {expected_mode}")
+print(f"  OK      build mode meteorite_mode={mode} lua_runtime={lua_runtime}")
+' "$label" "$expected_mode" || {
+    echo "Preflight failed for $label. Refusing to benchmark mismatched Meteorite build mode."
+    return 1
+  }
+}
+
+
 hono_process_count() {
   local root_pid="$1"
   get_descendants "$root_pid" | wc -l | tr -d '[:space:]'
@@ -225,6 +254,43 @@ assert_scenario_content_type() {
 }
 
 
+assert_scenario_response_headers() {
+  local name="$1" method="$2" path="$3" label="$4"
+  local expected
+  expected="$(expected_response_header_for_scenario "$name" 2>/dev/null || true)"
+  [[ -z "$expected" ]] && return 0
+
+  local expected_name="${expected%%=*}"
+  local expected_value="${expected#*=}"
+  local headers_file="/tmp/meteorite-preflight-headers.$$"
+  local url="http://$HOST:$PORT$path"
+  if [[ "$method" == "POST" ]]; then
+    curl -fsS -D "$headers_file" -o /tmp/meteorite-preflight-header-body -X POST --data-binary "$BENCH_POST_BODY" "$url" >/dev/null || return 1
+  else
+    curl -fsS -D "$headers_file" -o /tmp/meteorite-preflight-header-body "$url" >/dev/null || return 1
+  fi
+
+  local actual_value
+  actual_value="$(awk -v wanted="$expected_name" '
+    BEGIN { value = "" }
+    /^[^:]+:/ {
+      name = substr($0, 1, index($0, ":") - 1)
+      val = substr($0, index($0, ":") + 1)
+      gsub(/^[ \t]+|[ \t\r]+$/, "", val)
+      if (tolower(name) == wanted) value = val
+    }
+    END { print value }
+  ' "$headers_file")"
+  rm -f "$headers_file"
+
+  if [[ "$actual_value" == "$expected_value" ]]; then
+    return 0
+  fi
+  echo "error: $label $name response header mismatch for $method $path: expected '$expected_name: $expected_value', actual '$actual_value'" >&2
+  return 1
+}
+
+
 scenario_lines_for_variant() {
   local label="$1"
   printf '%s\n' "${SCENARIOS[@]}"
@@ -244,6 +310,7 @@ preflight_variant() {
       return 1
     }
     echo "  OK      GET  /__bench/fixture-info -> 200"
+    verify_meteorite_build_mode "$label" || return 1
     case "$label" in
     meteorite-1worker) verify_meteorite_workers "$label" 1 || return 1 ;;
     meteorite-auto) verify_meteorite_workers "$label" 0 || return 1 ;;
@@ -277,9 +344,14 @@ preflight_variant() {
       echo "Preflight failed for $label. Refusing to benchmark invalid body."
       return 1
     fi
-    if [[ "$label" == "go-fiber-fasthttp" ]] && ! assert_scenario_content_type "$name" "$method" "$path" "$label"; then
+    if ! assert_scenario_content_type "$name" "$method" "$path" "$label"; then
       printf '  INVALID %-4s %s -> bad-content-type\n' "$method" "$path"
       echo "Preflight failed for $label. Refusing to benchmark invalid content type."
+      return 1
+    fi
+    if ! assert_scenario_response_headers "$name" "$method" "$path" "$label"; then
+      printf '  INVALID %-4s %s -> bad-headers\n' "$method" "$path"
+      echo "Preflight failed for $label. Refusing to benchmark invalid response headers."
       return 1
     fi
     printf '  OK      %-4s %s -> %s\n' "$method" "$path" "$status"
@@ -326,5 +398,3 @@ preflight_variant() {
     echo "  OK      slow lua sleep proof ${sleep_elapsed_ms}ms"
   fi
 }
-
-

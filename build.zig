@@ -93,7 +93,6 @@ pub fn build(b: *std.Build) void {
     const build_info_content = std.fmt.allocPrint(b.allocator,
         \\const builtin = @import("builtin");
         \\
-
         \\pub const meteorite_mode = "{s}";
         \\pub const backend = "{s}";
         \\pub const fast_http_strategy = "{s}";
@@ -104,14 +103,12 @@ pub fn build(b: *std.Build) void {
         \\pub const lua_state_strategy = "{s}";
         \\pub const router_dispatch = "{s}";
         \\
-
         \\pub const zig_optimize = @tagName(builtin.mode);
         \\pub const cpu_arch = @tagName(builtin.cpu.arch);
         \\pub const os_tag = @tagName(builtin.os.tag);
         \\pub const abi = @tagName(builtin.abi);
         \\pub const target = cpu_arch ++ "-" ++ os_tag ++ "-" ++ abi;
         \\
-
     , .{ mode, backend, fast_http_strategy, fast_http_workers, fast_http_queue, lua_runtime, hybrid_profile, lua_state_strategy, router_dispatch }) catch @panic("OOM");
     const write_build_info = b.addWriteFiles();
     const build_info_file = write_build_info.add("build_info.zig", build_info_content);
@@ -150,6 +147,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    ctx_module.addImport("meteorite_protocol", protocol_module);
     const http_date_module = b.createModule(.{
         .root_source_file = b.path("zig/server/http_date.zig"),
         .target = target,
@@ -180,6 +178,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    bridge_vtable_module.addImport("meteorite_protocol", protocol_module);
     const bridge_json_module = b.createModule(.{
         .root_source_file = b.path("zig/bridge/lua_json.zig"),
         .target = target,
@@ -193,7 +192,7 @@ pub fn build(b: *std.Build) void {
     });
     bridge_http_module.addImport("bridge/lua_vtable", bridge_vtable_module);
     bridge_http_module.addImport("bridge/lua_json", bridge_json_module);
-const meteorite_module = b.createModule(.{
+    const meteorite_module = b.createModule(.{
         .root_source_file = b.path("zig/meteorite.zig"),
         .target = target,
         .optimize = optimize,
@@ -248,6 +247,7 @@ const meteorite_module = b.createModule(.{
         .optimize = optimize,
     });
     bridge_bindings_module.addImport("meteorite_graph", graph_module);
+    bridge_bindings_module.addImport("meteorite_protocol", protocol_module);
     bridge_bindings_module.addImport("c_imports", c_imports_module);
     bridge_bindings_module.addImport("bridge/lua_stats", bridge_stats_module);
     bridge_bindings_module.addImport("bridge/lua_vtable", bridge_vtable_module);

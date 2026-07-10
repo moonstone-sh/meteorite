@@ -402,4 +402,60 @@ function handler_sync.sync_luarc(output)
   }, "\n"))
 end
 
+function handler_sync.moonstone_manifest(name, build_mode, dev_script)
+  local release_mode = build_mode == "release-static" and "static" or "hybrid"
+  return table.concat({
+    "[package]",
+    "name = \"" .. tostring(name) .. "\"",
+    "version = \"0.1.0\"",
+    "kind = \"app\"",
+    "",
+    "[interpreter]",
+    "name = \"lua\"",
+    "version = \"5.4\"",
+    "abi = \"5.4\"",
+    "",
+    "[dependencies.tool]",
+    "\"moonstone/meteorite\" = \"^0.1.0\"",
+    "\"moonstone/ballad\" = \"^0.2.0\"",
+    "",
+    "[scripts]",
+    "graph = \"meteorite graph src/main.lua .meteorite/graph/current " .. tostring(build_mode or "hybrid") .. "\"",
+    "dev = \"" .. tostring(dev_script or "meteorite dev") .. "\"",
+    "build = \"meteorite build --mode " .. tostring(build_mode or "hybrid") .. "\"",
+    "run = \"meteorite build --mode " .. tostring(build_mode or "hybrid") .. " && ./dist/server\"",
+    "release = \"ballad play partiture.lua\"",
+    "doctor = \"meteorite doctor\"",
+    "invoke:health = \"meteorite invoke --json src/main.lua GET /health\"",
+    "",
+    "[meteorite]",
+    "mode = \"" .. release_mode .. "\"",
+    "",
+  }, "\n")
+end
+
+function handler_sync.release_partiture(mode)
+  local release_mode = mode == "static" and "static" or "hybrid"
+  return table.concat({
+    "local ballad = require(\"ballad\")",
+    "local moonstone = require(\"ballad.plugins.moonstone\")",
+    "",
+    "return ballad.partiture(function(p)",
+    "  local meteorite = p:use(\"meteorite.ballad\")",
+    "  local project = moonstone.project_prepare({ root = \".\", roles = { \"runtime\" } })",
+    "  local release = meteorite.release({",
+    "    project = project,",
+    "    input = \"src/main.lua\",",
+    "    graph_output = \".meteorite/graph/release\",",
+    "    mode = \"" .. release_mode .. "\",",
+    "    bin = \"bin/server\",",
+    "    backend = \"std_http\",",
+    "    router_dispatch = \"param_matchers\",",
+    "  })",
+    "  p.sink.directory(release, { out = \"dist/release\", file_graph = true })",
+    "end)",
+    "",
+  }, "\n")
+end
+
 return handler_sync

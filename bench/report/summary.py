@@ -10,6 +10,7 @@ mode = os.environ["BENCH_MODE"]
 mode_name = mode.removeprefix("--mode=").removeprefix("--")
 selected_loadgen = os.environ.get("BENCH_LOADGEN", "wrk")
 selected_latency_correction = os.environ.get("BENCH_LATENCY_CORRECTION", "0") == "1"
+meteorite_build_mode = os.environ.get("BENCH_METEORITE_BUILD_MODE", "release-hybrid")
 if mode in ("--mode=lua-bridge", "--mode=lua-bridge-smoke", "--mode=meteorite-app"):
     labels = ["meteorite-1worker", "meteorite-auto"]
 else:
@@ -295,6 +296,8 @@ class Run:
     loadgen: str
     label: str
     scenario: str
+    meteorite_build_mode: str
+    claim_class: str
     tier: str
     concurrency: int
     rep: int
@@ -480,6 +483,8 @@ def load_run(label: str, scenario: str, c: int, rep: int):
         loadgen=meta.get("loadgen", selected_loadgen),
         label=label,
         scenario=scenario,
+        meteorite_build_mode=meta.get("meteorite_build_mode", meteorite_build_mode),
+        claim_class=meta.get("claim_class", "static" if meta.get("tier") == "static" else "unknown"),
         tier=meta.get("tier", "unknown"),
         concurrency=c,
         rep=rep,
@@ -638,8 +643,8 @@ for scenario in scenarios:
     if scenario_runs and all(r.proof_only for r in scenario_runs):
         continue
     print(f"\n### Scenario: {scenario}")
-    print("| Loadgen | Variant | Tier | Concurrency | Valid/Reps | RPS Median | p50 Median µs | p99 Median µs | Lua pcalls/request | Srv CPU% Max | Srv RSS MB | Notes |")
-    print("|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|")
+    print("| Loadgen | Variant | Claim Class | Tier | Concurrency | Valid/Reps | RPS Median | p50 Median µs | p99 Median µs | Lua pcalls/request | Srv CPU% Max | Srv RSS MB | Notes |")
+    print("|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|")
 
     for c in concurrency:
         for label in labels:
@@ -692,6 +697,7 @@ for scenario in scenarios:
                 fd_usage_high = any(r.fd_usage_high for r in valid)
                 fd_usage_critical = any(r.fd_usage_critical for r in valid)
                 tier = valid[0].tier
+                claim_class = valid[0].claim_class
             else:
                 med_rps = 0.0
                 med_latency_avg = 0.0
@@ -715,6 +721,7 @@ for scenario in scenarios:
                 server_fd_count_max = loadgen_fd_count_max = 0
                 fd_usage_high = fd_usage_critical = False
                 tier = group[0].tier if group else "unknown"
+                claim_class = group[0].claim_class if group else "unknown"
 
             row_source = valid[0] if valid else group[0]
             environment_reasons = []
@@ -788,6 +795,8 @@ for scenario in scenarios:
                 "expected_observed_mismatch": expected_observed_mismatch,
                 "variant": label,
                 "scenario": scenario,
+                "meteorite_build_mode": row_source.meteorite_build_mode,
+                "claim_class": claim_class,
                 "tier": tier,
                 "concurrency": c,
                 "valid_reps": len(valid),
@@ -858,7 +867,7 @@ for scenario in scenarios:
             })
 
             print(
-                f"| {selected_loadgen} | {label} | {tier} | {c} | {len(valid)}/{len(group)} | "
+                f"| {selected_loadgen} | {label} | {claim_class} | {tier} | {c} | {len(valid)}/{len(group)} | "
                 f"{med_rps:,.0f} | {med_p50:.0f} | {med_p99:.0f} | "
                 f"{med_lua_ratio:.2f} | {srv_cpu:.0f}% | {srv_rss:.1f} | {notes} |"
             )
@@ -1074,8 +1083,8 @@ suspicious = [r for r in all_runs if not r.valid]
 proof_runs = [r for r in all_runs if r.proof_only]
 if proof_runs:
     print("\n## Proof-Only Routes")
-    print("| Loadgen | Variant | Scenario | Tier | C | Valid/Reps | RPS Median | p99 Median µs | Lua pcalls/request | Validation | Notes |")
-    print("|---|---|---|---|---:|---:|---:|---:|---:|---|---|")
+    print("| Loadgen | Variant | Scenario | Claim Class | Tier | C | Valid/Reps | RPS Median | p99 Median µs | Lua pcalls/request | Validation | Notes |")
+    print("|---|---|---|---|---|---:|---:|---:|---:|---:|---|---|")
     proof_keys = sorted({(r.label, r.scenario, r.concurrency) for r in proof_runs})
     for label, scenario, c in proof_keys:
         group = [r for r in proof_runs if r.label == label and r.scenario == scenario and r.concurrency == c]
@@ -1114,6 +1123,7 @@ if proof_runs:
         fd_usage_high = any(r.fd_usage_high for r in valid)
         fd_usage_critical = any(r.fd_usage_critical for r in valid)
         tier = group[0].tier if group else "unknown"
+        claim_class = group[0].claim_class if group else "unknown"
         validation = group[0].validation if group else ""
         row_source = valid[0] if valid else group[0]
         environment_reasons = []
@@ -1162,7 +1172,7 @@ if proof_runs:
             notes = (notes + "; " if notes else "") + ", ".join(sanity_notes)
         if environment_reasons or audit_reasons:
             notes = (notes + "; " if notes else "") + ", ".join(environment_reasons + audit_reasons)
-        print(f"| {selected_loadgen} | {label} | {scenario} | {tier} | {c} | {len(valid)}/{len(group)} | {med_rps:,.0f} | {med_p99:.0f} | {med_lua_ratio:.2f} | {validation} | {notes} |")
+        print(f"| {selected_loadgen} | {label} | {scenario} | {claim_class} | {tier} | {c} | {len(valid)}/{len(group)} | {med_rps:,.0f} | {med_p99:.0f} | {med_lua_ratio:.2f} | {validation} | {notes} |")
         summary_rows.append({
             "fixture": "bench-service",
             "mode": mode_name,
@@ -1180,6 +1190,8 @@ if proof_runs:
             "expected_observed_mismatch": expected_observed_mismatch,
             "variant": label,
             "scenario": scenario,
+            "meteorite_build_mode": row_source.meteorite_build_mode,
+            "claim_class": claim_class,
             "tier": tier,
             "concurrency": c,
             "valid_reps": len(valid),
@@ -1272,6 +1284,20 @@ if mode in ("--mode=lua-bridge", "--mode=lua-bridge-smoke"):
     print("dynamic Lua proof ok: echo, state counter, and 1s Lua sleep route preflighted")
 print("pcall/request ratio ok: enforced per measured rep")
 
+print("\n## Claim Class Summary")
+print("| Loadgen | Claim Class | Valid reps | Median Lua pcalls/request | Median RPS |")
+print("|---|---|---:|---:|---:|")
+for claim_class in sorted({r.claim_class for r in all_runs}):
+    valid_class = [r for r in all_runs if r.claim_class == claim_class and r.valid]
+    if not valid_class:
+        print(f"| {selected_loadgen} | {claim_class} | 0 | 0.00 | 0 |")
+        continue
+    print(
+        f"| {selected_loadgen} | {claim_class} | {len(valid_class)} | "
+        f"{statistics.median([r.lua_pcalls_per_request for r in valid_class]):.2f} | "
+        f"{statistics.median([r.rps for r in valid_class]):,.0f} |"
+    )
+
 print("\n## Execution Tier Summary")
 print("| Loadgen | Tier | Valid reps | Median Lua pcalls/request | Median RPS |")
 print("|---|---|---:|---:|---:|")
@@ -1286,13 +1312,51 @@ for tier in sorted({r.tier for r in all_runs}):
         f"{statistics.median([r.rps for r in valid_tier]):,.0f} |"
     )
 
+claim_audit_rows = []
+for row in summary_rows:
+    reasons = row.get("claim_grade_reasons") or row.get("notes") or []
+    if isinstance(reasons, str):
+        reasons = [reasons]
+    claim_audit_rows.append({
+        "loadgen": row.get("loadgen", selected_loadgen),
+        "variant": row.get("variant", "unknown"),
+        "scenario": row.get("scenario", "unknown"),
+        "meteorite_build_mode": row.get("meteorite_build_mode", meteorite_build_mode),
+        "claim_class": row.get("claim_class", "unknown"),
+        "tier": row.get("tier", "unknown"),
+        "validation": row.get("validation", ""),
+        "claim_grade": row.get("claim_grade", False),
+        "proof_only": row.get("proof_only", False),
+        "reasons": reasons,
+    })
+
+claim_audit_lines = [
+    "# Benchmark Claim Audit",
+    "",
+    f"Mode: `{mode_name}`",
+    f"Loadgen: `{selected_loadgen}`",
+    f"Meteorite build mode: `{meteorite_build_mode}`",
+    "",
+    "Claim classes use `static`, `hybrid(lua-runtime)`, `framework-parity`, or `proof-only`; the report avoids the ambiguous `native` label for benchmark claims.",
+    "",
+    "| Loadgen | Variant | Scenario | Meteorite Build Mode | Claim Class | Tier | Validation | Claim Grade | Proof Only | Reasons |",
+    "|---|---|---|---|---|---|---|---:|---:|---|",
+]
+for row in sorted(claim_audit_rows, key=lambda r: (r["scenario"], r["variant"], r["loadgen"])):
+    reasons = ", ".join(str(reason) for reason in row["reasons"] if str(reason)) or "ok"
+    claim_audit_lines.append(
+        f"| {row['loadgen']} | {row['variant']} | {row['scenario']} | {row['meteorite_build_mode']} | {row['claim_class']} | {row['tier']} | {row['validation']} | {row['claim_grade']} | {row['proof_only']} | {reasons} |"
+    )
+(out / "claim-audit.md").write_text("\n".join(claim_audit_lines) + "\n")
+
 (out / "summary.json").write_text(json.dumps({
     "fixture": "bench-service",
     "mode": mode_name,
     "loadgen": selected_loadgen,
     "latency_correction": selected_latency_correction,
+    "meteorite_build_mode": meteorite_build_mode,
     "latency_unit": "microseconds",
     "environment": system_env,
+    "claim_audit": claim_audit_rows,
     "results": summary_rows,
 }, indent=2, sort_keys=True) + "\n")
-

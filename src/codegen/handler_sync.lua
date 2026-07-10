@@ -72,6 +72,10 @@ end
 function handler_sync.emit_ctx_zig(graph, output)
   local lines = {
     "const std = @import(\"std\");",
+    "const protocol = @import(\"meteorite_protocol\");",
+    "",
+    "pub const Header = protocol.Header;",
+    "pub const CookieOptions = protocol.CookieOptions;",
     "",
     "pub const Error = error{ MissingParam, InvalidParam } || std.fmt.ParseIntError;",
     "",
@@ -81,10 +85,18 @@ function handler_sync.emit_ctx_zig(graph, output)
     "    param: *const fn (*anyopaque, []const u8) ?[]const u8,",
     "    query: *const fn (*anyopaque, []const u8) ?[]const u8,",
     "    header: *const fn (*anyopaque, []const u8) ?[]const u8,",
+    "    request_id: *const fn (*anyopaque) anyerror![]const u8,",
     "    body: *const fn (*anyopaque) anyerror![]const u8,",
     "    text: *const fn (*anyopaque, u16, []const u8) anyerror!void,",
+    "    text_with_headers: *const fn (*anyopaque, u16, []const u8, []const Header) anyerror!void,",
     "    bytes: *const fn (*anyopaque, u16, []const u8, []const u8) anyerror!void,",
+    "    bytes_with_headers: *const fn (*anyopaque, u16, []const u8, []const u8, []const Header) anyerror!void,",
     "    json: *const fn (*anyopaque, u16, []const u8) anyerror!void,",
+    "    json_with_headers: *const fn (*anyopaque, u16, []const u8, []const Header) anyerror!void,",
+    "    empty: *const fn (*anyopaque, u16) anyerror!void,",
+    "    empty_with_headers: *const fn (*anyopaque, u16, []const Header) anyerror!void,",
+    "    redirect: *const fn (*anyopaque, u16, []const u8) anyerror!void,",
+    "    set_cookie: *const fn (*anyopaque, []u8, []const u8, []const u8, CookieOptions) anyerror!Header,",
     "};",
     "",
     "fn VTableFor(comptime RawPtr: type) type {",
@@ -95,11 +107,19 @@ function handler_sync.emit_ctx_zig(graph, output)
     "        fn param(ptr: *anyopaque, name: []const u8) ?[]const u8 { return cast(ptr).param(name); }",
     "        fn query(ptr: *anyopaque, name: []const u8) ?[]const u8 { return cast(ptr).query(name); }",
     "        fn header(ptr: *anyopaque, name: []const u8) ?[]const u8 { return cast(ptr).header(name); }",
+    "        fn requestId(ptr: *anyopaque) anyerror![]const u8 { return cast(ptr).requestId(); }",
     "        fn body(ptr: *anyopaque) anyerror![]const u8 { return cast(ptr).body(); }",
     "        fn text(ptr: *anyopaque, status: u16, response_body: []const u8) anyerror!void { return cast(ptr).text(status, response_body); }",
+    "        fn textWithHeaders(ptr: *anyopaque, status: u16, response_body: []const u8, headers: []const Header) anyerror!void { return cast(ptr).textWithHeaders(status, response_body, headers); }",
     "        fn bytes(ptr: *anyopaque, status: u16, content_type: []const u8, response_body: []const u8) anyerror!void { return cast(ptr).bytes(status, content_type, response_body); }",
+    "        fn bytesWithHeaders(ptr: *anyopaque, status: u16, content_type: []const u8, response_body: []const u8, headers: []const Header) anyerror!void { return cast(ptr).bytesWithHeaders(status, content_type, response_body, headers); }",
     "        fn json(ptr: *anyopaque, status: u16, response_body: []const u8) anyerror!void { return cast(ptr).json(status, response_body); }",
-    "        pub const value = VTable{ .method = method, .path = path, .param = param, .query = query, .header = header, .body = body, .text = text, .bytes = bytes, .json = json };",
+    "        fn jsonWithHeaders(ptr: *anyopaque, status: u16, response_body: []const u8, headers: []const Header) anyerror!void { return cast(ptr).jsonWithHeaders(status, response_body, headers); }",
+    "        fn empty(ptr: *anyopaque, status: u16) anyerror!void { return cast(ptr).empty(status); }",
+    "        fn emptyWithHeaders(ptr: *anyopaque, status: u16, headers: []const Header) anyerror!void { return cast(ptr).emptyWithHeaders(status, headers); }",
+    "        fn redirect(ptr: *anyopaque, status: u16, location: []const u8) anyerror!void { return cast(ptr).redirect(status, location); }",
+    "        fn setCookie(ptr: *anyopaque, buffer: []u8, name: []const u8, cookie_value: []const u8, options: CookieOptions) anyerror!Header { return cast(ptr).setCookie(buffer, name, cookie_value, options); }",
+    "        pub const value = VTable{ .method = method, .path = path, .param = param, .query = query, .header = header, .request_id = requestId, .body = body, .text = text, .text_with_headers = textWithHeaders, .bytes = bytes, .bytes_with_headers = bytesWithHeaders, .json = json, .json_with_headers = jsonWithHeaders, .empty = empty, .empty_with_headers = emptyWithHeaders, .redirect = redirect, .set_cookie = setCookie };",
     "    };",
     "}",
     "",
@@ -152,10 +172,18 @@ function handler_sync.emit_ctx_zig(graph, output)
     lines[#lines + 1] = "        pub fn param(self: " .. id .. ", name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }"
     lines[#lines + 1] = "        pub fn queryValue(self: " .. id .. ", name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }"
     lines[#lines + 1] = "        pub fn header(self: " .. id .. ", name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }"
+    lines[#lines + 1] = "        pub fn requestId(self: " .. id .. ") ![]const u8 { return self.vtable.request_id(self.raw); }"
     lines[#lines + 1] = "        pub fn body(self: " .. id .. ") ![]const u8 { return self.vtable.body(self.raw); }"
     lines[#lines + 1] = "        pub fn text(self: " .. id .. ", status: u16, response_body: []const u8) !void { return self.vtable.text(self.raw, status, response_body); }"
+    lines[#lines + 1] = "        pub fn textWithHeaders(self: " .. id .. ", status: u16, response_body: []const u8, headers: []const Header) !void { return self.vtable.text_with_headers(self.raw, status, response_body, headers); }"
     lines[#lines + 1] = "        pub fn bytes(self: " .. id .. ", status: u16, content_type: []const u8, response_body: []const u8) !void { return self.vtable.bytes(self.raw, status, content_type, response_body); }"
+    lines[#lines + 1] = "        pub fn bytesWithHeaders(self: " .. id .. ", status: u16, content_type: []const u8, response_body: []const u8, headers: []const Header) !void { return self.vtable.bytes_with_headers(self.raw, status, content_type, response_body, headers); }"
     lines[#lines + 1] = "        pub fn json(self: " .. id .. ", status: u16, response_body: []const u8) !void { return self.vtable.json(self.raw, status, response_body); }"
+    lines[#lines + 1] = "        pub fn jsonWithHeaders(self: " .. id .. ", status: u16, response_body: []const u8, headers: []const Header) !void { return self.vtable.json_with_headers(self.raw, status, response_body, headers); }"
+    lines[#lines + 1] = "        pub fn empty(self: " .. id .. ", status: u16) !void { return self.vtable.empty(self.raw, status); }"
+    lines[#lines + 1] = "        pub fn emptyWithHeaders(self: " .. id .. ", status: u16, headers: []const Header) !void { return self.vtable.empty_with_headers(self.raw, status, headers); }"
+    lines[#lines + 1] = "        pub fn redirect(self: " .. id .. ", status: u16, location: []const u8) !void { return self.vtable.redirect(self.raw, status, location); }"
+    lines[#lines + 1] = "        pub fn setCookie(self: " .. id .. ", buffer: []u8, name: []const u8, value: []const u8, options: CookieOptions) !Header { return self.vtable.set_cookie(self.raw, buffer, name, value, options); }"
     lines[#lines + 1] = "    };"
   end
   lines[#lines + 1] = "};"

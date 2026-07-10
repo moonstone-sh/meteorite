@@ -65,7 +65,8 @@ local function scan_files(root)
   local links_raw = fs.list_symlinks(root)
   local links = {}
   for _, l in ipairs(links_raw) do links[#links + 1] = l end
-  if links ~= "" then
+  if #links > 0 then
+    local first_link = links[1]
     error(table.concat({
       "static directory contains symlinks",
       "",
@@ -73,7 +74,7 @@ local function scan_files(root)
       "  " .. tostring(root),
       "",
       "Symlink:",
-      "  " .. tostring((links:match("([^\n]+)") or links):gsub("^%./", "")),
+      "  " .. tostring(first_link:gsub("^%./", "")),
       "",
       "Fix:",
       "  copy real files into the static root or remove the symlink",
@@ -111,9 +112,9 @@ function static.prepare_route(route, output, mode)
     end
     local content = read_file(source) or ""
     local artifact, artifact_rel = static_artifact_path(output, route, source:match("([^/\\]+)$") or "file")
-    if mode == "release-static" then copy_file(source, artifact) end
+    copy_file(source, artifact)
     handler.source_path = source
-    handler.artifact_path = mode == "release-static" and artifact_rel or source
+    handler.artifact_path = artifact_rel
     handler.content_type = handler.content_type or static.infer_content_type(source)
     handler.content_length = file_size(source) or #content
     handler.etag = etag_for_text(content)
@@ -138,33 +139,33 @@ function static.prepare_route(route, output, mode)
         local source = path_join(root, rel)
         local content = read_file(source) or ""
         local artifact, artifact_rel = static_artifact_path(output, route, rel)
-        if mode == "release-static" then copy_file(source, artifact) end
+        copy_file(source, artifact)
         local br_source = source .. ".br"
         local gz_source = source .. ".gz"
-        local br_artifact, gz_artifact = nil, nil
+        local br_artifact_rel, gz_artifact_rel = nil, nil
         if handler.compressed and handler.compressed.br and file_exists(br_source) then
-          br_artifact = mode == "release-static" and static_artifact_path(output, route, rel .. ".br") or br_source
-          if mode == "release-static" then copy_file(br_source, br_artifact) end
+          local br_artifact
+          br_artifact, br_artifact_rel = static_artifact_path(output, route, rel .. ".br")
+          copy_file(br_source, br_artifact)
         end
         if handler.compressed and handler.compressed.gzip and file_exists(gz_source) then
-          gz_artifact = mode == "release-static" and static_artifact_path(output, route, rel .. ".gz") or gz_source
-          if mode == "release-static" then copy_file(gz_source, gz_artifact) end
+          local gz_artifact
+          gz_artifact, gz_artifact_rel = static_artifact_path(output, route, rel .. ".gz")
+          copy_file(gz_source, gz_artifact)
         end
-        local _, br_rel = static_artifact_path(output, route, rel .. ".br")
-        local _, gz_rel = static_artifact_path(output, route, rel .. ".gz")
         assets[#assets + 1] = {
           request_path = rel,
-          artifact_path = mode == "release-static" and artifact_rel or artifact,
+          artifact_path = artifact_rel,
           content_type = static.infer_content_type(rel, handler.types),
           content_length = file_size(source) or #content,
           etag = etag_for_text(content),
           cache_control = handler.cache or "no-cache",
-          compressed_br_path = br_artifact and (mode == "release-static" and br_rel or br_source) or nil,
-          compressed_br_length = br_artifact and file_size(br_source) or nil,
-          compressed_br_etag = br_artifact and etag_for_text(read_file(br_source) or "") or nil,
-          compressed_gzip_path = gz_artifact and (mode == "release-static" and gz_rel or gz_source) or nil,
-          compressed_gzip_length = gz_artifact and file_size(gz_source) or nil,
-          compressed_gzip_etag = gz_artifact and etag_for_text(read_file(gz_source) or "") or nil,
+          compressed_br_path = br_artifact_rel,
+          compressed_br_length = br_artifact_rel and file_size(br_source) or nil,
+          compressed_br_etag = br_artifact_rel and etag_for_text(read_file(br_source) or "") or nil,
+          compressed_gzip_path = gz_artifact_rel,
+          compressed_gzip_length = gz_artifact_rel and file_size(gz_source) or nil,
+          compressed_gzip_etag = gz_artifact_rel and etag_for_text(read_file(gz_source) or "") or nil,
         }
       end
     end

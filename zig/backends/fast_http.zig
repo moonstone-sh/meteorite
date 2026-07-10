@@ -1,7 +1,7 @@
 const std = @import("std");
 const Io = std.Io;
 const build_options = @import("build_options");
-const proto = @import("protocol.zig");
+const proto = @import("meteorite_protocol");
 const http_date = @import("../server/http_date.zig");
 
 pub const name = "fast_http";
@@ -25,15 +25,33 @@ pub fn snapshotCounters() Counters {
     return c;
 }
 
-pub fn connectionStarted() void { proto.connectionStarted(&counters); }
-pub fn connectionEnded() void { proto.connectionEnded(&counters); }
-pub fn requestStarted() void { proto.requestStarted(&counters); }
-pub fn requestCompleted() void { proto.requestCompleted(&counters); }
-pub fn threadSpawned() void { proto.threadSpawned(&counters); }
-pub fn connectionError() void { proto.connectionError(&counters); }
-pub fn droppedConnection() void { proto.droppedConnection(&counters); }
-pub fn setQueueDepth(value: u64) void { proto.setQueueDepth(&counters, value); }
-pub fn resetAuditCounters() void { proto.resetAuditCounters(&counters); }
+pub fn connectionStarted() void {
+    proto.connectionStarted(&counters);
+}
+pub fn connectionEnded() void {
+    proto.connectionEnded(&counters);
+}
+pub fn requestStarted() void {
+    proto.requestStarted(&counters);
+}
+pub fn requestCompleted() void {
+    proto.requestCompleted(&counters);
+}
+pub fn threadSpawned() void {
+    proto.threadSpawned(&counters);
+}
+pub fn connectionError() void {
+    proto.connectionError(&counters);
+}
+pub fn droppedConnection() void {
+    proto.droppedConnection(&counters);
+}
+pub fn setQueueDepth(value: u64) void {
+    proto.setQueueDepth(&counters, value);
+}
+pub fn resetAuditCounters() void {
+    proto.resetAuditCounters(&counters);
+}
 
 pub const ListenConfig = struct {
     host: []const u8 = "127.0.0.1",
@@ -117,7 +135,10 @@ pub fn receiveHead(req: *Request) !void {
     var parts = std.mem.splitScalar(u8, clean_line, ' ');
     const method_text = parts.next() orelse return error.BadRequest;
     const target_text = parts.next() orelse return error.BadRequest;
-    const version_text = parts.next() orelse "HTTP/1.1";
+    const version_text = parts.next() orelse return error.BadRequest;
+    if (parts.next() != null) return error.BadRequest;
+    if (!proto.isToken(method_text)) return error.BadRequest;
+    if (!std.mem.eql(u8, version_text, "HTTP/1.1") and !std.mem.eql(u8, version_text, "HTTP/1.0")) return error.BadRequest;
 
     req.method_value = proto.parseMethod(method_text);
     req.target_value = target_text;
@@ -142,9 +163,11 @@ pub fn receiveHead(req: *Request) !void {
 
         const clean = proto.trimCr(line);
         if (clean.len == 0) break;
-        const colon = std.mem.indexOfScalar(u8, clean, ':') orelse continue;
+        if (clean[0] == ' ' or clean[0] == '\t') return error.BadRequest;
+        const colon = std.mem.indexOfScalar(u8, clean, ':') orelse return error.BadRequest;
         const header_name = std.mem.trim(u8, clean[0..colon], " \t");
         const value = std.mem.trim(u8, clean[colon + 1 ..], " \t");
+        if (!proto.isToken(header_name)) return error.BadRequest;
 
         // Reject header values containing CR/LF (header injection prevention)
         if (std.mem.indexOfScalar(u8, value, '\r') != null or std.mem.indexOfScalar(u8, value, '\n') != null) {
@@ -171,6 +194,18 @@ pub fn receiveHead(req: *Request) !void {
     req.request_count += 1;
     if (req.request_count > 1) proto.inc(&counters.keepalive_reuse_count);
     req.close_after_response = !req.keep_alive;
+}
+
+pub fn respondParseError(req: *Request, status: u16, body: []const u8) void {
+    const reason = proto.reasonPhrase(status);
+    var response_buffer: [512]u8 = undefined;
+    const bytes = std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {d} {s}\r\ncontent-type: text/plain; charset=utf-8\r\ncontent-length: {d}\r\nconnection: close\r\n\r\n{s}", .{ status, reason, body.len, body }) catch return;
+    req.writer.interface.writeAll(bytes) catch return;
+    req.writer.interface.flush() catch return;
+    proto.inc(&counters.requests_served);
+    proto.add(&counters.bytes_written, bytes.len);
+    req.keep_alive = false;
+    req.close_after_response = true;
 }
 
 pub fn method(req: *Request) Method {
@@ -242,26 +277,41 @@ pub fn drainBody(req: *Request) void {
 }
 
 pub fn respondText(req: *Request, status: u16, body: []const u8) !void {
-    if (status == 200 and std.mem.eql(u8, body, "ok")) return respondRawOk(req);
+    if (method(req) != .HEAD and status == 200 and std.mem.eql(u8, body, "ok")) return respondRawOk(req);
     try respondBytes(req, status, "text/plain; charset=utf-8", body);
 }
 
+pub fn respondTextWithHeaders(req: *Request, status: u16, body: []const u8, extra_headers: []const proto.Header) !void {
+    try respondBytesWithHeaders(req, status, "text/plain; charset=utf-8", body, extra_headers);
+}
+
 pub fn respondBytes(req: *Request, status: u16, content_type: []const u8, body: []const u8) !void {
+    try respondBytesWithHeaders(req, status, content_type, body, &.{});
+}
+
+pub fn respondBytesWithHeaders(req: *Request, status: u16, content_type: []const u8, body: []const u8, extra_headers: []const proto.Header) !void {
     const reason = proto.reasonPhrase(status);
     const connection = if (req.keep_alive) "keep-alive" else "close";
     const date = http_date.formatHttpDate(req.date_seconds);
 
     var header_buffer: [4096]u8 = undefined;
-    const headers = try std.fmt.bufPrint(&header_buffer, "HTTP/1.1 {d} {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\nconnection: {s}\r\ndate: {s}\r\n\r\n", .{ status, reason, content_type, body.len, connection, date });
-    
+    var stream = std.Io.Writer.fixed(&header_buffer);
+    try stream.print("HTTP/1.1 {d} {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\nconnection: {s}\r\ndate: {s}\r\n", .{ status, reason, content_type, body.len, connection, date });
+    for (extra_headers) |header_item| {
+        try stream.print("{s}: {s}\r\n", .{ header_item.name, header_item.value });
+    }
+    try stream.writeAll("\r\n");
+    const headers = stream.buffered();
+
     try req.writer.interface.writeAll(headers);
-    if (body.len > 0) {
+    const head_only = method(req) == .HEAD;
+    if (!head_only and body.len > 0) {
         try req.writer.interface.writeAll(body);
     }
     try req.writer.interface.flush();
-    
+
     proto.inc(&counters.requests_served);
-    proto.add(&counters.bytes_written, headers.len + body.len);
+    proto.add(&counters.bytes_written, headers.len + if (head_only) 0 else body.len);
     req.close_after_response = !req.keep_alive;
 }
 
@@ -272,11 +322,11 @@ pub fn respondStatic(req: *Request, status: u16, content_type: []const u8, conte
     const encoding = content_encoding orelse "";
     const date = http_date.formatHttpDate(req.date_seconds);
     const response = if (status == 304 and content_encoding != null)
-        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 304 Not Modified\r\ncache-control: {s}\r\netag: {s}\r\nvary: Accept-Encoding\r\nconnection: {s}\r\n\r\n", .{ cache_control, etag, connection })
+        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 304 Not Modified\r\ncache-control: {s}\r\netag: {s}\r\nvary: Accept-Encoding\r\nconnection: {s}\r\ndate: {s}\r\n\r\n", .{ cache_control, etag, connection, date })
     else if (status == 304)
-        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 304 Not Modified\r\ncache-control: {s}\r\netag: {s}\r\nconnection: {s}\r\n\r\n", .{ cache_control, etag, connection })
+        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 304 Not Modified\r\ncache-control: {s}\r\netag: {s}\r\nconnection: {s}\r\ndate: {s}\r\n\r\n", .{ cache_control, etag, connection, date })
     else if (content_encoding != null)
-        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {d} {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\ncache-control: {s}\r\netag: {s}\r\ncontent-encoding: {s}\r\nvary: Accept-Encoding\r\nconnection: {s}\r\n\r\n", .{ status, reason, content_type, content_length, cache_control, etag, encoding, connection })
+        try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {d} {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\ncache-control: {s}\r\netag: {s}\r\ncontent-encoding: {s}\r\nvary: Accept-Encoding\r\nconnection: {s}\r\ndate: {s}\r\n\r\n", .{ status, reason, content_type, content_length, cache_control, etag, encoding, connection, date })
     else
         try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {d} {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\ncache-control: {s}\r\netag: {s}\r\nconnection: {s}\r\ndate: {s}\r\n\r\n", .{ status, reason, content_type, content_length, cache_control, etag, connection, date });
     try req.writer.interface.writeAll(response);
@@ -288,7 +338,10 @@ pub fn respondStatic(req: *Request, status: u16, content_type: []const u8, conte
 }
 
 pub fn respondRawOk(req: *Request) !void {
-    const bytes = if (req.keep_alive) raw_ok_keepalive else raw_ok_close;
+    var response_buffer: [256]u8 = undefined;
+    const connection = if (req.keep_alive) "keep-alive" else "close";
+    const date = http_date.formatHttpDate(req.date_seconds);
+    const bytes = try std.fmt.bufPrint(&response_buffer, "HTTP/1.1 200 OK\r\ncontent-type: text/plain; charset=utf-8\r\ncontent-length: 2\r\nconnection: {s}\r\ndate: {s}\r\n\r\nok", .{ connection, date });
     try writeRaw(req, bytes);
 }
 
@@ -301,7 +354,3 @@ pub fn writeRaw(req: *Request, bytes: []const u8) !void {
 }
 
 pub fn finish(_: *Request) !void {}
-
-
-const raw_ok_keepalive = "HTTP/1.1 200 OK\r\ncontent-type: text/plain; charset=utf-8\r\ncontent-length: 2\r\nconnection: keep-alive\r\n\r\nok";
-const raw_ok_close = "HTTP/1.1 200 OK\r\ncontent-type: text/plain; charset=utf-8\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok";

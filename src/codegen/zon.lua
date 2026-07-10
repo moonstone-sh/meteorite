@@ -11,7 +11,7 @@ local zon = {}
 ---@type string[]
 local preferred = {
   "format", "meteorite_version", "graph_hash", "mode", "app", "name", "routes", "id", "method", "raw_path", "path", "segments",
-  "kind", "value", "params", "query", "type", "max_len", "optional", "decode", "handler", "symbol", "module", "import", "source", "file", "line", "column",
+  "kind", "value", "params", "query", "validation", "headers", "cookies", "json_body", "form_body", "schema", "properties", "required", "additionalProperties", "minimum", "maximum", "minLength", "maxLength", "format", "pattern", "openapi", "template", "operationId", "parameters", "in_", "requestBody", "responses", "default", "description", "missing_schema", "security", "type", "max_len", "optional", "decode", "handler", "symbol", "module", "import", "source", "file", "line", "column",
 }
 ---@type table<string, integer>
 local rank = {}

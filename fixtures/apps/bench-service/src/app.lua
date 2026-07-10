@@ -421,7 +421,12 @@ if is_hybrid then
 		return "sqlite:insert-small:" .. tostring(row.count)
 	end)
 	app:get("/__app/pipeline/cors", function()
-		return "pipeline:cors:ok"
+		return {
+			status = 200,
+			content_type = "text/plain; charset=utf-8",
+			body = "pipeline:cors:ok",
+			headers = { ["Access-Control-Allow-Origin"] = "*" },
+		}
 	end)
 	app:get("/__app/pipeline/cors-json-template", function()
 		local cjson = require("cjson")
@@ -429,7 +434,12 @@ if is_hybrid then
 		local rendered = etlua.render and etlua.render("<%= message %>", { message = "cors-json-template" })
 			or assert(etlua.compile("<%= message %>"))({ message = "cors-json-template" })
 		local decoded = cjson.decode(cjson.encode({ rendered = rendered }))
-		return "pipeline:cors-json-template:" .. decoded.rendered
+		return {
+			status = 200,
+			content_type = "text/plain; charset=utf-8",
+			body = "pipeline:cors-json-template:" .. decoded.rendered,
+			headers = { ["Access-Control-Allow-Origin"] = "*" },
+		}
 	end)
 	app:get("/__app/full/sqlite-json-template", function()
 		local luasql = require("luasql.sqlite3")

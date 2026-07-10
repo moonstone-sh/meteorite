@@ -45,6 +45,87 @@ pub fn hybrid_inline_echo(ctx: anytype) !void {
     try ctx.text(200, value);
 }
 
+pub fn request_header_echo(ctx: anytype) !void {
+    const lower = ctx.header("x-meteorite-request") orelse "missing";
+    const upper = ctx.header("X-METEORITE-REQUEST") orelse "missing";
+    var buffer: [256]u8 = undefined;
+    const body = try std.fmt.bufPrint(&buffer, "lower={s};upper={s}", .{ lower, upper });
+    try ctx.text(200, body);
+}
+
+pub fn response_zig_text_headers(ctx: anytype) !void {
+    try ctx.textWithHeaders(201, "zig-text", &.{.{ .name = "X-Meteorite-Zig", .value = "text" }});
+}
+
+pub fn response_zig_json_headers(ctx: anytype) !void {
+    try ctx.jsonWithHeaders(202, "{\"ok\":true}", &.{.{ .name = "X-Meteorite-Zig", .value = "json" }});
+}
+
+pub fn response_zig_bytes_headers(ctx: anytype) !void {
+    try ctx.bytesWithHeaders(203, "application/octet-stream", "zig-bytes", &.{.{ .name = "X-Meteorite-Zig", .value = "bytes" }});
+}
+
+pub fn response_zig_empty_headers(ctx: anytype) !void {
+    try ctx.emptyWithHeaders(204, &.{.{ .name = "X-Meteorite-Zig", .value = "empty" }});
+}
+
+pub fn response_zig_redirect(ctx: anytype) !void {
+    try ctx.redirect(302, "/health");
+}
+
+pub fn response_zig_set_cookie(ctx: anytype) !void {
+    var cookie_buffer: [512]u8 = undefined;
+    const cookie = try ctx.setCookie(&cookie_buffer, "session", "zighelper", .{});
+    try ctx.textWithHeaders(200, "cookie:helper-zig", &.{cookie});
+}
+
+pub fn response_zig_invalid_header_name(ctx: anytype) !void {
+    try ctx.textWithHeaders(200, "bad-zig-name", &.{.{ .name = "X-Bad\r\nInjected", .value = "value" }});
+}
+
+pub fn response_zig_invalid_header_value(ctx: anytype) !void {
+    try ctx.textWithHeaders(200, "bad-zig-value", &.{.{ .name = "X-Meteorite-Zig", .value = "safe\r\nInjected: bad" }});
+}
+
+pub fn response_zig_reserved_header(ctx: anytype) !void {
+    try ctx.textWithHeaders(200, "bad-zig-reserved", &.{.{ .name = "Content-Length", .value = "999" }});
+}
+
+pub fn response_zig_error(ctx: anytype) !void {
+    _ = ctx;
+    return error.ZigHandlerBoom;
+}
+
+pub fn response_post_header_base(ctx: anytype) !void {
+    try ctx.text(200, "post-header");
+}
+
+pub fn response_post_header_injection_base(ctx: anytype) !void {
+    try ctx.text(200, "post-header-injection");
+}
+
+pub fn response_post_header_hook(ctx: anytype) !void {
+    try ctx.responseHeader("X-Meteorite-Post-Handler", "mutated");
+}
+
+pub fn response_post_header_injection_hook(ctx: anytype) !void {
+    try ctx.responseHeader("X-Meteorite-Post-Handler", "safe\r\nInjected: bad");
+}
+
+pub fn response_zig_request_id(ctx: anytype) !void {
+    const id = try ctx.requestId();
+    var buffer: [256]u8 = undefined;
+    const body = try std.fmt.bufPrint(&buffer, "request-id-zig:{s}", .{id});
+    try ctx.textWithHeaders(200, body, &.{.{ .name = "X-Request-ID", .value = id }});
+}
+
+pub fn param_zig(ctx: anytype) !void {
+    const missing = ctx.param("missing") orelse "missing";
+    var buffer: [256]u8 = undefined;
+    const body = try std.fmt.bufPrint(&buffer, "param-zig:{d}:{s}", .{ ctx.params.id, missing });
+    try ctx.text(200, body);
+}
+
 pub fn hybrid_debug_unavailable(ctx: anytype) !void {
     try ctx.text(501, "hybrid debug route requires Lua runtime");
 }
@@ -203,6 +284,14 @@ pub fn delete_user(ctx: anytype) !void {
 pub fn echo(ctx: anytype) !void {
     const value = try ctx.body();
     try ctx.text(200, value);
+}
+
+pub fn body_repeat_zig(ctx: anytype) !void {
+    const first = try ctx.body();
+    const second = try ctx.body();
+    var buffer: [256]u8 = undefined;
+    const response = try std.fmt.bufPrint(&buffer, "repeat-zig:{s}:{s}", .{ first, second });
+    try ctx.text(200, response);
 }
 
 pub fn get_device(ctx: anytype) !void {

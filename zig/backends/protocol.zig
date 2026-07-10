@@ -2,8 +2,7 @@ const std = @import("std");
 
 /// Shared HTTP protocol types used by all backends.
 /// Backends import this to avoid duplicating counter logic and method enums.
-
-pub const Method = enum { GET, HEAD, POST, PUT, PATCH, DELETE, OTHER };
+pub const Method = enum { GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS, OTHER };
 
 pub const Header = struct {
     name: []const u8,
@@ -158,8 +157,16 @@ pub fn setQueueDepth(c: *AtomicCounters, value: u64) void {
 pub fn reasonPhrase(status: u16) []const u8 {
     return switch (status) {
         200 => "OK",
+        204 => "No Content",
+        301 => "Moved Permanently",
+        302 => "Found",
+        303 => "See Other",
         304 => "Not Modified",
+        307 => "Temporary Redirect",
+        308 => "Permanent Redirect",
         400 => "Bad Request",
+        401 => "Unauthorized",
+        403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
         413 => "Payload Too Large",
@@ -177,7 +184,111 @@ pub fn parseMethod(value: []const u8) Method {
     if (std.mem.eql(u8, value, "PUT")) return .PUT;
     if (std.mem.eql(u8, value, "PATCH")) return .PATCH;
     if (std.mem.eql(u8, value, "DELETE")) return .DELETE;
+    if (std.mem.eql(u8, value, "OPTIONS")) return .OPTIONS;
     return .OTHER;
+}
+
+pub fn isTokenChar(ch: u8) bool {
+    return std.ascii.isAlphanumeric(ch) or switch (ch) {
+        '!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~' => true,
+        else => false,
+    };
+}
+
+pub fn isReservedResponseHeader(name: []const u8) bool {
+    return std.ascii.eqlIgnoreCase(name, "content-type") or
+        std.ascii.eqlIgnoreCase(name, "content-length") or
+        std.ascii.eqlIgnoreCase(name, "connection") or
+        std.ascii.eqlIgnoreCase(name, "date") or
+        std.ascii.eqlIgnoreCase(name, "transfer-encoding");
+}
+
+pub fn validateResponseHeader(name: []const u8, value: []const u8) !void {
+    if (name.len == 0 or name.len > 64 or value.len > 1024) return error.InvalidResponseHeader;
+    if (isReservedResponseHeader(name)) return error.ReservedResponseHeader;
+    for (name) |ch| if (!isTokenChar(ch)) return error.InvalidResponseHeader;
+    for (value) |ch| if (ch == '\r' or ch == '\n') return error.InvalidResponseHeader;
+}
+
+pub fn validateResponseHeaders(headers: []const Header) !void {
+    if (headers.len > 16) return error.TooManyResponseHeaders;
+    for (headers) |header| try validateResponseHeader(header.name, header.value);
+}
+
+pub fn isRedirectStatus(status: u16) bool {
+    return switch (status) {
+        301, 302, 303, 307, 308 => true,
+        else => false,
+    };
+}
+
+pub fn validateRedirectLocation(location: []const u8) !void {
+    if (location.len == 0 or location.len > 2048) return error.InvalidRedirectLocation;
+    for (location) |ch| if (ch == '\r' or ch == '\n') return error.InvalidRedirectLocation;
+}
+
+pub const SameSite = enum { lax, strict, none };
+
+pub const CookieOptions = struct {
+    path: ?[]const u8 = "/",
+    domain: ?[]const u8 = null,
+    max_age: ?i64 = null,
+    expires: ?[]const u8 = null,
+    secure: bool = true,
+    http_only: bool = true,
+    same_site: ?SameSite = .lax,
+};
+
+fn isCookieOctet(ch: u8) bool {
+    return switch (ch) {
+        0x21, 0x23...0x2b, 0x2d...0x3a, 0x3c...0x5b, 0x5d...0x7e => true,
+        else => false,
+    };
+}
+
+fn validateCookieName(name: []const u8) !void {
+    if (name.len == 0 or name.len > 64) return error.InvalidCookieName;
+    for (name) |ch| if (!isTokenChar(ch)) return error.InvalidCookieName;
+}
+
+fn validateCookieValue(value: []const u8) !void {
+    if (value.len > 4096) return error.InvalidCookieValue;
+    for (value) |ch| if (!isCookieOctet(ch)) return error.InvalidCookieValue;
+}
+
+fn validateCookieAttrValue(value: []const u8) !void {
+    if (value.len == 0 or value.len > 1024) return error.InvalidCookieAttribute;
+    for (value) |ch| if (ch < 0x20 or ch == 0x7f or ch == ';' or ch == '\r' or ch == '\n') return error.InvalidCookieAttribute;
+}
+
+pub fn buildSetCookie(buffer: []u8, name: []const u8, value: []const u8, options: CookieOptions) ![]const u8 {
+    try validateCookieName(name);
+    try validateCookieValue(value);
+    if (options.path) |path| try validateCookieAttrValue(path);
+    if (options.domain) |domain| try validateCookieAttrValue(domain);
+    if (options.expires) |expires| try validateCookieAttrValue(expires);
+    if (options.same_site == .none and !options.secure) return error.InsecureSameSiteNone;
+
+    var stream = std.Io.Writer.fixed(buffer);
+    try stream.print("{s}={s}", .{ name, value });
+    if (options.path) |path| try stream.print("; Path={s}", .{path});
+    if (options.domain) |domain| try stream.print("; Domain={s}", .{domain});
+    if (options.max_age) |max_age| try stream.print("; Max-Age={d}", .{max_age});
+    if (options.expires) |expires| try stream.print("; Expires={s}", .{expires});
+    if (options.secure) try stream.writeAll("; Secure");
+    if (options.http_only) try stream.writeAll("; HttpOnly");
+    if (options.same_site) |same_site| switch (same_site) {
+        .lax => try stream.writeAll("; SameSite=Lax"),
+        .strict => try stream.writeAll("; SameSite=Strict"),
+        .none => try stream.writeAll("; SameSite=None"),
+    };
+    return stream.buffered();
+}
+
+pub fn isToken(value: []const u8) bool {
+    if (value.len == 0) return false;
+    for (value) |ch| if (!isTokenChar(ch)) return false;
+    return true;
 }
 
 pub fn trimCr(line: []const u8) []const u8 {
