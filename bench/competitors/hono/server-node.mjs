@@ -19,7 +19,7 @@ app.get('/__bench/plain', (c) => c.text('ok'))
 app.get('/health', (c) => c.text('ok'))
 app.get('/users/:id', (c) => {
   const id = Number(c.req.param('id'))
-  return (!Number.isSafeInteger(id) || id < 0) ? c.text('bad id', 400) : c.text(String(id))
+  return (!Number.isSafeInteger(id) || id < 0) ? c.text('bad id', 400) : c.json(id)
 })
 app.get('/devices/:device_id', (c) => {
   const id = c.req.param('device_id')
