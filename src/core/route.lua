@@ -88,6 +88,8 @@ function route.declare(method, path, options, handler)
     responses = options.responses or {},
     memory = memory,
     capabilities = options.capabilities or {},
+    message = options.message,
+    message_source = options.message_source,
     scope = options.scope or root_scope(),
     handler = handler_shape(handler),
     source = source_info(4),
@@ -148,6 +150,78 @@ local function path_symbol_id(path)
   value = value:gsub("[/\\]+", "_"):gsub("%W", "_"):gsub("_+", "_"):gsub("^_", ""):gsub("_$", "")
   if value == "" then value = "zig_file" end
   return value
+end
+
+local function message_symbol_id(name)
+  local value = tostring(name or "message"):gsub("%W", "_"):gsub("_+", "_"):gsub("^_", ""):gsub("_$", "")
+  if value == "" then value = "message" end
+  return "message_" .. value
+end
+
+local method_message_suffix = {
+  GET = "get",
+  POST = "create",
+  PUT = "put",
+  PATCH = "patch",
+  DELETE = "delete",
+}
+
+local function normalize_message_name(value)
+  assert(type(value) == "string" and value ~= "", "message name must be a non-empty string")
+  local normalized = value:gsub("^/+", ""):gsub("/+$", ""):gsub("/", ".")
+  for segment in normalized:gmatch("[^%.]+") do
+    assert(segment:match("^[%a_][%w_]*$"), "invalid message name: " .. value .. " (expected dot-separated identifiers such as users.get)")
+  end
+  assert(not normalized:match("%.%.") and normalized:sub(1, 1) ~= "." and normalized:sub(-1) ~= ".", "invalid message name: " .. value .. " (expected dot-separated identifiers such as users.get)")
+  return normalized
+end
+
+local function infer_message_name(method, raw_path, segments)
+  local literals = {}
+  for _, segment in ipairs(segments or {}) do
+    if segment.kind == "literal" then
+      local value = segment.value:gsub("%W+", "_"):gsub("^_", ""):gsub("_$", "")
+      if value ~= "" then literals[#literals + 1] = value end
+    end
+  end
+  local base = #literals > 0 and table.concat(literals, ".") or raw_path:gsub("^/+", ""):gsub("/.*$", "")
+  if base == "" then base = "root" end
+  local suffix = method_message_suffix[method] or tostring(method):lower()
+  return normalize_message_name(base .. "." .. suffix)
+end
+
+local function message_param_names(segments)
+  local out = {}
+  for _, segment in ipairs(segments or {}) do
+    if segment.kind == "param" then out[#out + 1] = segment.name end
+  end
+  return out
+end
+
+local function normalize_message_projection(declaration)
+  local explicit = declaration.message
+  local name
+  local pattern
+  local source = declaration.message_source or "inferred"
+  if type(explicit) == "string" then
+    name = normalize_message_name(explicit)
+    pattern = name
+    source = declaration.message_source or "explicit"
+  elseif type(explicit) == "table" then
+    name = normalize_message_name(explicit.name or explicit[1] or explicit.pattern)
+    pattern = explicit.pattern and normalize_message_name(explicit.pattern) or name
+    source = declaration.message_source or "explicit"
+  else
+    name = infer_message_name(declaration.method, declaration.raw_path, declaration.path.segments)
+    pattern = name
+  end
+  return {
+    name = name,
+    pattern = pattern,
+    params = declaration.message_source == "message" and sorted_keys(declaration.params) or message_param_names(declaration.path.segments),
+    source = source,
+    slash_alias = name:gsub("%.", "/"),
+  }
 end
 
 local function normalize_handler(handler)
@@ -281,20 +355,39 @@ function route.normalize_app(app, opts)
   local mode = opts.mode or "dev"
   local resolved_profile = profiles.resolve(app.profile or (app.options and app.options.profile))
   local routes = {}
+  local messages = {}
+  local nodes = {}
   local patterns = {}
   local pattern_seen = {}
   local seen = {}
+  local seen_messages = {}
   for index, declaration in ipairs(app.routes) do
     local key = declaration.method .. " " .. declaration.raw_path
     assert(not seen[key], "duplicate route: " .. key)
     seen[key] = true
+    local message = normalize_message_projection(declaration)
+    local message_domain = message.source == "message" and "message" or "route"
+    local message_key = message_domain .. ":" .. message.name
+    assert(not seen_messages[message_key], table.concat({
+      "duplicate native message: " .. message.name,
+      "",
+      "first route:",
+      "  " .. tostring(seen_messages[message_key] or "<unknown>"),
+      "duplicate route:",
+      "  " .. key,
+      "",
+      "hint: set an explicit unique message name in this graph domain",
+    }, "\n"))
+    seen_messages[message_key] = key
 
     local path_param_names = segment_params(declaration.path.segments)
-    for name, _ in pairs(declaration.params) do
-      assert(path_param_names[name], "param declared but not present in path: " .. name)
-    end
-    for name, _ in pairs(path_param_names) do
-      if declaration.params[name] == nil then declaration.params[name] = { type = "string" } end
+    if declaration.message_source ~= "message" then
+      for name, _ in pairs(declaration.params) do
+        assert(path_param_names[name], "param declared but not present in path: " .. name)
+      end
+      for name, _ in pairs(path_param_names) do
+        if declaration.params[name] == nil then declaration.params[name] = { type = "string" } end
+      end
     end
 
     local handler = normalize_handler(declaration.handler)
@@ -322,10 +415,17 @@ function route.normalize_app(app, opts)
     end
 
     local memory = profiles.route_memory(resolved_profile, declaration.method, declaration.memory)
+    local is_message = message.source == "message"
     local normalized = {
-      id = (handler.kind == "zig" or handler.kind == "zig_file") and handler.symbol or ("route_" .. tostring(index)),
+      id = is_message and message_symbol_id(message.name) or ((handler.kind == "zig" or handler.kind == "zig_file") and handler.symbol or ("route_" .. tostring(index))),
       method = declaration.method,
       raw_path = declaration.raw_path,
+      canonical_id = (message.source == "message" and "message." or "route.") .. message.name,
+      http = {
+        method = declaration.method,
+        path = declaration.raw_path,
+      },
+      message = message,
       path = declaration.path,
       params = normalize_schema_map(declaration.params),
       query = normalize_schema_map(declaration.query),
@@ -374,7 +474,8 @@ function route.normalize_app(app, opts)
         patterns[#patterns + 1] = pattern
       end
     end
-    routes[#routes + 1] = normalized
+    nodes[#nodes + 1] = normalized
+    if is_message then messages[#messages + 1] = normalized else routes[#routes + 1] = normalized end
   end
   local budget_memory = profiles.route_memory(resolved_profile, "GET", {})
   validate_pattern_budget(patterns, budget_memory)
@@ -384,7 +485,7 @@ function route.normalize_app(app, opts)
   }
   local plugins = {}
   local plugin_seen = {}
-  for _, route in ipairs(routes) do
+  for _, route in ipairs(nodes) do
     for _, plugin in ipairs(route.scope.plugins or {}) do
       if type(plugin) == "table" and plugin.__meteorite_plugin and not plugin_seen[plugin] then
         plugin_seen[plugin] = true
@@ -403,6 +504,7 @@ function route.normalize_app(app, opts)
     -- Build the graph object that plugins will mutate
     local plugin_graph = {
       routes = routes,
+      messages = messages,
       patterns = patterns,
       plugins = plugins,
       hooks = {},
@@ -432,6 +534,8 @@ function route.normalize_app(app, opts)
     mode = mode,
     listen = listen,
     routes = routes,
+    messages = messages,
+    nodes = nodes,
     patterns = patterns,
     plugins = plugins,
     capabilities = app.capabilities or {},

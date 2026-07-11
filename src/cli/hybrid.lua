@@ -25,14 +25,28 @@ local function split_target(target)
   return path, query or ""
 end
 
+local function percent_decode(value)
+  return tostring(value):gsub("%%(%x%x)", function(hex)
+    return string.char(tonumber(hex, 16))
+  end)
+end
+
+--- Parse query string into first-wins map and multi-value list map.
+--- Values are percent-decoded to match form/cookie parity.
 local function parse_query(raw)
-  local out = {}
+  local first = {}
+  local all = {}
   for part in tostring(raw):gmatch("[^&]+") do
     local key, value = part:match("^([^=]*)=(.*)$")
     if not key then key, value = part, "" end
-    if key ~= "" and out[key] == nil then out[key] = value end
+    if key ~= "" then
+      local decoded = percent_decode(value)
+      if first[key] == nil then first[key] = decoded end
+      if all[key] == nil then all[key] = {} end
+      all[key][#all[key] + 1] = decoded
+    end
   end
-  return out
+  return first, all
 end
 
 local function validation_response(domain, field, reason)
@@ -809,12 +823,43 @@ function Context:scope(name)
   return self.scope[name]
 end
 
+--- Look up a single query parameter value (first-wins, percent-decoded).
+--- @param name string
+--- @return string|nil
+function Context:query(name)
+  local values = self._raw_query_values
+  if values then return values[name] end
+  return self._validated_query and self._validated_query[name] or nil
+end
+
+--- Look up all values for a repeated query parameter.
+--- @param name string
+--- @return string[]|nil
+function Context:query_all(name)
+  local all = self._raw_query_all
+  if all and all[name] then return all[name] end
+  local single = self:query(name)
+  if single then return { single } end
+  return nil
+end
+
+--- Look up a route parameter by name.
+--- @param name string
+--- @return string|integer|nil
+function Context:param(name)
+  local params = self.params or {}
+  if params[name] ~= nil then return params[name] end
+  return nil
+end
+
 local function new_context(opts)
   local params = opts.params or {}
   return setmetatable({
     request = opts.request,
     params = params,
-    query = opts.query or {},
+    _validated_query = opts.query or {},
+    _raw_query_values = opts.raw_query_values or {},
+    _raw_query_all = opts.raw_query_all or {},
     state = {},
     scope = opts.scope or {},
     worker_cache = opts.worker_cache or {},
@@ -838,11 +883,11 @@ local function execute_scope_plugins(route, ctx, plugin_map)
       local result = plugin.execute(ctx)
       if result then
         if type(result) == "string" then
-          return { status = 200, content_type = "text/plain", body = result, http_requests = ctx.http_requests, state = ctx.state }
+          return { status = 200, content_type = "text/plain; charset=utf-8", body = result, http_requests = ctx.http_requests, state = ctx.state }
         end
         return {
           status = result.status or 200,
-          content_type = result.content_type or "text/plain",
+          content_type = result.content_type or "text/plain; charset=utf-8",
           body = result.body or "",
           http_requests = ctx.http_requests,
           state = ctx.state,
@@ -860,7 +905,7 @@ function hybrid.invoke(app, request, opts)
   local plugin_map = build_plugin_map(graph.plugins)
   local method = request.method or "GET"
   local path, raw_query = split_target(request.path or "/")
-  local query_values = parse_query(raw_query)
+  local query_values, query_all = parse_query(raw_query)
   local path_matched = false
   for _, route in ipairs(graph.routes) do
     local params = match_route(route, method, path)
@@ -869,27 +914,35 @@ function hybrid.invoke(app, request, opts)
       if query_error then return query_error end
       local validation_error = validate_request_domains(route, request)
       if validation_error then return validation_error end
-      local ctx = new_context({ request = request, params = params, query = query, scope = route.scope.context or {}, capabilities = graph.capabilities, zig_helpers = opts.zig_helpers, worker_cache = app.cache, capability_store = store.capabilities })
+      local ctx = new_context({ request = request, params = params, query = query, raw_query_values = query_values, raw_query_all = query_all, scope = route.scope.context or {}, capabilities = graph.capabilities, zig_helpers = opts.zig_helpers, worker_cache = app.cache, capability_store = store.capabilities })
       local plugin_response = execute_scope_plugins(route, ctx, plugin_map)
       if plugin_response then return plugin_response end
       if route.handler.kind == "inline_lua" then
-        local response = route.handler.value(ctx) or ctx.response or ctx:text(204, "")
+        local result = route.handler.value(ctx) or ctx.response
+        if type(result) == "string" then
+          result = { status = 200, content_type = "text/plain; charset=utf-8", body = result }
+        end
+        local response = result or ctx:text(204, "")
         response.http_requests = ctx.http_requests
         response.state = ctx.state
         return response
       elseif route.handler.kind == "lua" then
         local handler = require(route.handler.module)
-        local response = handler(ctx) or ctx.response or ctx:text(204, "")
+        local result = handler(ctx) or ctx.response
+        if type(result) == "string" then
+          result = { status = 200, content_type = "text/plain; charset=utf-8", body = result }
+        end
+        local response = result or ctx:text(204, "")
         response.http_requests = ctx.http_requests
         response.state = ctx.state
         return response
       end
-      return { status = 501, content_type = "text/plain", body = "handler requires Zig runtime" }
+      return { status = 501, content_type = "text/plain; charset=utf-8", body = "handler requires Zig runtime" }
     end
     if match_route(route, route.method, path) then path_matched = true end
   end
-  if path_matched then return { status = 405, content_type = "text/plain", body = "method not allowed" } end
-  return { status = 404, content_type = "text/plain", body = "not found" }
+  if path_matched then return { status = 405, content_type = "text/plain; charset=utf-8", body = "method not allowed" } end
+  return { status = 404, content_type = "text/plain; charset=utf-8", body = "not found" }
 end
 
 return hybrid

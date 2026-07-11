@@ -99,6 +99,9 @@ local function route_shape_descriptor(route)
   table.sort(capabilities, function(a, b) return (a.kind .. ":" .. a.name) < (b.kind .. ":" .. b.name) end)
   return {
     id = route.id,
+    canonical_id = route.canonical_id,
+    http = route.http,
+    message = route.message,
     method = helpers.method_enum(route.method),
     raw_path = route.raw_path,
     path = { segments = segments },
@@ -162,15 +165,43 @@ local function plugin_descriptor(plugin)
   }
 end
 
-local function build_partitions(graph, routes_text, graph_hash, mode)
+local function backend_capabilities(backend)
+  local is_native_ipc = backend == "ipc_unixsocket"
+  return {
+    http_headers = not is_native_ipc,
+    cookies = not is_native_ipc,
+    cors = not is_native_ipc,
+    redirects = not is_native_ipc,
+    ipc_metadata = is_native_ipc,
+    peer_credentials = false,
+    static_files = not is_native_ipc,
+  }
+end
+
+local function backend_transport(backend)
+  return (backend == "ipc_unixsocket" or backend == "ipc_unixsocket_http") and "unix" or "tcp"
+end
+
+local function backend_protocol(backend)
+  return backend == "ipc_unixsocket" and "meteorite.ipc.v0" or "http/1.1"
+end
+
+local function build_partitions(graph, routes_text, graph_hash, mode, backend)
   local routes = {}
+  local messages = {}
   local handlers = {}
   local lua_chunks = {}
   local static_assets = {}
   for _, route in ipairs(graph.routes or {}) do
     local shape = route_shape_descriptor(route)
+    routes[#routes + 1] = { id = route.id, canonical_id = route.canonical_id, message = route.message and route.message.name, method = route.method, path = route.raw_path, hash = helpers.hash_zon(shape) }
+  end
+  for _, route in ipairs(graph.messages or {}) do
+    local shape = route_shape_descriptor(route)
+    messages[#messages + 1] = { id = route.id, canonical_id = route.canonical_id, message = route.message and route.message.name, hash = helpers.hash_zon(shape) }
+  end
+  for _, route in ipairs(graph.nodes or graph.routes or {}) do
     local handler = handler_descriptor(route)
-    routes[#routes + 1] = { id = route.id, method = route.method, path = route.raw_path, hash = helpers.hash_zon(shape) }
     handlers[#handlers + 1] = { id = route.id, kind = handler.kind, hash = helpers.hash_zon(handler) }
     if handler.kind == "inline_lua" then
       lua_chunks[#lua_chunks + 1] = { id = route.id, path = handler.chunk_path, hash = helpers.hash_text(read_file(handler.chunk_path) or "") }
@@ -188,14 +219,19 @@ local function build_partitions(graph, routes_text, graph_hash, mode)
   end
   local runtime = {
     mode = helpers.mode_enum(mode),
-    backend = "fast_http",
+    backend = backend,
+    transport = backend_transport(backend),
+    protocol = backend_protocol(backend),
+    capabilities = backend_capabilities(backend),
     listen = graph.listen or { host = "127.0.0.1", port = 8080 },
     memory = graph.memory_report,
   }
   local route_graph = {}
   for _, route in ipairs(graph.routes or {}) do route_graph[#route_graph + 1] = route_shape_descriptor(route) end
+  local message_graph = {}
+  for _, route in ipairs(graph.messages or {}) do message_graph[#message_graph + 1] = route_shape_descriptor(route) end
   local handler_graph = {}
-  for _, route in ipairs(graph.routes or {}) do handler_graph[#handler_graph + 1] = handler_descriptor(route) end
+  for _, route in ipairs(graph.nodes or graph.routes or {}) do handler_graph[#handler_graph + 1] = handler_descriptor(route) end
   local pattern_graph = {}
   for _, pattern in ipairs(graph.patterns or {}) do pattern_graph[#pattern_graph + 1] = pattern_descriptor(pattern) end
   local lua_chunk_graph = {}
@@ -214,6 +250,7 @@ local function build_partitions(graph, routes_text, graph_hash, mode)
     format = "codegen.partitions.v0",
     graph_hash = graph_hash,
     route_graph_hash = helpers.hash_zon(route_graph),
+    message_graph_hash = helpers.hash_zon(message_graph),
     handler_hash = helpers.hash_zon(handler_graph),
     pattern_hash = helpers.hash_zon(pattern_graph),
     lua_chunk_hash = helpers.hash_zon(lua_chunk_graph),
@@ -222,6 +259,7 @@ local function build_partitions(graph, routes_text, graph_hash, mode)
     runtime_hash = helpers.hash_zon(runtime),
     routes_zon_hash = helpers.hash_text(routes_text),
     routes = routes,
+    messages = messages,
     handlers = handlers,
     patterns = patterns,
     lua_chunks = lua_chunks,
@@ -252,33 +290,38 @@ function emitter.emit(app, opts)
   opts = opts or {}
   local output = opts.output or ".meteorite/graph/current"
   local mode = opts.mode or "dev"
+  local backend = opts.backend or "fast_http"
   fs.mkdir_p(output)
   local graph = app:normalize({ mode = mode })
   graph = graph_emit.prepare_graph(graph, output, mode)
   local routes_zon = {}
   for _, route in ipairs(graph.routes) do routes_zon[#routes_zon + 1] = report.route_to_zon(route) end
+  local messages_zon = {}
+  for _, route in ipairs(graph.messages or {}) do messages_zon[#messages_zon + 1] = report.route_to_zon(route) end
   local routes_text = zon.encode(routes_zon)
+  local messages_text = zon.encode(messages_zon)
   local schemas_text = zon.encode(report.schema_ir(graph))
   local openapi_plan_text = zon.encode(report.openapi_plan(graph))
   graph.memory_report = report.memory_report(graph, routes_text)
-  local graph_hash = helpers.hash_text(routes_text)
-  local partitions = build_partitions(graph, routes_text, graph_hash, mode)
+  local graph_hash = helpers.hash_text(routes_text .. "\n" .. messages_text)
+  local partitions = build_partitions(graph, routes_text, graph_hash, mode, backend)
   local previous_partitions = read_file(output .. "/partition-hashes.tsv")
   local partition_changes = partition_diff.diagnostics(previous_partitions, partitions)
   helpers.write_file(output .. "/routes.zon", routes_text)
+  helpers.write_file(output .. "/messages.zon", messages_text)
   helpers.write_file(output .. "/schemas.zon", schemas_text)
   helpers.write_file(output .. "/openapi-plan.zon", openapi_plan_text)
-  helpers.write_file(output .. "/manifest.zon", zon.encode({ format = "meteorite.graph.v0", meteorite_version = "0.1.0", graph_hash = graph_hash, mode = helpers.mode_enum(mode), partitions = { route_graph = partitions.route_graph_hash, handlers = partitions.handler_hash, patterns = partitions.pattern_hash, lua_chunks = partitions.lua_chunk_hash, capabilities = partitions.capability_hash, runtime = partitions.runtime_hash } }))
+  helpers.write_file(output .. "/manifest.zon", zon.encode({ format = "meteorite.graph.v0", meteorite_version = "0.1.0", graph_hash = graph_hash, mode = helpers.mode_enum(mode), partitions = { route_graph = partitions.route_graph_hash, message_graph = partitions.message_graph_hash, handlers = partitions.handler_hash, patterns = partitions.pattern_hash, lua_chunks = partitions.lua_chunk_hash, capabilities = partitions.capability_hash, runtime = partitions.runtime_hash } }))
   helpers.write_file(output .. "/partitions.zon", zon.encode(partitions))
   helpers.write_file(output .. "/partition-hashes.tsv", partition_diff.encode_tsv(partitions))
   emit_partition_json(partition_changes, output)
-  helpers.write_file(output .. "/runtime.zon", zon.encode({ mode = helpers.mode_enum(mode), lua_runtime = mode ~= "release-static", backend = { __meteorite_enum = true, value = "fast_http" }, workers = { strategy = { __meteorite_enum = true, value = "auto" }, lua_state = { __meteorite_enum = true, value = "single_locked" } }, memory = graph.memory_report }))
-  helpers.write_file(output .. "/capabilities.zon", zon.encode({ backend = "fast_http", methods = { "GET", "POST", "PUT", "PATCH", "DELETE" }, declared = graph.capabilities or {} }))
+  helpers.write_file(output .. "/runtime.zon", zon.encode({ mode = helpers.mode_enum(mode), lua_runtime = mode ~= "release-static", backend = { __meteorite_enum = true, value = backend }, transport = backend_transport(backend), protocol = backend_protocol(backend), capabilities = backend_capabilities(backend), workers = { strategy = { __meteorite_enum = true, value = "auto" }, lua_state = { __meteorite_enum = true, value = "single_locked" } }, memory = graph.memory_report }))
+  helpers.write_file(output .. "/capabilities.zon", zon.encode({ backend = backend, transport = backend_transport(backend), protocol = backend_protocol(backend), backend_capabilities = backend_capabilities(backend), methods = { "GET", "POST", "PUT", "PATCH", "DELETE" }, declared = graph.capabilities or {} }))
   helpers.write_file(output .. "/listen.zon", zon.encode(graph.listen or { host = "127.0.0.1", port = 8080 }))
     helpers.write_file(output .. "/listen_config.zig", "pub const listen_zon = @embedFile(\"listen.zon\");\n")
   helpers.write_file(output .. "/graph_hash.txt", graph_hash .. "\n")
   emit_patterns_report(graph, output)
-  report.emit_build_report(graph, output, mode)
+  report.emit_build_report(graph, output, mode, backend)
   report.emit_luals_aids(graph, output)
   handler_sync.emit_ctx_zig(graph, output)
   handler_sync.emit_zig_aids(graph, output)

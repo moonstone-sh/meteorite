@@ -2,7 +2,7 @@
 
 Purpose: turn Meteorite from a fast compiler prototype into a serious, standards-aligned HTTP application platform. This is a phased checklist, not a claim that every item is already complete.
 
-Last reviewed: 2026-07-07
+Last reviewed: 2026-07-10
 
 ## Release Bar Definitions
 
@@ -40,7 +40,7 @@ Generated-artifact policy: benchmark runs may create `.meteorite/graph/bench`, `
 ## Phase 2 — Request API Surface
 
 - [x] Route params support typed access, missing-param diagnostics, and generated Zig context types.
-- [x] Query parsing supports repeated keys, booleans, integers, optional values, and malformed encoding behavior.
+- [x] Query parsing supports repeated keys, booleans, integers, optional values, malformed encoding behavior, percent-decoding, and multi-value access via `ctx:query_all()`.
 - [x] Request headers are case-insensitive and exposed consistently to Lua and Zig handlers.
 - [x] Cookies parser supports request cookies, quoted values, percent-encoding policy, and malformed cookie handling.
 - [x] JSON body parser exists for Lua dev/invoke and runtime paths or is explicitly exposed as userland helper.
@@ -51,9 +51,14 @@ Generated-artifact policy: benchmark runs may create `.meteorite/graph/bench`, `
 
 Multipart P1 design: multipart parsing is intentionally not a P0 runtime helper. The P1 parser must be opt-in per route, require explicit `max_parts`, `max_field_bytes`, `max_file_bytes`, and total body limits, stream file parts to caller-owned temp storage or a configured sink, reject nested multipart by default, sanitize filenames as metadata only, clean partial temp files on disconnect/error, and expose deterministic `400`/`413` diagnostics. Until implemented, apps should use raw `ctx:body()` with route body limits or an external upload service for multipart traffic.
 
+Query decoding policy: query parameter values are percent-decoded before validation and handler access in both the compiled Zig runtime and the local hybrid invoke path. This closes a previous inconsistency where form body and cookie values were decoded but query values were returned raw. The Zig `queryValue` function decodes into arena-allocated memory (zero-copy when no percent signs are present), and the Lua `parse_query` function applies the same `percent_decode` helper. Malformed percent-encoding (`%zz`, `%0a`) is still rejected at the server level by `queryEncodingValid` before values reach handlers.
+
+Query multi-value policy: `ctx:query(name)` returns the first value for a repeated key (first-wins), matching previous behavior. `ctx:query_all(name)` returns all values as a Lua array (`string[]`), enabling handlers to access `?tag=pepe&tag=pope` as `{ "pepe", "pope" }`. The API is available in both the compiled runtime (Zig `Context.queryAll`, `l_query_all` binding, vtable entry) and the hybrid invoke path (`Context:query_all` method). The web standards fixture exercises both `query_all` and percent-decoded query values on the compiled server and through hybrid invoke.
+
 ## Phase 3 — Response API Surface
 
 - [x] Lua response tables support `status`, `content_type`, `body`, and `headers`.
+- [x] Bare string returns from Lua handlers produce `200 text/plain; charset=utf-8` consistently across compiled runtime and hybrid invoke.
 - [x] `ctx:text`, `ctx:json`, and `ctx:bytes` support optional response headers.
 - [x] Zig context has response helpers for text, JSON, bytes, redirects, empty status responses, and custom headers.
 - [x] Header behavior is identical for `fast_http` and `std_http` backends.
@@ -64,6 +69,8 @@ Multipart P1 design: multipart parsing is intentionally not a P0 runtime helper.
 - [x] Response compression is opt-in and does not corrupt `Content-Length` or `ETag` semantics.
 
 JSON response policy: Lua runtime `ctx:json()` uses Meteorite's built-in Lua-value encoder, not a host-dependent JSON library. It emits Lua arrays with contiguous integer keys as JSON arrays, other tables as JSON objects, `nil` as `null`, booleans and numbers as JSON primitives, unsupported Lua values as `null`, and escapes `\\`, `"`, and ASCII control bytes as JSON string escapes. Zig `ctx.json()` and `ctx.jsonWithHeaders()` intentionally accept already-encoded JSON bytes; typed Zig serialization is a separate P1 feature.
+
+String-return policy: a bare string return from an inline Lua handler or scoped plugin `execute` function is sugar for `200 text/plain; charset=utf-8` with the string as the body. In the compiled runtime, `finishLuaResponse` detects `lua_isstring` and calls `vtable.text(ctx, 200, string)`. In the hybrid invoke path, string returns are normalized to `{ status = 200, content_type = "text/plain; charset=utf-8", body = result }` before response fields are attached. This fixes a previous inconsistency where hybrid invoke used `text/plain` without charset for string returns, plugin returns, 404/405, and 501 responses. Use string returns for simple status/echo endpoints; for custom status codes, content types, or headers, return a response table or use `ctx:text()`, `ctx:json()`, or `ctx:bytes()`.
 
 Redirect policy: Zig `ctx.redirect(status, location)` accepts only `301`, `302`, `303`, `307`, or `308`, rejects empty or CRLF-containing `Location` values, and emits an empty response with a validated `Location` header. Lua can currently emit redirects with response tables; a Lua redirect helper remains part of cookie/response-builder follow-up work.
 
@@ -90,7 +97,7 @@ Hook phase contract: `pre_tree` runs before route params exist and must not read
 
 Ordering contract: route pipelines are validated around the first `handle` stage. `pre_tree`, `post_match`, and `pre_handler` hooks must appear before `handle`; `post_handler`, `observe`, and `error` hooks must appear after `handle`. Transform stages remain order-preserving middleware and may appear before or after `handle` so plugins such as cache lookup/store can model before/after behavior without a separate stage kind.
 
-Scoped middleware runtime: scoped Lua plugins execute before matched route handlers, can short-circuit by returning a response or calling a response helper, and share request-local string state with the eventual handler through `ctx:set()`/`ctx:get()`. Mounted child routes inherit the same plugin chain and scope context used by the route graph, so compiled fast_http/std_http behavior matches the local hybrid invoke contract for scoped plugins.
+Scoped middleware runtime: scoped Lua plugins execute before matched route handlers, can short-circuit by returning a response or calling a response helper, and share request-local string state with the eventual handler through `ctx:set()`/`ctx:get()`. Mounted child routes inherit the same plugin chain and scope context used by the route graph, so compiled fast_http/std_http behavior matches the local hybrid invoke contract for scoped plugins. Plugin `execute` string returns are now normalized to `text/plain; charset=utf-8` in hybrid invoke, matching the compiled runtime.
 
 Error boundary runtime: scoped middleware/plugin failures, Lua handler failures, and Zig handler errors now route through the same route-level boundary. If no response has been committed, Meteorite returns `500 text/plain` with `internal server error` and `X-Meteorite-Error-Boundary: route`; if a response was already committed, the boundary logs and closes the connection rather than attempting a second response.
 
@@ -140,7 +147,7 @@ OpenAPI plan artifact: graph generation emits `openapi-plan.zon` with format `me
 
 Runtime validation diagnostics: query, header, cookie, JSON body, and URL-encoded form validators now fail with stable `400 validation error` responses when a matched route has missing or invalid fields. Responses include `X-Meteorite-Validation-Domain`, `X-Meteorite-Validation-Field`, and `X-Meteorite-Validation-Reason` (`missing` or `invalid`) across both HTTP backends. Path params remain route-matching constraints and continue to produce `404` when no route matches.
 
-Local hybrid invoke consistency: `cli.hybrid.invoke()` now mirrors compiled runtime validator semantics for matched-route query, header, cookie, JSON body, and URL-encoded form validators, including the same `400 validation error` body and `X-Meteorite-Validation-*` headers. The web standards fixture runs direct local invoke checks for each validator domain before exercising the compiled server.
+Local hybrid invoke consistency: `cli.hybrid.invoke()` now mirrors compiled runtime validator semantics for matched-route query, header, cookie, JSON body, and URL-encoded form validators, including the same `400 validation error` body and `X-Meteorite-Validation-*` headers. The hybrid invoke context also provides method-based access parity with the compiled runtime: `Context:query(name)`, `Context:param(name)`, and `Context:query_all(name)` are now available as methods rather than only table fields, matching the `.lazy_context` arg_mode contract used by inline Lua handlers that name their first parameter `ctx` or `c`. Bare string returns from handlers are normalized to `{ status = 200, content_type = "text/plain; charset=utf-8", body = result }` in hybrid invoke, matching the compiled runtime's `finishLuaResponse` string path. The web standards fixture runs direct local invoke checks for each validator domain, context method access, query decoding, query_all, and string-return content-type before exercising the compiled server.
 
 Routes graph inspection: `meteorite routes --graph` now emits stable `meteorite.routes.v0` JSON for developer tooling. Each route entry includes method/path/handler facts, params and query schema summaries, header/cookie/JSON/form validation domains, declared response status schemas, runtime requirements, normalized scope plugin ids, and pipeline stages. The web standards fixture parses this JSON and asserts the validation contract route contains the expected params, validators, response schema, runtime flag, and root scope.
 
@@ -159,10 +166,12 @@ Dev reload classification: the dev supervisor now distinguishes Lua-only handler
 - [x] `meteorite routes --graph` emits stable JSON for route/middleware/validator inspection.
 - [x] `meteorite doctor` checks Lua runtime, Zig version, Moonstone env, Ballad, ports, generated graph, and static/hybrid release readiness.
 - [x] `meteorite invoke` returns status, content-type, headers, and body for local route checks.
-- [x] Generated docs/stubs show complete context API, including response headers and cookies.
+- [x] Generated docs/stubs show complete context API, including response headers, cookies, `query_all`, and `param` methods. The `meteorite.lua` facade now defines `MeteoriteContext` with all 30+ method/field annotations, plus `MeteoriteHttpClient`, `MeteoriteAuthClient`, `MeteoriteZigClient`, `MeteoritePlugin`, and `MeteoriteHttpResponse` classes for LuaLS/EmmyLua IDE support without requiring a build.
 - [x] `meteorite init` templates include static, hybrid, middleware, CORS, JSON API, and static-site examples.
 - [x] Error messages identify source location, route id, mode, and remediation.
 - [x] Dev reload differentiates Lua-only, graph-shape, Zig, and asset changes.
+
+LuaLS annotation coverage: the `meteorite.lua` facade now carries inline `---@class MeteoriteContext` annotations with all context methods (`query`, `query_all`, `param`, `header`, `body`, `json_body`, `form_body`, `text`, `json`, `bytes`, `cookie`, `set_cookie`, `request_id`, `secure_headers`, `cors_headers`, `constant_time_equal`, `basic_auth`, `bearer_token`, `safe_header`, `safe_headers`, `log`, `timing_stage`, `server_timing`, `http`, `auth`, `zig`, `get`, `set`, `scope`) so language servers provide autocomplete and type checking before a build generates the full per-route meta files. The `MeteoriteHandler` alias documents that string returns produce `200 text/plain; charset=utf-8`, table returns provide `{status?, content_type?, body?, headers?}`, and `nil` means no response. The generated `report.lua` LuaLS output also includes `query_all` and `param` method annotations. `EXAMPLES.md` documents the `arg_mode` contract: `ctx`/`c` → `lazy_context` (method-based access), `req` → `request_table` (pre-populated table access), no params → `no_args`, other names → `direct_params`.
 
 ## Phase 8 — Release And Deployment
 

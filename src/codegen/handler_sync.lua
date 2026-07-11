@@ -13,6 +13,11 @@ local detect_lua_version = helpers.detect_lua_version
 local fs = require("utils.fs")
 
 local handler_sync = {}
+
+local function graph_nodes(graph)
+  return graph.nodes or graph.routes or {}
+end
+
 function handler_sync.zig_param_type(param)
   local kind = param.type or param.kind or "string"
   local base
@@ -83,6 +88,8 @@ function handler_sync.emit_ctx_zig(graph, output)
     "    method: *const fn (*anyopaque) []const u8,",
     "    path: *const fn (*anyopaque) []const u8,",
     "    param: *const fn (*anyopaque, []const u8) ?[]const u8,",
+    "    message: *const fn (*anyopaque) []const u8,",
+    "    metadata: *const fn (*anyopaque, []const u8) ?[]const u8,",
     "    query: *const fn (*anyopaque, []const u8) ?[]const u8,",
     "    header: *const fn (*anyopaque, []const u8) ?[]const u8,",
     "    request_id: *const fn (*anyopaque) anyerror![]const u8,",
@@ -105,6 +112,8 @@ function handler_sync.emit_ctx_zig(graph, output)
     "        fn method(ptr: *anyopaque) []const u8 { return @tagName(cast(ptr).method()); }",
     "        fn path(ptr: *anyopaque) []const u8 { return cast(ptr).path(); }",
     "        fn param(ptr: *anyopaque, name: []const u8) ?[]const u8 { return cast(ptr).param(name); }",
+    "        fn message(ptr: *anyopaque) []const u8 { return cast(ptr).message(); }",
+    "        fn metadata(ptr: *anyopaque, name: []const u8) ?[]const u8 { return cast(ptr).metadata(name); }",
     "        fn query(ptr: *anyopaque, name: []const u8) ?[]const u8 { return cast(ptr).query(name); }",
     "        fn header(ptr: *anyopaque, name: []const u8) ?[]const u8 { return cast(ptr).header(name); }",
     "        fn requestId(ptr: *anyopaque) anyerror![]const u8 { return cast(ptr).requestId(); }",
@@ -119,7 +128,7 @@ function handler_sync.emit_ctx_zig(graph, output)
     "        fn emptyWithHeaders(ptr: *anyopaque, status: u16, headers: []const Header) anyerror!void { return cast(ptr).emptyWithHeaders(status, headers); }",
     "        fn redirect(ptr: *anyopaque, status: u16, location: []const u8) anyerror!void { return cast(ptr).redirect(status, location); }",
     "        fn setCookie(ptr: *anyopaque, buffer: []u8, name: []const u8, cookie_value: []const u8, options: CookieOptions) anyerror!Header { return cast(ptr).setCookie(buffer, name, cookie_value, options); }",
-    "        pub const value = VTable{ .method = method, .path = path, .param = param, .query = query, .header = header, .request_id = requestId, .body = body, .text = text, .text_with_headers = textWithHeaders, .bytes = bytes, .bytes_with_headers = bytesWithHeaders, .json = json, .json_with_headers = jsonWithHeaders, .empty = empty, .empty_with_headers = emptyWithHeaders, .redirect = redirect, .set_cookie = setCookie };",
+    "        pub const value = VTable{ .method = method, .path = path, .param = param, .message = message, .metadata = metadata, .query = query, .header = header, .request_id = requestId, .body = body, .text = text, .text_with_headers = textWithHeaders, .bytes = bytes, .bytes_with_headers = bytesWithHeaders, .json = json, .json_with_headers = jsonWithHeaders, .empty = empty, .empty_with_headers = emptyWithHeaders, .redirect = redirect, .set_cookie = setCookie };",
     "    };",
     "}",
     "",
@@ -131,7 +140,7 @@ function handler_sync.emit_ctx_zig(graph, output)
     "",
     "pub const ctx = struct {",
   }
-  for _, route in ipairs(graph.routes) do
+  for _, route in ipairs(graph_nodes(graph)) do
     local id = helpers.zig_ident(route.id)
     local params_name = "Params_" .. id
     local query_name = "Query_" .. id
@@ -170,6 +179,8 @@ function handler_sync.emit_ctx_zig(graph, output)
     lines[#lines + 1] = "        pub fn method(self: " .. id .. ") []const u8 { return self.vtable.method(self.raw); }"
     lines[#lines + 1] = "        pub fn path(self: " .. id .. ") []const u8 { return self.vtable.path(self.raw); }"
     lines[#lines + 1] = "        pub fn param(self: " .. id .. ", name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }"
+    lines[#lines + 1] = "        pub fn message(self: " .. id .. ") []const u8 { return self.vtable.message(self.raw); }"
+    lines[#lines + 1] = "        pub fn metadata(self: " .. id .. ", name: []const u8) ?[]const u8 { return self.vtable.metadata(self.raw, name); }"
     lines[#lines + 1] = "        pub fn queryValue(self: " .. id .. ", name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }"
     lines[#lines + 1] = "        pub fn header(self: " .. id .. ", name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }"
     lines[#lines + 1] = "        pub fn requestId(self: " .. id .. ") ![]const u8 { return self.vtable.request_id(self.raw); }"
@@ -220,7 +231,7 @@ function handler_sync.emit_zig_aids(graph, output)
     "// Copy these stubs into zig/handlers.zig or use `moon meteorite sync` later.",
     "",
   }
-  for _, route in ipairs(graph.routes) do
+  for _, route in ipairs(graph_nodes(graph)) do
     if route.handler.kind == "zig" then
       lines[#lines + 1] = handler_sync.zig_stub_body(route)
       lines[#lines + 1] = ""
@@ -253,7 +264,7 @@ end
 
 function handler_sync.grouped_zig_routes(graph)
   local routes = {}
-  for _, route in ipairs(graph.routes) do
+  for _, route in ipairs(graph_nodes(graph)) do
     if route.handler.kind == "zig" then routes[#routes + 1] = route end
   end
   table.sort(routes, function(a, b) return a.id < b.id end)
@@ -339,7 +350,7 @@ function handler_sync.sync_handler_files(graph, output, mode)
     end
   end
 
-  for _, route in ipairs(graph.routes) do
+  for _, route in ipairs(graph_nodes(graph)) do
     if route.handler.kind == "zig_file" and mode ~= "release-static" then
       local target = helpers.path_join(root, route.handler.path)
       if not helpers.file_exists(target) then

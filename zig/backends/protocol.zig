@@ -1,12 +1,75 @@
 const std = @import("std");
 
-/// Shared HTTP protocol types used by all backends.
-/// Backends import this to avoid duplicating counter logic and method enums.
+/// Shared Meteorite protocol types used by all backends.
+/// HTTP adapters use the HTTP-shaped aliases below; IPC adapters should use
+/// the transport-neutral request/response types as they come online.
 pub const Method = enum { GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS, OTHER };
 
 pub const Header = struct {
     name: []const u8,
     value: []const u8,
+};
+
+pub const MetadataEntry = struct {
+    name: []const u8,
+    value: []const u8,
+};
+
+pub const Transport = enum { tcp, unix };
+
+pub const Protocol = enum { http_1_1, meteorite_ipc_v0 };
+
+pub const ResultCode = enum(u16) {
+    ok = 0,
+    not_found = 1,
+    method_not_allowed = 2,
+    validation_error = 3,
+    payload_too_large = 4,
+    malformed_message = 5,
+    unauthorized_peer = 6,
+    busy = 7,
+    timeout = 8,
+    internal_error = 9,
+};
+
+pub const Peer = struct {
+    uid: ?u32 = null,
+    gid: ?u32 = null,
+    pid: ?u32 = null,
+};
+
+pub const MeteoriteRequest = struct {
+    route_key: []const u8 = "",
+    message: []const u8 = "",
+    method: ?Method = null,
+    path: ?[]const u8 = null,
+    params: []const MetadataEntry = &.{},
+    query: []const MetadataEntry = &.{},
+    metadata: []const MetadataEntry = &.{},
+    body: []const u8 = "",
+    content_type: ?[]const u8 = null,
+    request_id: []const u8 = "",
+    peer: ?Peer = null,
+};
+
+pub const MeteoriteResponse = struct {
+    result: ResultCode = .ok,
+    status: ?u16 = null,
+    content_type: []const u8 = "text/plain; charset=utf-8",
+    metadata: []const MetadataEntry = &.{},
+    headers: []const Header = &.{},
+    body: []const u8 = "",
+    close_policy: enum { keep_open, close_after_response } = .keep_open,
+};
+
+pub const BackendCapabilities = struct {
+    http_headers: bool = false,
+    cookies: bool = false,
+    cors: bool = false,
+    redirects: bool = false,
+    ipc_metadata: bool = false,
+    peer_credentials: bool = false,
+    static_files: bool = false,
 };
 
 pub const Counters = struct {
@@ -25,6 +88,10 @@ pub const Counters = struct {
     bytes_read: u64 = 0,
     bytes_written: u64 = 0,
     connection_errors: u64 = 0,
+    malformed_frames: u64 = 0,
+    oversized_frames: u64 = 0,
+    protocol_errors: u64 = 0,
+    early_closes: u64 = 0,
     max_active_connections: u64 = 0,
     queue_depth: u64 = 0,
     max_queue_depth: u64 = 0,
@@ -50,6 +117,10 @@ pub const AtomicCounters = struct {
     bytes_read: AtomicCounter = AtomicCounter.init(0),
     bytes_written: AtomicCounter = AtomicCounter.init(0),
     connection_errors: AtomicCounter = AtomicCounter.init(0),
+    malformed_frames: AtomicCounter = AtomicCounter.init(0),
+    oversized_frames: AtomicCounter = AtomicCounter.init(0),
+    protocol_errors: AtomicCounter = AtomicCounter.init(0),
+    early_closes: AtomicCounter = AtomicCounter.init(0),
     max_active_connections: AtomicCounter = AtomicCounter.init(0),
     queue_depth: AtomicCounter = AtomicCounter.init(0),
     max_queue_depth: AtomicCounter = AtomicCounter.init(0),
@@ -96,6 +167,10 @@ pub fn snapshotCounters(c: *const AtomicCounters) Counters {
         .bytes_read = c.bytes_read.load(.monotonic),
         .bytes_written = c.bytes_written.load(.monotonic),
         .connection_errors = c.connection_errors.load(.monotonic),
+        .malformed_frames = c.malformed_frames.load(.monotonic),
+        .oversized_frames = c.oversized_frames.load(.monotonic),
+        .protocol_errors = c.protocol_errors.load(.monotonic),
+        .early_closes = c.early_closes.load(.monotonic),
         .max_active_connections = c.max_active_connections.load(.monotonic),
         .queue_depth = c.queue_depth.load(.monotonic),
         .max_queue_depth = c.max_queue_depth.load(.monotonic),
@@ -133,6 +208,13 @@ pub fn resetAuditCounters(c: *AtomicCounters) void {
     c.max_queue_depth.store(0, .monotonic);
     c.budget_rejections_total.store(0, .monotonic);
     c.backpressure_total.store(0, .monotonic);
+    c.bytes_read.store(0, .monotonic);
+    c.bytes_written.store(0, .monotonic);
+    c.connection_errors.store(0, .monotonic);
+    c.malformed_frames.store(0, .monotonic);
+    c.oversized_frames.store(0, .monotonic);
+    c.protocol_errors.store(0, .monotonic);
+    c.early_closes.store(0, .monotonic);
 }
 
 pub fn threadSpawned(c: *AtomicCounters) void {

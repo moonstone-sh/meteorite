@@ -171,7 +171,7 @@ pub fn query(req: *Request) []const u8 {
 }
 
 pub fn header(req: *Request, header_name: []const u8) ?[]const u8 {
-    var it = req.inner.iterateHeaders();
+    var it = std.http.HeaderIterator.init(req.inner.head_buffer);
     while (it.next()) |h| {
         if (std.ascii.eqlIgnoreCase(h.name, header_name)) return h.value;
     }
@@ -284,7 +284,7 @@ fn respondSmall(req: *Request, reason: []const u8, content_type: []const u8, bod
 
 fn estimateRequestHeadBytes(req: *Request) u64 {
     var total: u64 = @tagName(req.inner.head.method).len + 1 + req.inner.head.target.len + " HTTP/1.1\r\n\r\n".len;
-    var it = req.inner.iterateHeaders();
+    var it = std.http.HeaderIterator.init(req.inner.head_buffer);
     while (it.next()) |h| total += h.name.len + 2 + h.value.len + 2;
     return total;
 }

@@ -55,8 +55,14 @@ else
 
 const SelectedBackend = if (std.mem.eql(u8, build_info.backend, "fast_http"))
     meteorite.backends.fast_http
+else if (std.mem.eql(u8, build_info.backend, "std_http"))
+    meteorite.backends.std_http
+else if (std.mem.eql(u8, build_info.backend, "ipc_unixsocket"))
+    meteorite.backends.unix_socket
+else if (std.mem.eql(u8, build_info.backend, "ipc_unixsocket_http"))
+    @compileError("ipc_unixsocket_http is planned but not implemented; use std_http, fast_http, or ipc_unixsocket")
 else
-    meteorite.backends.std_http;
+    @compileError("unsupported Meteorite backend; expected ipc_unixsocket, ipc_unixsocket_http, std_http, or fast_http");
 
 const App = meteorite.compile(.{
     .graph = graph,

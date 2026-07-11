@@ -7,6 +7,7 @@ const protocol = @import("meteorite_protocol");
 pub const backends = struct {
     pub const std_http = @import("backends/std_http.zig");
     pub const fast_http = @import("backends/fast_http.zig");
+    pub const unix_socket = @import("backends/unix_socket.zig");
 };
 
 pub const ListenConfig = struct {
@@ -87,12 +88,27 @@ pub fn compile(comptime spec: anytype) type {
                 thread.detach();
             }
 
-            var server = try backend.listen(.{ .host = config.host, .port = config.port, .io = io });
+            var server = if (@hasField(backend.ListenConfig, "path"))
+                try backend.listen(.{ .path = build_info.unix_socket_path, .mode = build_info.unix_socket_mode, .unlink_stale = build_info.unix_socket_unlink_stale, .io = io })
+            else
+                try backend.listen(.{ .host = config.host, .port = config.port, .io = io });
             defer server.deinit();
 
             signals.installHandlers();
 
-            std.debug.print("Meteorite build\n  mode: {s}\n  backend: {s}\n  Lua runtime: {s}\n  Lua state: single_locked\n  workers: auto\n  inline Lua handlers: {d}\n  Zig handlers: {d}\n  routes: {d}\n  artifact: dist/server\nListening: http://{s}:{d}\n", .{
+            if (comptime std.mem.eql(u8, build_info.transport, "unix")) {
+                std.debug.print("Meteorite build\n  mode: {s}\n  backend: {s}\n  transport: {s}\n  protocol: {s}\n  Lua runtime: {s}\n  Lua state: single_locked\n  workers: auto\n  inline Lua handlers: {d}\n  Zig handlers: {d}\n  routes: {d}\n  artifact: dist/server\nListening: unix://{s}\n", .{
+                    if (graph_requires_lua) "hybrid" else "static",
+                    build_info.backend,
+                    build_info.transport,
+                    build_info.protocol,
+                    if (graph_requires_lua) "included" else "removed",
+                    inline_lua_handlers,
+                    zig_handlers,
+                    graph.routes.len,
+                    build_info.unix_socket_path,
+                });
+            } else std.debug.print("Meteorite build\n  mode: {s}\n  backend: {s}\n  Lua runtime: {s}\n  Lua state: single_locked\n  workers: auto\n  inline Lua handlers: {d}\n  Zig handlers: {d}\n  routes: {d}\n  artifact: dist/server\nListening: http://{s}:{d}\n", .{
                 if (graph_requires_lua) "hybrid" else "static",
                 backend.name,
                 if (graph_requires_lua) "included" else "removed",
@@ -256,8 +272,8 @@ pub fn compile(comptime spec: anytype) type {
                 var arena_buffer: [graph.max_request_arena_bytes]u8 = undefined;
                 var arena_state = std.heap.FixedBufferAllocator.init(&arena_buffer);
                 const arena = arena_state.allocator();
-                request.body_cache = null;
-                request.close_after_response = true;
+                if (!@hasField(@TypeOf(request.*), "frame_buffer")) request.body_cache = null;
+                request.close_after_response = !@hasField(@TypeOf(request.*), "frame_buffer");
                 // Cache current time for Date header in responses
                 if (@hasField(@TypeOf(request.*), "date_seconds")) {
                     request.date_seconds = global_cached_time.load(.acquire);
@@ -286,6 +302,7 @@ pub fn compile(comptime spec: anytype) type {
                     error.HeaderTooLarge => backend.respondParseError(request, 400, "bad request"),
                     error.StreamTooLong => backend.respondParseError(request, 400, "bad request"),
                     error.BadRequest => backend.respondParseError(request, 400, "bad request"),
+                    error.PayloadTooLarge => backend.respondParseError(request, 413, "payload too large"),
                     else => {},
                 }
             }
@@ -294,7 +311,7 @@ pub fn compile(comptime spec: anytype) type {
         pub fn countersJson(allocator: std.mem.Allocator) ![]const u8 {
             const c = backend.snapshotCounters();
             const lua = lua_runtime.snapshotStats();
-            const prefix = try std.fmt.allocPrint(allocator, "{{\"backend\":\"{s}\",\"connection_strategy\":\"{s}\",\"bounded\":{},\"active_connections\":{d},\"open_connections_current\":{d},\"inflight_current\":{d},\"inflight_requests_current\":{d},\"inflight_max\":{d},\"inflight_requests_max\":{d},\"open_connections_max\":{d},\"total_connections\":{d},\"accepted_connections\":{d},\"accepted_total\":{d},\"completed_total\":{d},\"threads_spawned\":{d},\"requests_served\":{d},\"requests_per_connection\":{d},\"keepalive_reuse_count\":{d},\"connection_close_count\":{d},\"bytes_read\":{d},\"bytes_written\":{d},\"connection_errors\":{d}", .{ backend.name, backend.connection_strategy, backend.bounded, c.active_connections, c.active_connections, c.inflight_current, c.inflight_current, c.inflight_max, c.inflight_max, c.max_active_connections, c.total_connections, c.accepted_connections, c.accepted_total, c.completed_total, c.threads_spawned, c.requests_served, c.requests_per_connection, c.keepalive_reuse_count, c.connection_close_count, c.bytes_read, c.bytes_written, c.connection_errors });
+            const prefix = try std.fmt.allocPrint(allocator, "{{\"backend\":\"{s}\",\"connection_strategy\":\"{s}\",\"bounded\":{},\"active_connections\":{d},\"open_connections_current\":{d},\"inflight_current\":{d},\"inflight_requests_current\":{d},\"inflight_max\":{d},\"inflight_requests_max\":{d},\"open_connections_max\":{d},\"total_connections\":{d},\"accepted_connections\":{d},\"accepted_total\":{d},\"completed_total\":{d},\"threads_spawned\":{d},\"requests_served\":{d},\"requests_per_connection\":{d},\"keepalive_reuse_count\":{d},\"connection_close_count\":{d},\"bytes_read\":{d},\"bytes_written\":{d},\"connection_errors\":{d},\"malformed_frames\":{d},\"oversized_frames\":{d},\"protocol_errors\":{d},\"early_closes\":{d}", .{ backend.name, backend.connection_strategy, backend.bounded, c.active_connections, c.active_connections, c.inflight_current, c.inflight_current, c.inflight_max, c.inflight_max, c.max_active_connections, c.total_connections, c.accepted_connections, c.accepted_total, c.completed_total, c.threads_spawned, c.requests_served, c.requests_per_connection, c.keepalive_reuse_count, c.connection_close_count, c.bytes_read, c.bytes_written, c.connection_errors, c.malformed_frames, c.oversized_frames, c.protocol_errors, c.early_closes });
             defer allocator.free(prefix);
             const pressure = try std.fmt.allocPrint(allocator, ",\"max_active_connections\":{d},\"queue_depth\":{d},\"queue_depth_current\":{d},\"max_queue_depth\":{d},\"queue_depth_max\":{d},\"worker_queue_depth_max\":{d},\"budget_capacity\":{d},\"budget_rejections_total\":{d},\"backpressure_total\":{d},\"dropped_connections\":{d}", .{ c.max_active_connections, c.queue_depth, c.queue_depth, c.max_queue_depth, c.max_queue_depth, c.worker_queue_depth_max, c.budget_capacity, c.budget_rejections_total, c.backpressure_total, c.dropped_connections });
             defer allocator.free(pressure);
@@ -306,9 +323,9 @@ pub fn compile(comptime spec: anytype) type {
         pub fn metaJson(allocator: std.mem.Allocator) ![]const u8 {
             const c = backend.snapshotCounters();
             const lua = lua_runtime.snapshotStats();
-            const prefix = try std.fmt.allocPrint(allocator, "{{\"meteorite_mode\":\"{s}\",\"zig_optimize\":\"{s}\",\"target\":\"{s}\",\"backend\":\"{s}\",\"connection_strategy\":\"{s}\",\"backend_strategy\":\"{s}\",\"worker_strategy\":\"{s}\",\"bounded\":{},\"fast_http_workers\":{d},\"fast_http_queue\":{d},\"router_dispatch\":\"{s}\",\"worker_count\":{d},\"lua_runtime\":{},\"hybrid_profile\":\"{s}\",\"lua_state_strategy\":\"{s}\",\"lua_handler_ref_strategy\":\"{s}\",\"capability_store_strategy\":\"{s}\",\"require_cache_strategy\":\"{s}\"", .{ build_info.meteorite_mode, build_info.zig_optimize, build_info.target, backend.name, backend.connection_strategy, backend.connection_strategy, backend.connection_strategy, backend.bounded, build_info.fast_http_workers, build_info.fast_http_queue, build_info.router_dispatch, c.threads_spawned, build_info.lua_runtime, build_info.hybrid_profile, lua_runtime.lua_state_strategy, lua_runtime.lua_handler_ref_strategy, lua_runtime.capability_store_strategy, lua_runtime.require_cache_strategy });
+            const prefix = try std.fmt.allocPrint(allocator, "{{\"meteorite_mode\":\"{s}\",\"zig_optimize\":\"{s}\",\"target\":\"{s}\",\"backend\":\"{s}\",\"transport\":\"{s}\",\"protocol\":\"{s}\",\"capabilities\":{{\"http_headers\":{},\"cookies\":{},\"cors\":{},\"redirects\":{},\"ipc_metadata\":{},\"peer_credentials\":{},\"static_files\":{}}},\"connection_strategy\":\"{s}\",\"backend_strategy\":\"{s}\",\"worker_strategy\":\"{s}\",\"bounded\":{},\"fast_http_workers\":{d},\"fast_http_queue\":{d},\"router_dispatch\":\"{s}\",\"worker_count\":{d},\"lua_runtime\":{},\"hybrid_profile\":\"{s}\",\"lua_state_strategy\":\"{s}\",\"lua_handler_ref_strategy\":\"{s}\",\"capability_store_strategy\":\"{s}\",\"require_cache_strategy\":\"{s}\"", .{ build_info.meteorite_mode, build_info.zig_optimize, build_info.target, backend.name, build_info.transport, build_info.protocol, build_info.capability_http_headers, build_info.capability_cookies, build_info.capability_cors, build_info.capability_redirects, build_info.capability_ipc_metadata, build_info.capability_peer_credentials, build_info.capability_static_files, backend.connection_strategy, backend.connection_strategy, backend.connection_strategy, backend.bounded, build_info.fast_http_workers, build_info.fast_http_queue, build_info.router_dispatch, c.threads_spawned, build_info.lua_runtime, build_info.hybrid_profile, lua_runtime.lua_state_strategy, lua_runtime.lua_handler_ref_strategy, lua_runtime.capability_store_strategy, lua_runtime.require_cache_strategy });
             defer allocator.free(prefix);
-            const counters_suffix = try std.fmt.allocPrint(allocator, ",\"active_connections\":{d},\"open_connections_current\":{d},\"inflight_current\":{d},\"inflight_requests_current\":{d},\"inflight_max\":{d},\"inflight_requests_max\":{d},\"open_connections_max\":{d},\"total_connections\":{d},\"accepted_connections\":{d},\"accepted_total\":{d},\"completed_total\":{d},\"threads_spawned\":{d},\"requests_served\":{d},\"requests_per_connection\":{d},\"bytes_read\":{d},\"bytes_written\":{d},\"connection_errors\":{d}", .{ c.active_connections, c.active_connections, c.inflight_current, c.inflight_current, c.inflight_max, c.inflight_max, c.max_active_connections, c.total_connections, c.accepted_connections, c.accepted_total, c.completed_total, c.threads_spawned, c.requests_served, c.requests_per_connection, c.bytes_read, c.bytes_written, c.connection_errors });
+            const counters_suffix = try std.fmt.allocPrint(allocator, ",\"active_connections\":{d},\"open_connections_current\":{d},\"inflight_current\":{d},\"inflight_requests_current\":{d},\"inflight_max\":{d},\"inflight_requests_max\":{d},\"open_connections_max\":{d},\"total_connections\":{d},\"accepted_connections\":{d},\"accepted_total\":{d},\"completed_total\":{d},\"threads_spawned\":{d},\"requests_served\":{d},\"requests_per_connection\":{d},\"bytes_read\":{d},\"bytes_written\":{d},\"connection_errors\":{d},\"malformed_frames\":{d},\"oversized_frames\":{d},\"protocol_errors\":{d},\"early_closes\":{d}", .{ c.active_connections, c.active_connections, c.inflight_current, c.inflight_current, c.inflight_max, c.inflight_max, c.max_active_connections, c.total_connections, c.accepted_connections, c.accepted_total, c.completed_total, c.threads_spawned, c.requests_served, c.requests_per_connection, c.bytes_read, c.bytes_written, c.connection_errors, c.malformed_frames, c.oversized_frames, c.protocol_errors, c.early_closes });
             defer allocator.free(counters_suffix);
             const pressure_suffix = try std.fmt.allocPrint(allocator, ",\"max_active_connections\":{d},\"queue_depth\":{d},\"queue_depth_current\":{d},\"max_queue_depth\":{d},\"queue_depth_max\":{d},\"worker_queue_depth_max\":{d},\"budget_capacity\":{d},\"budget_rejections_total\":{d},\"backpressure_total\":{d},\"dropped_connections\":{d}", .{ c.max_active_connections, c.queue_depth, c.queue_depth, c.max_queue_depth, c.max_queue_depth, c.worker_queue_depth_max, c.budget_capacity, c.budget_rejections_total, c.backpressure_total, c.dropped_connections });
             defer allocator.free(pressure_suffix);
@@ -318,7 +335,7 @@ pub fn compile(comptime spec: anytype) type {
         }
 
         pub fn buildInfoJson(allocator: std.mem.Allocator) ![]const u8 {
-            return std.fmt.allocPrint(allocator, "{{\"format\":\"meteorite.info.v0\",\"meteorite_mode\":\"{s}\",\"zig_optimize\":\"{s}\",\"target\":\"{s}\",\"backend\":\"{s}\",\"connection_strategy\":\"{s}\",\"backend_strategy\":\"{s}\",\"worker_strategy\":\"{s}\",\"bounded\":{},\"fast_http_workers\":{d},\"fast_http_queue\":{d},\"router_dispatch\":\"{s}\",\"lua_runtime\":{},\"hybrid_profile\":\"{s}\",\"lua_state_strategy\":\"{s}\",\"lua_handler_ref_strategy\":\"{s}\",\"capability_store_strategy\":\"{s}\",\"require_cache_strategy\":\"{s}\"}}", .{ build_info.meteorite_mode, build_info.zig_optimize, build_info.target, backend.name, backend.connection_strategy, backend.connection_strategy, backend.connection_strategy, backend.bounded, build_info.fast_http_workers, build_info.fast_http_queue, build_info.router_dispatch, build_info.lua_runtime, build_info.hybrid_profile, lua_runtime.lua_state_strategy, lua_runtime.lua_handler_ref_strategy, lua_runtime.capability_store_strategy, lua_runtime.require_cache_strategy });
+            return std.fmt.allocPrint(allocator, "{{\"format\":\"meteorite.info.v0\",\"meteorite_mode\":\"{s}\",\"zig_optimize\":\"{s}\",\"target\":\"{s}\",\"backend\":\"{s}\",\"transport\":\"{s}\",\"protocol\":\"{s}\",\"capabilities\":{{\"http_headers\":{},\"cookies\":{},\"cors\":{},\"redirects\":{},\"ipc_metadata\":{},\"peer_credentials\":{},\"static_files\":{}}},\"connection_strategy\":\"{s}\",\"backend_strategy\":\"{s}\",\"worker_strategy\":\"{s}\",\"bounded\":{},\"fast_http_workers\":{d},\"fast_http_queue\":{d},\"router_dispatch\":\"{s}\",\"lua_runtime\":{},\"hybrid_profile\":\"{s}\",\"lua_state_strategy\":\"{s}\",\"lua_handler_ref_strategy\":\"{s}\",\"capability_store_strategy\":\"{s}\",\"require_cache_strategy\":\"{s}\"}}", .{ build_info.meteorite_mode, build_info.zig_optimize, build_info.target, backend.name, build_info.transport, build_info.protocol, build_info.capability_http_headers, build_info.capability_cookies, build_info.capability_cors, build_info.capability_redirects, build_info.capability_ipc_metadata, build_info.capability_peer_credentials, build_info.capability_static_files, backend.connection_strategy, backend.connection_strategy, backend.connection_strategy, backend.bounded, build_info.fast_http_workers, build_info.fast_http_queue, build_info.router_dispatch, build_info.lua_runtime, build_info.hybrid_profile, lua_runtime.lua_state_strategy, lua_runtime.lua_handler_ref_strategy, lua_runtime.capability_store_strategy, lua_runtime.require_cache_strategy });
         }
 
         fn serveRequest(allocator: std.mem.Allocator, io: Io, request: *backend.Request) !void {
@@ -357,6 +374,10 @@ pub fn compile(comptime spec: anytype) type {
                     return backend.respondText(request, 501, "lua reload unavailable");
                 }
             }
+            if (comptime @hasField(@TypeOf(request.*), "frame_buffer")) {
+                if (try dispatchNativeMessage(allocator, io, request, req_path)) return;
+                return backend.respondText(request, 404, "not found");
+            }
             if (!try enforceGlobalTargetLimits(request, req_path)) return;
             if (comptime std.mem.eql(u8, build_info.router_dispatch, "legacy_scan")) {
                 if (try dispatchLegacyScan(req_method, allocator, io, request, req_path)) return;
@@ -377,6 +398,40 @@ pub fn compile(comptime spec: anytype) type {
             }
             if (pathMatchedAnyRoute(req_path)) return respondMethodNotAllowed(allocator, request, req_path);
             return backend.respondText(request, 404, "not found");
+        }
+
+        fn dispatchNativeMessage(allocator: std.mem.Allocator, io: Io, request: *backend.Request, message_name: []const u8) !bool {
+            inline for (graph.messages) |route| {
+                if (try dispatchNativeMessageRoute(route, allocator, io, request, message_name)) return true;
+            }
+            return false;
+        }
+
+        fn dispatchNativeMessageRoute(comptime route: graph.Route, allocator: std.mem.Allocator, io: Io, request: *backend.Request, message_name: []const u8) !bool {
+            const matches_name = std.mem.eql(u8, message_name, route.message.name);
+            if (!matches_name) return false;
+            var captures = Captures{};
+            inline for (route.params) |param| {
+                const value = backend.header(request, param.name) orelse {
+                    try respondValidationError(request, .{ .domain = "metadata", .field = param.name, .reason = "missing" });
+                    return true;
+                };
+                if (!validateParam(param, value)) {
+                    try respondValidationError(request, .{ .domain = "metadata", .field = param.name, .reason = "invalid" });
+                    return true;
+                }
+                if (param.pattern) |pattern| {
+                    if (!graph.patterns.match(pattern, value)) {
+                        try respondValidationError(request, .{ .domain = "metadata", .field = param.name, .reason = "invalid" });
+                        return true;
+                    }
+                }
+                if (!captures.add(param.name, value)) {
+                    try backend.respondText(request, 500, "internal server error");
+                    return true;
+                }
+            }
+            return dispatchMatchedRoute(route, allocator, io, request, route.raw_path, captures);
         }
 
         fn dispatchLegacyScan(req_method: graph.Method, allocator: std.mem.Allocator, io: Io, request: *backend.Request, req_path: []const u8) !bool {
@@ -451,14 +506,24 @@ pub fn compile(comptime spec: anytype) type {
             std.debug.print("route error boundary for {s} {s}: {s}\n", .{ @tagName(ctx.route.method), ctx.route.raw_path, @errorName(err) });
             ctx.request.close_after_response = true;
             if (ctx.response_committed) return true;
-            try ctx.textWithHeaders(500, "internal server error", &.{.{ .name = "X-Meteorite-Error-Boundary", .value = "route" }});
+            const body = switch (err) {
+                error.HttpHeadersUnavailable => "backend capability unavailable: http_headers",
+                error.CookiesUnavailable => "backend capability unavailable: cookies",
+                error.RedirectsUnavailable => "backend capability unavailable: redirects",
+                else => "internal server error",
+            };
+            if (build_info.capability_http_headers) {
+                try ctx.textWithHeaders(500, body, &.{.{ .name = "X-Meteorite-Error-Boundary", .value = "route" }});
+            } else {
+                try ctx.text(500, body);
+            }
             try ctx.commitResponse();
             return true;
         }
 
         fn dispatchMatchedRoute(comptime route: graph.Route, allocator: std.mem.Allocator, io: Io, request: *backend.Request, req_path: []const u8, captures: Captures) !bool {
             if (!try enforceRouteTargetLimits(request, req_path, route)) return true;
-            if (validateQuery(route.query, request)) |validation_error| {
+            if (validateQuery(route.query, allocator, request)) |validation_error| {
                 try respondValidationError(request, validation_error);
                 return true;
             }
@@ -833,6 +898,31 @@ pub fn compile(comptime spec: anytype) type {
             };
         }
 
+        fn backendProtocolMethod(method: backend.Method) protocol.Method {
+            return switch (method) {
+                .GET => .GET,
+                .HEAD => .HEAD,
+                .POST => .POST,
+                .PUT => .PUT,
+                .PATCH => .PATCH,
+                .DELETE => .DELETE,
+                .OPTIONS => .OPTIONS,
+                else => .OTHER,
+            };
+        }
+
+        fn resultCodeForStatus(status: u16) protocol.ResultCode {
+            return switch (status) {
+                200...299 => .ok,
+                404 => .not_found,
+                405 => .method_not_allowed,
+                413 => .payload_too_large,
+                422 => .validation_error,
+                429 => .busy,
+                else => if (status >= 500) .internal_error else .ok,
+            };
+        }
+
         const Capture = struct { name: []const u8 = "", value: []const u8 = "" };
         const Captures = struct {
             items: [16]Capture = undefined,
@@ -947,9 +1037,9 @@ pub fn compile(comptime spec: anytype) type {
             try backend.respondTextWithHeaders(request, 400, "validation error", &headers);
         }
 
-        fn validateQuery(comptime specs: []const graph.ParamSpec, request: *backend.Request) ?ValidationError {
+        fn validateQuery(comptime specs: []const graph.ParamSpec, allocator: std.mem.Allocator, request: *backend.Request) ?ValidationError {
             inline for (specs) |query_spec| {
-                if (queryValue(request, query_spec.name)) |value| {
+                if (queryValue(allocator, request, query_spec.name)) |value| {
                     if (query_spec.pattern) |pattern| {
                         if (!graph.patterns.match(pattern, value)) return .{ .domain = "query", .field = query_spec.name, .reason = "invalid" };
                     }
@@ -1141,7 +1231,7 @@ pub fn compile(comptime spec: anytype) type {
             return null;
         }
 
-        fn queryValue(request: *backend.Request, name: []const u8) ?[]const u8 {
+        fn rawQueryValue(request: *backend.Request, name: []const u8) ?[]const u8 {
             const raw_query = backend.query(request);
             if (raw_query.len == 0) return null;
             var parts = std.mem.splitScalar(u8, raw_query, '&');
@@ -1153,6 +1243,77 @@ pub fn compile(comptime spec: anytype) type {
                 }
             }
             return null;
+        }
+
+        /// Percent-decode a query value into arena-allocated memory.
+        /// The encoding has already been validated by queryEncodingValid.
+        fn percentDecode(allocator: std.mem.Allocator, value: []const u8) ![]u8 {
+            var out = try allocator.alloc(u8, value.len);
+            var out_len: usize = 0;
+            var i: usize = 0;
+            while (i < value.len) {
+                if (value[i] == '%' and i + 2 < value.len) {
+                    const hi = std.fmt.charToDigit(value[i + 1], 16) catch {
+                        out[out_len] = value[i];
+                        out_len += 1;
+                        i += 1;
+                        continue;
+                    };
+                    const lo = std.fmt.charToDigit(value[i + 2], 16) catch {
+                        out[out_len] = value[i];
+                        out_len += 1;
+                        i += 1;
+                        continue;
+                    };
+                    out[out_len] = @intCast((hi << 4) | lo);
+                    out_len += 1;
+                    i += 3;
+                } else {
+                    out[out_len] = value[i];
+                    out_len += 1;
+                    i += 1;
+                }
+            }
+            return out[0..out_len];
+        }
+
+        /// Return the first percent-decoded query value for a key.
+        fn queryValue(allocator: std.mem.Allocator, request: *backend.Request, name: []const u8) ?[]const u8 {
+            const raw = rawQueryValue(request, name) orelse return null;
+            // If no percent signs, return the raw slice (zero-copy).
+            if (std.mem.indexOfScalar(u8, raw, '%') == null) return raw;
+            return percentDecode(allocator, raw) catch null;
+        }
+
+        /// Return all percent-decoded values for a repeated query key.
+        fn queryAllValues(allocator: std.mem.Allocator, request: *backend.Request, name: []const u8) ?[][]const u8 {
+            const raw_query = backend.query(request);
+            if (raw_query.len == 0) return null;
+            var count: usize = 0;
+            var parts = std.mem.splitScalar(u8, raw_query, '&');
+            while (parts.next()) |part| {
+                if (part.len == 0) continue;
+                const eq = std.mem.indexOfScalar(u8, part, '=') orelse part.len;
+                if (std.mem.eql(u8, part[0..eq], name)) count += 1;
+            }
+            if (count == 0) return null;
+            var result = allocator.alloc([]const u8, count) catch return null;
+            var idx: usize = 0;
+            parts = std.mem.splitScalar(u8, raw_query, '&');
+            while (parts.next()) |part| {
+                if (part.len == 0) continue;
+                const eq = std.mem.indexOfScalar(u8, part, '=') orelse part.len;
+                if (std.mem.eql(u8, part[0..eq], name)) {
+                    const raw = if (eq < part.len) part[eq + 1 ..] else "";
+                    if (std.mem.indexOfScalar(u8, raw, '%') == null) {
+                        result[idx] = raw;
+                    } else {
+                        result[idx] = percentDecode(allocator, raw) catch raw;
+                    }
+                    idx += 1;
+                }
+            }
+            return result;
         }
 
         fn isSafeRequestId(value: []const u8) bool {
@@ -1189,8 +1350,64 @@ pub fn compile(comptime spec: anytype) type {
                 return backendMethod(backend.method(self.request));
             }
 
+            fn captureEntries(self: *Context) ![]const protocol.MetadataEntry {
+                var entries = try self.allocator.alloc(protocol.MetadataEntry, self.route.params.len);
+                var count: usize = 0;
+                for (self.route.params) |param_spec| {
+                    if (self.captures.get(param_spec.name)) |value| {
+                        entries[count] = .{ .name = param_spec.name, .value = value };
+                        count += 1;
+                    }
+                }
+                return entries[0..count];
+            }
+
+            fn queryEntries(self: *Context) ![]const protocol.MetadataEntry {
+                var entries = try self.allocator.alloc(protocol.MetadataEntry, self.route.query.len);
+                var count: usize = 0;
+                for (self.route.query) |query_spec| {
+                    if (queryValue(self.allocator, self.request, query_spec.name)) |value| {
+                        entries[count] = .{ .name = query_spec.name, .value = value };
+                        count += 1;
+                    }
+                }
+                return entries[0..count];
+            }
+
+            fn requestMetadataEntries(self: *Context) ![]const protocol.MetadataEntry {
+                var entries = try self.allocator.alloc(protocol.MetadataEntry, 2);
+                var count: usize = 0;
+                if (self.header("content-type")) |content_type| {
+                    entries[count] = .{ .name = "content_type", .value = content_type };
+                    count += 1;
+                }
+                entries[count] = .{ .name = "transport", .value = build_info.transport };
+                count += 1;
+                return entries[0..count];
+            }
+
+            pub fn meteoriteRequest(self: *Context) !protocol.MeteoriteRequest {
+                return .{
+                    .route_key = self.route.canonical_id,
+                    .message = self.route.message.name,
+                    .method = backendProtocolMethod(backend.method(self.request)),
+                    .path = backend.path(self.request),
+                    .params = try self.captureEntries(),
+                    .query = try self.queryEntries(),
+                    .metadata = try self.requestMetadataEntries(),
+                    .body = self.cached_body orelse "",
+                    .content_type = self.header("content-type"),
+                    .request_id = try self.requestId(),
+                    .peer = null,
+                };
+            }
+
             pub fn path(self: *Context) []const u8 {
                 return backend.path(self.request);
+            }
+
+            pub fn message(self: *Context) []const u8 {
+                return self.route.message.name;
             }
 
             pub fn run(self: *Context, allocator: std.mem.Allocator, argv: []const []const u8) ![]const u8 {
@@ -1209,16 +1426,29 @@ pub fn compile(comptime spec: anytype) type {
             }
 
             pub fn query(self: *Context, name: []const u8) ?[]const u8 {
-                return queryValue(self.request, name);
+                return queryValue(self.allocator, self.request, name);
+            }
+
+            pub fn queryAll(self: *Context, name: []const u8) ?[][]const u8 {
+                return queryAllValues(self.allocator, self.request, name);
+            }
+
+            pub fn metadata(self: *Context, name: []const u8) ?[]const u8 {
+                if (comptime @hasField(@TypeOf(self.request.*), "metadata_value")) {
+                    return backend.header(self.request, name);
+                }
+                return null;
             }
 
             pub fn header(self: *Context, name: []const u8) ?[]const u8 {
+                if (!build_info.capability_http_headers) return null;
                 return backend.header(self.request, name);
             }
 
             pub fn requestId(self: *Context) ![]const u8 {
                 if (self.request_id_cache) |value| return value;
-                if (self.header("x-request-id")) |incoming| {
+                const incoming_id = if (build_info.capability_http_headers) self.header("x-request-id") else self.metadata("request_id");
+                if (incoming_id) |incoming| {
                     if (isSafeRequestId(incoming)) {
                         self.request_id_cache = try self.allocator.dupe(u8, incoming);
                         return self.request_id_cache.?;
@@ -1285,6 +1515,7 @@ pub fn compile(comptime spec: anytype) type {
             }
 
             pub fn bytesWithHeaders(self: *Context, status: u16, content_type: []const u8, response_body: []const u8, headers: []const backend.Header) !void {
+                if (headers.len > 0 and !build_info.capability_http_headers) return error.HttpHeadersUnavailable;
                 if (response_body.len > self.route.memory.max_response_bytes) {
                     try self.stageBytes(500, "text/plain; charset=utf-8", "response too large", &.{});
                     return;
@@ -1294,6 +1525,7 @@ pub fn compile(comptime spec: anytype) type {
             }
 
             pub fn responseHeader(self: *Context, name: []const u8, value: []const u8) !void {
+                if (!build_info.capability_http_headers) return error.HttpHeadersUnavailable;
                 try protocol.validateResponseHeader(name, value);
                 if (self.response_header_count >= self.response_headers.len) return error.TooManyResponseHeaders;
                 self.response_headers[self.response_header_count] = .{ .name = try self.allocator.dupe(u8, name), .value = try self.allocator.dupe(u8, value) };
@@ -1313,9 +1545,22 @@ pub fn compile(comptime spec: anytype) type {
 
             pub fn commitResponse(self: *Context) !void {
                 if (!self.response_staged) return;
-                try backend.respondBytesWithHeaders(self.request, self.response_status, self.response_content_type, self.response_body, self.response_headers[0..self.response_header_count]);
+                const response = self.meteoriteResponse();
+                try backend.respondBytesWithHeaders(self.request, response.status orelse self.response_status, response.content_type, response.body, response.headers);
                 self.response_staged = false;
                 self.response_committed = true;
+            }
+
+            pub fn meteoriteResponse(self: *Context) protocol.MeteoriteResponse {
+                return .{
+                    .result = resultCodeForStatus(self.response_status),
+                    .status = self.response_status,
+                    .content_type = self.response_content_type,
+                    .metadata = &.{},
+                    .headers = self.response_headers[0..self.response_header_count],
+                    .body = self.response_body,
+                    .close_policy = if (self.request.close_after_response) .close_after_response else .keep_open,
+                };
             }
 
             pub fn json(self: *Context, status: u16, response_body: []const u8) !void {
@@ -1335,6 +1580,7 @@ pub fn compile(comptime spec: anytype) type {
             }
 
             pub fn redirect(self: *Context, status: u16, location: []const u8) !void {
+                if (!build_info.capability_redirects) return error.RedirectsUnavailable;
                 if (!protocol.isRedirectStatus(status)) return error.InvalidRedirectStatus;
                 try protocol.validateRedirectLocation(location);
                 try self.emptyWithHeaders(status, &.{.{ .name = "Location", .value = location }});
@@ -1342,6 +1588,7 @@ pub fn compile(comptime spec: anytype) type {
 
             pub fn setCookie(self: *Context, buffer: []u8, name: []const u8, value: []const u8, options: protocol.CookieOptions) !backend.Header {
                 _ = self;
+                if (!build_info.capability_cookies) return error.CookiesUnavailable;
                 return .{ .name = "Set-Cookie", .value = try protocol.buildSetCookie(buffer, name, value, options) };
             }
 

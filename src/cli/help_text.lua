@@ -50,15 +50,28 @@ Examples:
 help.build = [[Meteorite build
 
 Usage:
-  meteorite build [--mode <mode>] [zig build args...]
+  meteorite build [--mode <mode>] [--backend <backend>] [zig build args...]
 
 Modes:
   hybrid          Include Lua runtime for inline/module Lua handlers
   release-static  Require Zig/static handlers only; no Lua runtime in output
 
+Backends:
+  fast_http            High-performance HTTP backend
+  std_http             Zig std HTTP backend
+  ipc_unixsocket       Native Meteorite IPC over UNIX sockets
+  ipc_unixsocket_http  HTTP/1.1 over UNIX sockets (planned)
+
+Unix socket flags:
+  --unix-socket-path <path>
+  --unix-socket-mode <mode>
+  --unix-socket-unlink-stale
+  --no-unix-socket-unlink-stale
+
 Examples:
   meteorite build
   meteorite build --mode hybrid
+  meteorite build --backend ipc_unixsocket
   meteorite build --mode release-static
   meteorite build --mode hybrid -Dtarget=aarch64-linux-gnu]]
 

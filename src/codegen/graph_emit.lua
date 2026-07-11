@@ -16,6 +16,11 @@ local static_compiler = require("codegen.static")
 local fs = require("utils.fs")
 
 local graph_emit = {}
+
+local function graph_nodes(graph)
+  return graph.nodes or graph.routes or {}
+end
+
 function graph_emit.scan_capabilities(source)
   local refs, seen = {}, {}
   local function add(kind, name)
@@ -64,7 +69,7 @@ function graph_emit.prepare_graph(graph, output, mode)
     plugin.handler = { kind = "inline_lua", lifted = lifted }
     plugin.execute = nil
   end
-  for _, route in ipairs(graph.routes) do
+  for _, route in ipairs(graph_nodes(graph)) do
     local plugin_ids = {}
     for _, plugin in ipairs(route.scope.plugins or {}) do
       if type(plugin) == "table" and plugin.__meteorite_plugin then
@@ -183,8 +188,8 @@ end
 ---@param graph table  Normalized route graph
 ---@param output string  Output directory
 function graph_emit.emit_bindings(graph, output)
-  local infos = graph_emit.sorted_handler_infos(graph.routes)
-  local route_infos = graph_emit.sorted_route_handler_infos(graph.routes)
+  local infos = graph_emit.sorted_handler_infos(graph_nodes(graph))
+  local route_infos = graph_emit.sorted_route_handler_infos(graph_nodes(graph))
   local lines = {
     "const handlers = @import(\"meteorite_handlers\");",
     "const validators = @import(\"meteorite_validators\");",
@@ -529,6 +534,11 @@ function graph_emit.route_module_content(route)
     lines[#lines + 1] = "            .{ ." .. ref.kind .. " = " .. helpers.zig_string(ref.name) .. " },"
   end
   lines[#lines + 1] = "        };"
+  lines[#lines + 1] = "        const message_params = [_][]const u8{"
+  for _, name in ipairs((route.message and route.message.params) or {}) do
+    lines[#lines + 1] = "            " .. helpers.zig_string(name) .. ","
+  end
+  lines[#lines + 1] = "        };"
   lines[#lines + 1] = "        const static_assets = [_]graph.StaticAsset{"
   for _, asset in ipairs((route.handler and route.handler.manifest) or {}) do
     lines[#lines + 1] = "            " .. graph_emit.static_asset_zig(asset) .. ","
@@ -589,7 +599,8 @@ function graph_emit.route_module_content(route)
     stage_lines[#stage_lines + 1] = "    }"
     pipeline_zig = table.concat(stage_lines, "\n")
   end
-  lines[#lines + 1] = "    return .{ .id = " .. helpers.zig_string(route.id) .. ", .method = ." .. route.method .. ", .raw_path = " .. helpers.zig_string(route.raw_path) .. ", .path = &data.segments, .params = &data.params, .query = &data.query, .validation = .{ .headers = &data.validation_headers, .cookies = &data.validation_cookies, .json_body = &data.validation_json_body, .form_body = &data.validation_form_body }, .memory = " .. graph_emit.route_memory_zig(route) .. ", .max_body_bytes = " .. route.memory.max_body_bytes .. ", .request_arena_bytes = " .. route.memory.request_arena_bytes .. ", .handler = " .. graph_emit.route_handler_zig(route) .. ", .pipeline = &data.pipeline, .runtime = " .. graph_emit.route_runtime_zig(route) .. ", .execution = " .. graph_emit.route_execution_zig(route) .. ", .capabilities = &data.capabilities, .scope = " .. scope_zig .. " };"
+  local message = route.message or { name = route.id, pattern = route.id, slash_alias = route.id, source = "inferred" }
+  lines[#lines + 1] = "    return .{ .id = " .. helpers.zig_string(route.id) .. ", .canonical_id = " .. helpers.zig_string(route.canonical_id or ("route." .. tostring(message.name))) .. ", .method = ." .. route.method .. ", .raw_path = " .. helpers.zig_string(route.raw_path) .. ", .http = .{ .method = ." .. route.method .. ", .path = " .. helpers.zig_string(route.raw_path) .. " }, .message = .{ .name = " .. helpers.zig_string(message.name) .. ", .pattern = " .. helpers.zig_string(message.pattern or message.name) .. ", .slash_alias = " .. helpers.zig_string(message.slash_alias or tostring(message.name):gsub("%.", "/")) .. ", .source = " .. helpers.zig_string(message.source or "inferred") .. ", .params = &data.message_params }, .path = &data.segments, .params = &data.params, .query = &data.query, .validation = .{ .headers = &data.validation_headers, .cookies = &data.validation_cookies, .json_body = &data.validation_json_body, .form_body = &data.validation_form_body }, .memory = " .. graph_emit.route_memory_zig(route) .. ", .max_body_bytes = " .. route.memory.max_body_bytes .. ", .request_arena_bytes = " .. route.memory.request_arena_bytes .. ", .handler = " .. graph_emit.route_handler_zig(route) .. ", .pipeline = &data.pipeline, .runtime = " .. graph_emit.route_runtime_zig(route) .. ", .execution = " .. graph_emit.route_execution_zig(route) .. ", .capabilities = &data.capabilities, .scope = " .. scope_zig .. " };"
   lines[#lines + 1] = "}"
   return table.concat(lines, "\n") .. "\n"
 end
@@ -600,7 +611,7 @@ end
 function graph_emit.emit_route_modules(graph, output)
   local dir = output .. "/routes"
   fs.mkdir_p(dir)
-  for _, route in ipairs(graph.routes) do
+  for _, route in ipairs(graph_nodes(graph)) do
     helpers.write_file(dir .. "/" .. graph_emit.route_module_name(route) .. ".zig", graph_emit.route_module_content(route))
   end
 end
@@ -611,7 +622,7 @@ end
 function graph_emit.emit_graph_zig(graph, output)
   local max_arena = 0
   local max_uri, max_path, max_query, max_query_pairs, max_path_segments = 0, 0, 0, 0, 0
-  for _, route in ipairs(graph.routes) do
+  for _, route in ipairs(graph_nodes(graph)) do
     local memory = route.memory
     if memory.request_arena_bytes > max_arena then max_arena = memory.request_arena_bytes end
     if memory.max_uri_bytes > max_uri then max_uri = memory.max_uri_bytes end
@@ -665,7 +676,9 @@ function graph_emit.emit_graph_zig(graph, output)
     "pub const RouteScope = struct { id: []const u8 = \"root\", parent: []const u8 = \"\", path_prefix: []const u8 = \"\", chain: []const ScopeRef = &.{}, plugins: []const []const u8 = &.{}, context: []const ScopeContextRef = &.{} };",
     "pub const PluginHandler = union(enum) { inline_lua: InlineLuaHandler, lua_file: LuaFileHandler, zig_symbol: ZigSymbolHandler, none };",
     "pub const PluginDescriptor = struct { id: []const u8, kind: []const u8, handler: PluginHandler = .none };",
-    "pub const Route = struct { id: []const u8, method: Method, raw_path: []const u8, path: []const Segment, params: []const ParamSpec, query: []const ParamSpec, validation: ValidationSpec = .{}, memory: RouteMemory, max_body_bytes: usize, request_arena_bytes: usize, handler: Handler, pipeline: []const PipelineStage = &.{}, runtime: RouteRuntime = .{}, execution: RouteExecution = .{}, capabilities: []const CapabilityRef = &.{}, scope: RouteScope = .{} };",
+    "pub const MessageProjection = struct { name: []const u8, pattern: []const u8, slash_alias: []const u8 = \"\", source: []const u8 = \"inferred\", params: []const []const u8 = &.{} };",
+    "pub const HttpProjection = struct { method: Method, path: []const u8 };",
+    "pub const Route = struct { id: []const u8, canonical_id: []const u8 = \"\", method: Method, raw_path: []const u8, http: HttpProjection, message: MessageProjection, path: []const Segment, params: []const ParamSpec, query: []const ParamSpec, validation: ValidationSpec = .{}, memory: RouteMemory, max_body_bytes: usize, request_arena_bytes: usize, handler: Handler, pipeline: []const PipelineStage = &.{}, runtime: RouteRuntime = .{}, execution: RouteExecution = .{}, capabilities: []const CapabilityRef = &.{}, scope: RouteScope = .{} };",
     "",
   }
   graph_emit.emit_pattern_tables(graph, lines, output)
@@ -673,7 +686,7 @@ function graph_emit.emit_graph_zig(graph, output)
     graph_emit.emit_capabilities(graph, lines)
 
   graph_emit.emit_route_modules(graph, output)
-  for _, route in ipairs(graph.routes) do
+  for _, route in ipairs(graph_nodes(graph)) do
     lines[#lines + 1] = "const " .. graph_emit.route_module_name(route) .. " = @import(\"routes/" .. graph_emit.route_module_name(route) .. ".zig\");"
   end
   lines[#lines + 1] = ""
@@ -695,6 +708,12 @@ function graph_emit.emit_graph_zig(graph, output)
   lines[#lines + 1] = ""
   lines[#lines + 1] = "pub const routes = [_]Route{"
   for _, route in ipairs(graph.routes) do
+    lines[#lines + 1] = "    " .. graph_emit.route_module_name(route) .. ".route(@This()),"
+  end
+  lines[#lines + 1] = "};"
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = "pub const messages = [_]Route{"
+  for _, route in ipairs(graph.messages or {}) do
     lines[#lines + 1] = "    " .. graph_emit.route_module_name(route) .. ".route(@This()),"
   end
   lines[#lines + 1] = "};"

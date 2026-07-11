@@ -2,7 +2,7 @@
 
 Purpose: identify which Hono features matter for a serious Meteorite release, decide what must be first-class vs. intentionally out of scope, and track parity with checkboxes.
 
-Sources reviewed on 2026-07-07:
+Sources reviewed on 2026-07-07; local Meteorite status reconciled on 2026-07-10:
 
 - Hono docs home: https://www.honojs.com/docs/
 - Hono routing docs: https://hono.dev/docs/api/routing
@@ -24,49 +24,54 @@ Hono positioning to respect: it is a small, ultrafast framework built on Web Sta
 
 ## Status Legend
 
-- [ ] Missing or not validated
-- [ ] Partial / needs design
-- [ ] Implemented but needs tests/docs
-- [ ] Release-ready
+- Missing or not validated
+- Partial / needs design
+- Implemented but needs tests/docs
+- Release-ready
 
 ## Phase H0 — Core Hono-Like Routing Expectations
 
 Hono docs emphasize flexible routing, method-specific handlers, wildcard routes, host/header-derived routing customization, and registration-order priority.
 
-- [ ] `GET`, `POST`, `PUT`, `PATCH`, `DELETE` route declarations are documented and tested.
-- [ ] `HEAD` and `OPTIONS` behavior is defined and tested.
+- [x] `GET`, `POST`, `PUT`, `PATCH`, `DELETE` route declarations are documented and tested.
+- [x] `HEAD` and `OPTIONS` behavior is defined and tested.
 - [ ] `app:all()` or equivalent any-method route support exists or is explicitly out of scope.
 - [ ] Wildcard route matching exists or has a design.
-- [ ] Param route matching supports typed extraction and source diagnostics.
+- [x] Param route matching supports typed extraction and source diagnostics.
 - [ ] Route priority/order semantics are explicit; static vs param vs wildcard behavior is deterministic.
-- [ ] Mounted apps/scopes behave like route groups.
+- [x] Mounted apps/scopes behave like route groups.
 - [ ] Host/header-aware routing is evaluated as P1: useful, but not P0 unless multi-tenant routing is a target.
-- [ ] 404/405 behavior is aligned with web expectations and includes `Allow` for 405.
+- [x] 404/405 behavior is aligned with web expectations and includes `Allow` for 405.
+
+
+### H0 Reconciliation Notes
+
+Release-ready coverage now includes method declarations (`GET`/`POST`/`PUT`/`PATCH`/`DELETE`), explicit `HEAD`/`OPTIONS`, typed params, mounted scopes, and `405 Allow` behavior via `fixtures/tests/basic-service.sh` and `fixtures/tests/web-standards.sh`. General `app:all()` and arbitrary wildcard routes remain open; Meteorite has deterministic static/param/splat behavior for declared routes and static directory splats, but `src/core/route.lua` still rejects bare `*` wildcard routes.
 
 ## Phase H1 — Context And Request/Response API
 
 Hono’s DX is centered around an easy context object and Web-standard Request/Response style behavior.
 
-- [ ] Lua `ctx` exposes params, query, state, scope, request headers, body, and response helpers.
-- [ ] Zig generated contexts expose typed params/query and response helpers.
-- [ ] Response helpers support text, JSON, bytes, redirects, custom status, custom headers, and empty bodies.
-- [ ] Response headers work in returned Lua response tables and direct helpers like `ctx:text(..., { headers = ... })`.
+- [x] Lua `ctx` exposes params, query, state, scope, request headers, body, and response helpers.
+- [x] Zig generated contexts expose typed params/query and response helpers.
+- [x] Response helpers support text, JSON, bytes, redirects, custom status, custom headers, and empty bodies.
+- [x] Response headers work in returned Lua response tables and direct helpers like `ctx:text(..., { headers = ... })`.
 - [ ] `meteorite invoke` prints or returns response headers for local testing.
-- [ ] Request parsing supports JSON, form, query, header, param, and cookie validation targets comparable to Hono validation docs.
-- [ ] Context-local storage/state semantics are documented and tested for scoped plugins and nested mounts.
+- [x] Request parsing supports JSON, form, query, header, param, and cookie validation targets comparable to Hono validation docs.
+- [x] Context-local storage/state semantics are documented and tested for scoped plugins and nested mounts.
 
 ## Phase H2 — Middleware System
 
 Hono middleware can run before/after handlers, call `next()`, short-circuit, and compose in registration order. Hono catches thrown errors and routes them through error handling.
 
-- [ ] Meteorite pipeline has middleware-like before/after semantics that users can understand without compiler internals.
-- [ ] Middleware can short-circuit with a response.
-- [ ] Middleware can mutate response headers after handler execution.
-- [ ] Middleware ordering is registration-order or documented equivalent.
-- [ ] Scoped middleware works for route groups/mounts.
-- [ ] Error propagation from middleware and handlers uses a single `on_error`/error hook contract.
+- [x] Meteorite pipeline has middleware-like before/after semantics that users can understand without compiler internals.
+- [x] Middleware can short-circuit with a response.
+- [x] Middleware can mutate response headers after handler execution.
+- [x] Middleware ordering is registration-order or documented equivalent.
+- [x] Scoped middleware works for route groups/mounts.
+- [x] Error propagation from middleware and handlers uses a single `on_error`/error hook contract.
 - [ ] Middleware source locations appear in diagnostics.
-- [ ] Middleware effects are captured in graph metadata for release inspection.
+- [x] Middleware effects are captured in graph metadata for release inspection.
 
 ## Phase H3 — Built-In Middleware And Helpers That Matter
 
@@ -74,22 +79,22 @@ Hono docs list built-ins/helpers including Basic Auth, Bearer Auth, Body Limit, 
 
 ### P0 Helpers
 
-- [ ] CORS helper: origin rules, methods, allowed headers, exposed headers, credentials, max-age, `Vary`, and preflight `OPTIONS`.
+- [x] CORS helper: origin rules, methods, allowed headers, exposed headers, credentials, max-age, `Vary`, and preflight `OPTIONS`.
 - [x] Body limit helper: global and route-level limits with deterministic errors.
-- [ ] Logger helper: basic structured request logging with redaction.
-- [ ] Secure headers helper: sane defaults with opt-out.
+- [x] Logger helper: basic structured request logging with redaction.
+- [x] Secure headers helper: sane defaults with opt-out.
 - [x] Cookie helper: parse request cookies and set response cookies.
-- [ ] ETag/static cache helper: static files covered; optional dynamic response helpers remain.
-- [ ] Request ID helper: generate/propagate request IDs.
+- [x] ETag/static cache helper: static files covered; optional dynamic response helpers remain.
+- [x] Request ID helper: generate/propagate request IDs.
 
 ### P1 Helpers
 
-- [ ] Basic Auth helper.
-- [ ] Bearer/JWT auth helper or documented integration path.
+- [x] Basic Auth helper.
+- [x] Bearer/JWT auth helper or documented integration path.
 - [ ] Pretty JSON helper for dev/debug only.
 - [ ] Compression helper with correct `Vary`, `Content-Length`, and ETag behavior.
 - [ ] Timeout helper with cancellation semantics.
-- [ ] Timing helper / `Server-Timing` support.
+- [x] Timing helper / `Server-Timing` support.
 - [ ] Trailing slash middleware policy.
 - [ ] Method override policy if HTML forms are a target.
 - [ ] IP restriction / trusted proxy story.
@@ -106,24 +111,29 @@ Hono docs list built-ins/helpers including Basic Auth, Bearer Auth, Body Limit, 
 
 Hono provides a thin validator and supports validation targets: `json`, `query`, `header`, `param`, `cookie`, and `form`; Hono RPC uses validator output for client inference.
 
-- [ ] Meteorite schema validators cover params, query, headers, cookies, JSON body, form body, and raw body constraints.
-- [ ] Validation errors return configurable but stable status/body format.
-- [ ] Validators generate graph metadata usable for docs and clients.
-- [ ] Runtime validation behavior matches dev/invoke validation behavior.
+- [x] Meteorite schema validators cover params, query, headers, cookies, JSON body, form body, and raw body constraints.
+- [x] Validation errors return configurable but stable status/body format.
+- [x] Validators generate graph metadata usable for docs and clients.
+- [x] Runtime validation behavior matches dev/invoke validation behavior.
 - [ ] Third-party Lua validators have an extension point without undermining release graph determinism.
-- [ ] Header validators are case-insensitive where appropriate.
-- [ ] Cookie validators handle absent, malformed, and repeated cookies.
-- [ ] Form validators document content-type requirements.
+- [x] Header validators are case-insensitive where appropriate.
+- [x] Cookie validators handle absent, malformed, and repeated cookies.
+- [x] Form validators document content-type requirements.
+
+
+### H1–H4 Reconciliation Notes
+
+The Web Standards fixture now validates Lua and Zig response helpers, returned Lua response tables, custom headers, redirects, empty responses, cookies, JSON/form/body parsing, case-insensitive request headers, scoped state, request IDs, auth helpers, secure headers, CORS, logging, `Server-Timing`, response-header injection rejection, graph schema metadata, OpenAPI planning metadata, and dev/invoke parity for validation. `meteorite invoke --headers` remains open because local invocation still needs first-class header output for DX.
 
 ## Phase H5 — RPC / Generated Client Parity
 
 Hono RPC shares server API specs with clients through TypeScript types and its client helper. Meteorite cannot mirror this exactly in Lua/Zig, but it can compete with graph-derived clients.
 
 - [ ] Decide target client outputs: TypeScript, Lua, OpenAPI-only, or all three.
-- [ ] Export route graph metadata with methods, paths, params, query, body, responses, and errors.
+- [x] Export route graph metadata with methods, paths, params, query, body, responses, and errors.
 - [ ] Generate TypeScript client from graph/OpenAPI for serious web-app adoption.
 - [ ] Generate Lua client for Moonstone/Meteorite service-to-service calls.
-- [ ] Include response status/content-type/header schemas in generated metadata.
+- [x] Include response status/content-type/header schemas in generated metadata.
 - [ ] Provide compatibility tests for generated clients against `meteorite invoke` and live server.
 - [ ] Document where Meteorite’s compile-time graph offers stronger guarantees than Hono RPC.
 
@@ -155,7 +165,7 @@ Hono supports html helpers, JSX, JSX renderer middleware, streaming JSX, and SSG
 
 Hono has a WebSocket helper with `onOpen`, `onMessage`, `onClose`, and `onError`, and Hono documents middleware/header caveats around upgrades. Hono also has streaming helpers.
 
-- [ ] Decide if WebSocket is in scope for the next serious release; if not, mark as explicit P2.
+- [x] Decide if WebSocket is in scope for the next serious release; if not, mark as explicit P2.
 - [ ] If in scope, design upgrade handling in `fast_http` and `std_http` separately.
 - [ ] Define Lua handler lifecycle for WebSocket callbacks and state.
 - [ ] Define backpressure, message size, close codes, ping/pong, and error behavior.
@@ -166,45 +176,50 @@ Hono has a WebSocket helper with `onOpen`, `onMessage`, `onClose`, and `onError`
 
 Hono wins mindshare partly by running across many JS runtimes. Meteorite’s equivalent is deployment clarity across native targets.
 
-- [ ] Static binary story is documented as the default production advantage.
-- [ ] Hybrid release story documents Lua runtime packaging and target ABI.
-- [ ] Cross-target release diagnostics are friendly and early.
-- [ ] Container deployment template exists.
+- [x] Static binary story is documented as the default production advantage.
+- [x] Hybrid release story documents Lua runtime packaging and target ABI.
+- [x] Cross-target release diagnostics are friendly and early.
+- [x] Container deployment template exists.
 - [ ] Systemd/launchd/supervisor examples exist.
 - [ ] Serverless/edge story is explicitly out of scope or planned as adapter work.
-- [ ] Graceful shutdown and health/readiness endpoints are documented.
+- [x] Graceful shutdown and health/readiness endpoints are documented.
 
 ## Phase H10 — Serious Release Must-Haves
 
 These are the minimum must-haves to be taken seriously against Hono for API services, even if Meteorite is not trying to be a TypeScript framework.
 
 - [ ] Routing: methods, params, query, scoped mounts, deterministic priority.
-- [ ] Middleware: before/after, short-circuit, response mutation, error boundary.
+- [x] Middleware: before/after, short-circuit, response mutation, error boundary.
 - [x] Request API: headers, body, params, query, cookies.
 - [x] Response API: status, body, content type, custom headers, cookies, redirects, JSON.
-- [ ] CORS: real helper plus benchmark/header tests.
-- [ ] Validation: params/query/body/header/cookie with graph metadata.
+- [x] CORS: real helper plus benchmark/header tests.
+- [x] Validation: params/query/body/header/cookie with graph metadata.
 - [ ] OpenAPI: generated spec from graph.
 - [ ] Dev UX: `init`, `doctor`, `routes`, `invoke`, hot reload, clear diagnostics.
-- [ ] Release UX: static/hybrid gates, manifest, smoke tests, no source leaks.
-- [ ] Performance UX: honest benchmark proof with counters and invalidation reasons.
+- [x] Release UX: static/hybrid gates, manifest, smoke tests, no source leaks.
+- [x] Performance UX: honest benchmark proof with counters and invalidation reasons.
 - [ ] Docs: copyable examples for JSON API, CORS, auth, cookies, static site, OpenAPI, and hybrid Lua.
+
+
+### H5–H10 Reconciliation Notes
+
+Meteorite now exports route/schema/OpenAPI-planning metadata and release manifests with enough graph facts to feed docs and clients, but generated TypeScript/Lua clients and a full OpenAPI 3.1 emitter remain open. Deployment parity is substantially stronger: static/hybrid release gates, copied-directory release smoke, no-source-leak checks, safe build-info endpoint, container recipe, graceful shutdown, and benchmark claim audits are in place. WebSockets, full JSX, TypeScript RPC inference, P0 serverless/edge adapter parity, GraphQL built-ins, and cloning every Hono middleware helper are explicitly non-goals for the serious API-service release.
 
 ## Non-Goals To Decide Explicitly
 
-- [ ] Full Hono JSX clone.
-- [ ] Full Hono RPC TypeScript inference clone.
-- [ ] Every Hono middleware helper as built-in.
-- [ ] Serverless/edge adapter parity in P0.
-- [ ] WebSocket parity in P0.
-- [ ] GraphQL built-in support.
+- [x] Full Hono JSX clone is a non-goal.
+- [x] Full Hono RPC TypeScript inference clone is a non-goal.
+- [x] Every Hono middleware helper as built-in is a non-goal.
+- [x] Serverless/edge adapter parity in P0 is a non-goal.
+- [x] WebSocket parity in P0 is a non-goal.
+- [x] GraphQL built-in support is a non-goal.
 
 ## Recommended Next Sprint
 
-- [ ] Finish response headers architecture and tests.
-- [ ] Implement first-class CORS helper and update benchmarks to assert headers/preflight.
+- [x] Finish response headers architecture and tests.
+- [x] Implement first-class CORS helper and update benchmarks to assert headers/preflight.
 - [x] Add cookie parse/set helper.
-- [ ] Add middleware response-mutation support.
+- [x] Add middleware response-mutation support.
 - [ ] Add OpenAPI metadata design doc from current route graph.
 - [ ] Add `meteorite invoke --headers` output.
-- [ ] Add `WEB_STANDARDS.md` fixture with CORS, cookies, redirects, headers, HEAD, OPTIONS, and JSON validation routes.
+- [x] Add Web Standards fixture with CORS, cookies, redirects, headers, HEAD, OPTIONS, and JSON validation routes.

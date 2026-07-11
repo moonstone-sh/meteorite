@@ -23,6 +23,10 @@ function tasks.build_args_for(mode, opts)
   args[#args + 1] = "-Dgraph-input=" .. (opts.graph_input or "src/main.lua")
   args[#args + 1] = "-Dgraph-output=" .. (opts.graph_output or ".meteorite/graph/current")
   args[#args + 1] = "-Dbackend=" .. (opts.backend or "std_http")
+  if opts.unix_socket_path or opts["unix-socket-path"] then args[#args + 1] = "-Dunix-socket-path=" .. (opts.unix_socket_path or opts["unix-socket-path"]) end
+  if opts.unix_socket_mode or opts["unix-socket-mode"] then args[#args + 1] = "-Dunix-socket-mode=" .. (opts.unix_socket_mode or opts["unix-socket-mode"]) end
+  if opts.unix_socket_unlink_stale ~= nil then args[#args + 1] = "-Dunix-socket-unlink-stale=" .. tostring(opts.unix_socket_unlink_stale) end
+  if opts["unix-socket-unlink-stale"] ~= nil then args[#args + 1] = "-Dunix-socket-unlink-stale=" .. tostring(opts["unix-socket-unlink-stale"]) end
   args[#args + 1] = "-Dhybrid-profile=" .. (opts.hybrid_profile or opts["hybrid-profile"] or (mode == "release-hybrid" and "optimized" or "default"))
   args[#args + 1] = "-Drouter-dispatch=" .. (opts.router_dispatch or opts["router-dispatch"] or "param_matchers")
   if opts.project_root then args[#args + 1] = "-Dproject-root=" .. opts.project_root end

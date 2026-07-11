@@ -39,6 +39,40 @@ local function static_entries(graph)
   return entries
 end
 
+local function message_entries(graph)
+  local entries = {}
+  for _, route in ipairs(graph.messages or {}) do
+    entries[#entries + 1] = {
+      id = route.id,
+      canonical_id = route.canonical_id,
+      message = route.message,
+    }
+  end
+  table.sort(entries, function(a, b) return tostring(a.canonical_id or a.id) < tostring(b.canonical_id or b.id) end)
+  return entries
+end
+
+local function backend_capabilities(backend)
+  local is_native_ipc = backend == "ipc_unixsocket"
+  return {
+    http_headers = not is_native_ipc,
+    cookies = not is_native_ipc,
+    cors = not is_native_ipc,
+    redirects = not is_native_ipc,
+    ipc_metadata = is_native_ipc,
+    peer_credentials = false,
+    static_files = not is_native_ipc,
+  }
+end
+
+local function backend_transport(backend)
+  return (backend == "ipc_unixsocket" or backend == "ipc_unixsocket_http") and "unix" or "tcp"
+end
+
+local function backend_protocol(backend)
+  return backend == "ipc_unixsocket" and "meteorite.ipc.v0" or "http/1.1"
+end
+
 local function runtime_source_artifact_path(target_lua)
   local source_path = target_lua and target_lua.source_payload_path or ""
   if source_path == "" then return "" end
@@ -65,11 +99,14 @@ local function target_abi(opts, target_lua)
 end
 
 function manifest.build(result, release_mode, server_path, contract, target_lua, opts)
+  opts = opts or {}
   local retained = contract and contract.retained_lua_nodes or {}
   local retained_nodes = retained_lua_nodes(contract)
   local static = static_entries(result.graph)
+  local messages = message_entries(result.graph)
   local runtime_source_path = runtime_source_artifact_path(target_lua)
   local abi = target_abi(opts, target_lua)
+  local backend = opts.backend or "std_http"
   local manifest_obj = {
     format = "meteorite.release.v0",
     mode = release_mode,
@@ -77,6 +114,17 @@ function manifest.build(result, release_mode, server_path, contract, target_lua,
     route_count = #(result.graph.routes or {}),
     routes = #(result.graph.routes or {}),
     server = server_path,
+    backend = {
+      name = backend,
+      transport = backend_transport(backend),
+      protocol = backend_protocol(backend),
+      capabilities = backend_capabilities(backend),
+      socket = backend_transport(backend) == "unix" and {
+        path = opts.unix_socket_path or opts["unix-socket-path"] or "/tmp/meteorite.sock",
+        mode = opts.unix_socket_mode or opts["unix-socket-mode"] or "0660",
+        unlink_stale = opts.unix_socket_unlink_stale ~= false and opts["unix-socket-unlink-stale"] ~= false,
+      } or nil,
+    },
     target = {
       abi = abi,
     },
@@ -92,6 +140,7 @@ function manifest.build(result, release_mode, server_path, contract, target_lua,
       count = #retained,
       nodes = retained_nodes,
     },
+    messages = { count = #messages, entries = messages },
     static = {
       count = #static,
       assets = {},

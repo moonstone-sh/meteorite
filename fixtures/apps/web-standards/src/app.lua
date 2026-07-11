@@ -35,23 +35,32 @@ app:get("/health", function()
 	return "ok"
 end)
 
-app:get("/static/hello.txt", m.file(fixture_root .. "/public/hello.txt", {
-	content_type = "text/plain; charset=utf-8",
-	cache = "public, max-age=60",
-}))
+app:get(
+	"/static/hello.txt",
+	m.file(fixture_root .. "/public/hello.txt", {
+		content_type = "text/plain; charset=utf-8",
+		cache = "public, max-age=60",
+	})
+)
 
-app:get("/static/html", m.file(fixture_root .. "/public/index.html", {
-	content_type = "text/html; charset=utf-8",
-	cache = "no-cache",
-	only = { accept = "text/html" },
-}))
+app:get(
+	"/static/html",
+	m.file(fixture_root .. "/public/index.html", {
+		content_type = "text/html; charset=utf-8",
+		cache = "no-cache",
+		only = { accept = "text/html" },
+	})
+)
 
-app:get("/static/assets/:path*", m.dir(fixture_root .. "/public/assets", {
-	param = "path",
-	cache = "public, max-age=31536000, immutable",
-	compressed = { gzip = true },
-	types = { js = "application/javascript" },
-}))
+app:get(
+	"/static/assets/:path*",
+	m.dir(fixture_root .. "/public/assets", {
+		param = "path",
+		cache = "public, max-age=31536000, immutable",
+		compressed = { gzip = true },
+		types = { js = "application/javascript" },
+	})
+)
 
 app:get("/headers/table", function()
 	return {
@@ -118,42 +127,60 @@ end)
 app:get("/security/request-id-zig", "handlers.response_zig_request_id")
 
 app:get("/security/cors", function(ctx)
-	return ctx:text(200, "security:cors", { headers = ctx:cors_headers({
-		origins = { "https://app.example", "https://admin.example" },
-		methods = { "GET", "POST", "OPTIONS" },
-		headers = { "Content-Type", "Authorization" },
-		credentials = true,
-		max_age = 600,
-		expose_headers = { "X-Request-ID" },
-	}) })
+	return ctx:text(
+		200,
+		"security:cors",
+		{
+			headers = ctx:cors_headers({
+				origins = { "https://app.example", "https://admin.example" },
+				methods = { "GET", "POST", "OPTIONS" },
+				headers = { "Content-Type", "Authorization" },
+				credentials = true,
+				max_age = 600,
+				expose_headers = { "X-Request-ID" },
+			}),
+		}
+	)
 end)
 
 app:post("/security/cors", function(ctx)
-	return ctx:text(200, "security:cors:post", { headers = ctx:cors_headers({
-		origins = { "https://app.example", "https://admin.example" },
-		methods = { "GET", "POST", "OPTIONS" },
-		headers = { "Content-Type", "Authorization" },
-		credentials = true,
-		max_age = 600,
-		expose_headers = { "X-Request-ID" },
-	}) })
+	return ctx:text(
+		200,
+		"security:cors:post",
+		{
+			headers = ctx:cors_headers({
+				origins = { "https://app.example", "https://admin.example" },
+				methods = { "GET", "POST", "OPTIONS" },
+				headers = { "Content-Type", "Authorization" },
+				credentials = true,
+				max_age = 600,
+				expose_headers = { "X-Request-ID" },
+			}),
+		}
+	)
 end)
 
 app:route("OPTIONS", "/security/cors", function(ctx)
-	return ctx:bytes(204, "text/plain; charset=utf-8", "", { headers = ctx:cors_headers({
-		origins = { "https://app.example", "https://admin.example" },
-		methods = { "GET", "POST", "OPTIONS" },
-		headers = { "Content-Type", "Authorization" },
-		credentials = true,
-		max_age = 600,
-		expose_headers = { "X-Request-ID" },
-	}) })
+	return ctx:bytes(
+		204,
+		"text/plain; charset=utf-8",
+		"",
+		{
+			headers = ctx:cors_headers({
+				origins = { "https://app.example", "https://admin.example" },
+				methods = { "GET", "POST", "OPTIONS" },
+				headers = { "Content-Type", "Authorization" },
+				credentials = true,
+				max_age = 600,
+				expose_headers = { "X-Request-ID" },
+			}),
+		}
+	)
 end)
 
 app:get("/security/auth/basic", function(ctx)
 	local username, password = ctx:basic_auth()
-	local ok = ctx:constant_time_equal(username or "", "meteorite")
-		and ctx:constant_time_equal(password or "", "rocks")
+	local ok = ctx:constant_time_equal(username or "", "meteorite") and ctx:constant_time_equal(password or "", "rocks")
 	if not ok then
 		return ctx:text(401, "auth:basic-denied", {
 			headers = { ["WWW-Authenticate"] = 'Basic realm="meteorite"' },
@@ -174,12 +201,15 @@ end)
 
 app:get("/security/logging/safe-headers", function(ctx)
 	local headers = ctx:safe_headers({ "Authorization", "Cookie", "X-Meteorite-Trace", "X-CSRF-Token" })
-	return ctx:text(200, table.concat({
-		"authorization=" .. tostring(headers.Authorization or "missing"),
-		"cookie=" .. tostring(headers.Cookie or "missing"),
-		"trace=" .. tostring(headers["X-Meteorite-Trace"] or "missing"),
-		"csrf=" .. tostring(headers["X-CSRF-Token"] or "missing"),
-	}, ";"))
+	return ctx:text(
+		200,
+		table.concat({
+			"authorization=" .. tostring(headers.Authorization or "missing"),
+			"cookie=" .. tostring(headers.Cookie or "missing"),
+			"trace=" .. tostring(headers["X-Meteorite-Trace"] or "missing"),
+			"csrf=" .. tostring(headers["X-CSRF-Token"] or "missing"),
+		}, ";")
+	)
 end)
 
 app:get("/observability/log", function(ctx)
@@ -302,7 +332,11 @@ app:get("/headers/invalid/zig-reserved", "handlers.response_zig_reserved_header"
 app:get({
 	route = "/headers/invalid/post-hook-value-crlf",
 	pipeline = function(ctx)
-		ctx:handle({ id = "post_header_injection_handle", strat = "zig", symbol = "response_post_header_injection_base" })
+		ctx:handle({
+			id = "post_header_injection_handle",
+			strat = "zig",
+			symbol = "response_post_header_injection_base",
+		})
 		ctx:hook("post_handler", {
 			id = "post_header_injection_hook",
 			strat = "zig",
@@ -418,6 +452,15 @@ end)
 
 app:get("/query/repeated", function(ctx)
 	return "tag=" .. tostring(ctx:query("tag") or "missing")
+end)
+
+app:get("/query/all", function(ctx)
+	local tags = ctx:query_all("tag") or {}
+	return "tags=" .. table.concat(tags, ",")
+end)
+
+app:get("/query/decoded", function(ctx)
+	return "q=" .. tostring(ctx:query("q") or "missing")
 end)
 
 app:get("/params/lua/:id", {

@@ -1131,4 +1131,52 @@ if grep -qi $'\r' <(curl -fsS -D - -o /tmp/meteorite-web-standards-body http://1
   : # curl preserves CRLF in raw headers; explicit injection checks belong in a negative fixture.
 fi
 
+# Hybrid invoke context API parity tests
+invoke_query="/tmp/meteorite-web-standards-invoke-query.json"
+LUA_PATH='src/?.lua;src/?/init.lua;fixtures/apps/web-standards/src/?.lua;;' ./.moonstone/env/bin/lua src/cli/main.lua invoke --json fixtures/apps/web-standards/src/main.lua GET '/query/repeated?tag=pepe&tag=pope' > "$invoke_query"
+python3 - "$invoke_query" <<'PY'
+import json, sys
+result = json.load(open(sys.argv[1]))
+assert result["response"]["status"] == 200, result
+assert result["response"]["body"] == "tag=pepe", result["response"]
+assert result["response"]["content_type"] == "text/plain; charset=utf-8", result["response"]
+PY
+
+invoke_param="/tmp/meteorite-web-standards-invoke-param.json"
+LUA_PATH='src/?.lua;src/?/init.lua;fixtures/apps/web-standards/src/?.lua;;' ./.moonstone/env/bin/lua src/cli/main.lua invoke --json fixtures/apps/web-standards/src/main.lua GET '/params/lua/456' > "$invoke_param"
+python3 - "$invoke_param" <<'PY'
+import json, sys
+result = json.load(open(sys.argv[1]))
+assert result["response"]["status"] == 200, result
+assert result["response"]["body"] == "param-lua:456:missing", result["response"]
+PY
+
+invoke_all="/tmp/meteorite-web-standards-invoke-all.json"
+LUA_PATH='src/?.lua;src/?/init.lua;fixtures/apps/web-standards/src/?.lua;;' ./.moonstone/env/bin/lua src/cli/main.lua invoke --json fixtures/apps/web-standards/src/main.lua GET '/query/all?tag=a&tag=b&tag=c' > "$invoke_all"
+python3 - "$invoke_all" <<'PY'
+import json, sys
+result = json.load(open(sys.argv[1]))
+assert result["response"]["status"] == 200, result
+assert result["response"]["body"] == "tags=a,b,c", result["response"]
+PY
+
+invoke_decoded="/tmp/meteorite-web-standards-invoke-decoded.json"
+LUA_PATH='src/?.lua;src/?/init.lua;fixtures/apps/web-standards/src/?.lua;;' ./.moonstone/env/bin/lua src/cli/main.lua invoke --json fixtures/apps/web-standards/src/main.lua GET '/query/decoded?q=hello%20world' > "$invoke_decoded"
+python3 - "$invoke_decoded" <<'PY'
+import json, sys
+result = json.load(open(sys.argv[1]))
+assert result["response"]["status"] == 200, result
+assert result["response"]["body"] == "q=hello world", result["response"]
+PY
+
+invoke_string="/tmp/meteorite-web-standards-invoke-string.json"
+LUA_PATH='src/?.lua;src/?/init.lua;fixtures/apps/web-standards/src/?.lua;;' ./.moonstone/env/bin/lua src/cli/main.lua invoke --json fixtures/apps/web-standards/src/main.lua DELETE '/body/no-body' > "$invoke_string"
+python3 - "$invoke_string" <<'PY'
+import json, sys
+result = json.load(open(sys.argv[1]))
+assert result["response"]["status"] == 200, result
+assert result["response"]["body"] == "delete:no-body", result["response"]
+assert result["response"]["content_type"] == "text/plain; charset=utf-8", result["response"]
+PY
+
 echo "web standards fixture: ok"

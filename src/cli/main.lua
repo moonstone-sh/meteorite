@@ -361,17 +361,113 @@ local function parse_mode_args(start_at, default_mode)
   return mode, table.concat(extras, " ")
 end
 
+local valid_backends = { ipc_unixsocket = true, ipc_unixsocket_http = true, std_http = true, fast_http = true }
+
+local function assert_backend(value)
+  if valid_backends[value] then return value end
+  error("unsupported backend: " .. tostring(value) .. " (expected ipc_unixsocket, ipc_unixsocket_http, std_http, or fast_http)")
+end
+
+local function parse_scalar(value)
+  value = tostring(value or ""):match("^%s*(.-)%s*$") or ""
+  value = value:gsub("%s+#.*$", "")
+  if value:sub(1, 1) == '"' and value:sub(-1) == '"' then return value:sub(2, -2) end
+  if value == "true" then return true end
+  if value == "false" then return false end
+  return value
+end
+
+local function parse_server_config(root)
+  local data = read_file((root or ".") .. "/moonstone.toml")
+  local config = { unix_socket = {} }
+  if not data then return config end
+  local section = nil
+  for line in data:gmatch("[^\n]+") do
+    local header = line:match("^%s*%[([^%]]+)%]%s*$")
+    if header then
+      section = header
+    elseif section == "server" or section == "server.unix_socket" or section == "server.ipc_unixsocket" or section == "server.ipc_unixsocket_http" then
+      local key, value = line:match("^%s*([%w_%-]+)%s*=%s*(.-)%s*$")
+      if key then
+        key = key:gsub("-", "_")
+        if section == "server" then
+          config[key] = parse_scalar(value)
+        else
+          config.unix_socket[key] = parse_scalar(value)
+        end
+      end
+    end
+  end
+  return config
+end
+
+local function parse_build_args(start_at, default_mode, root)
+  local server_config = parse_server_config(root or current_dir())
+  local parsed = {
+    mode = default_mode,
+    backend = server_config.backend or "std_http",
+    unix_socket = server_config.unix_socket or {},
+    extras = {},
+  }
+  local i = start_at
+  while i <= #arg do
+    local value = arg[i]
+    if value == "--help" or value == "-h" then print_help("build"); os.exit(0)
+    elseif value == "--mode" then
+      i = i + 1
+      parsed.mode = arg[i] or parsed.mode
+    elseif value and value:match("^%-%-mode=") then
+      parsed.mode = value:match("^%-%-mode=(.*)$")
+    elseif value == "--backend" then
+      i = i + 1
+      parsed.backend = assert_backend(arg[i])
+    elseif value and value:match("^%-%-backend=") then
+      parsed.backend = assert_backend(value:match("^%-%-backend=(.*)$"))
+    elseif value and value:match("^%-Dbackend=") then
+      parsed.backend = assert_backend(value:match("^%-Dbackend=(.*)$"))
+    elseif value == "--unix-socket-path" then
+      i = i + 1
+      parsed.unix_socket.path = arg[i]
+    elseif value and value:match("^%-%-unix%-socket%-path=") then
+      parsed.unix_socket.path = value:match("^%-%-unix%-socket%-path=(.*)$")
+    elseif value == "--unix-socket-mode" then
+      i = i + 1
+      parsed.unix_socket.mode = arg[i]
+    elseif value and value:match("^%-%-unix%-socket%-mode=") then
+      parsed.unix_socket.mode = value:match("^%-%-unix%-socket%-mode=(.*)$")
+    elseif value == "--unix-socket-unlink-stale" then
+      parsed.unix_socket.unlink_stale = true
+    elseif value == "--no-unix-socket-unlink-stale" then
+      parsed.unix_socket.unlink_stale = false
+    else
+      parsed.extras[#parsed.extras + 1] = shell_quote(value)
+    end
+    i = i + 1
+  end
+  parsed.backend = assert_backend(parsed.backend)
+  return parsed
+end
+
+local function unix_socket_build_flags(config)
+  local flags = {}
+  if config and config.path then flags[#flags + 1] = "-Dunix-socket-path=" .. shell_quote(config.path) end
+  if config and config.mode then flags[#flags + 1] = "-Dunix-socket-mode=" .. shell_quote(config.mode) end
+  if config and config.unlink_stale ~= nil then flags[#flags + 1] = "-Dunix-socket-unlink-stale=" .. tostring(config.unlink_stale) end
+  return table.concat(flags, " ")
+end
+
 local function build_project()
-  local mode, extras = parse_mode_args(2, "hybrid")
   local root = current_dir()
-  local graph_command = table.concat({ shell_quote(read_file(".moonstone/env/bin/lua") and ".moonstone/env/bin/lua" or "lua"), shell_quote(package_cli_file()), "graph", shell_quote(root .. "/src/main.lua"), shell_quote(root .. "/.meteorite/graph/current"), shell_quote(mode) }, " ")
+  local parsed = parse_build_args(2, "hybrid", root)
+  local graph_command = table.concat({ shell_quote(read_file(".moonstone/env/bin/lua") and ".moonstone/env/bin/lua" or "lua"), shell_quote(package_cli_file()), "graph", shell_quote(root .. "/src/main.lua"), shell_quote(root .. "/.meteorite/graph/current"), shell_quote(parsed.mode), shell_quote(parsed.backend) }, " ")
   if not run_command(graph_command) then os.exit(1) end
   local command_line = table.concat({
     "zig build --build-file", shell_quote(package_build_file()),
     "-Dmeteorite-cli=" .. shell_quote(package_cli_file()),
     "-Dproject-root=" .. shell_quote(root),
-    "-Dgraph-input=src/main.lua -Dgraph-output=.meteorite/graph/current -Dmode=" .. shell_quote(mode) .. " -Dbackend=std_http",
-    extras,
+    "-Dgraph-input=src/main.lua -Dgraph-output=.meteorite/graph/current -Dmode=" .. shell_quote(parsed.mode) .. " -Dbackend=" .. shell_quote(parsed.backend),
+    unix_socket_build_flags(parsed.unix_socket),
+    table.concat(parsed.extras, " "),
     "install-server --", shell_quote(root .. "/dist/server"),
   }, " ")
   if not run_command(command_line) then os.exit(1) end
@@ -380,12 +476,15 @@ end
 local function dev_project()
   local cli = package_cli_file()
   local root = current_dir()
+  local server_config = parse_server_config(root)
+  local backend = assert_backend(server_config.backend or "std_http")
   local guard = package_guard_file()
   local build_command = table.concat({
     "zig build --build-file", shell_quote(package_build_file()),
     "-Dmeteorite-cli=" .. shell_quote(cli),
     "-Dproject-root=" .. shell_quote(root),
-    "-Dgraph-input=src/main.lua -Dgraph-output=.meteorite/graph/current -Dmode=hybrid_dev -Dbackend=std_http -Dhybrid-profile=optimized -Drouter-dispatch=param_matchers",
+    "-Dgraph-input=src/main.lua -Dgraph-output=.meteorite/graph/current -Dmode=hybrid_dev -Dbackend=" .. shell_quote(backend) .. " -Dhybrid-profile=optimized -Drouter-dispatch=param_matchers",
+    unix_socket_build_flags(server_config.unix_socket),
     "install-server --", shell_quote(root .. "/dist/server"),
   }, " ")
   local lua = read_file(".moonstone/env/bin/lua") and ".moonstone/env/bin/lua" or "lua"
@@ -487,6 +586,19 @@ local function doctor_project()
     add("warn", "release readiness", tostring(app_err))
   end
   add(exists("partiture.lua") and "ok" or "warn", "release partiture", exists("partiture.lua") and "partiture.lua" or "add partiture.lua for Ballad release exports")
+  local server_config = parse_server_config(current_dir())
+  local backend_ok = valid_backends[server_config.backend or "std_http"] == true
+  local backend = backend_ok and (server_config.backend or "std_http") or tostring(server_config.backend)
+  add(backend_ok and "ok" or "fail", "server backend", backend_ok and backend or (backend .. " (expected ipc_unixsocket, ipc_unixsocket_http, std_http, or fast_http)"))
+  if backend == "ipc_unixsocket" or backend == "ipc_unixsocket_http" then
+    local socket_path = server_config.unix_socket.path or "/tmp/meteorite.sock"
+    local socket_mode = server_config.unix_socket.mode or "0660"
+    local path_ok = socket_path ~= "" and socket_path:sub(1, 1) == "/"
+    local mode_ok = tostring(socket_mode):match("^0?[0-7][0-7][0-7]$") ~= nil
+    add(path_ok and "ok" or "fail", "unix socket path", path_ok and socket_path or "must be a non-empty absolute path")
+    add(mode_ok and "ok" or "fail", "unix socket mode", mode_ok and socket_mode or "expected octal mode such as 0660")
+    add("ok", "unix socket stale unlink", tostring(server_config.unix_socket.unlink_stale ~= false))
+  end
   local port = os.getenv("METEORITE_DEV_PORT") or "8080"
   local listener = capture_command("lsof -tiTCP:" .. port .. " -sTCP:LISTEN 2>/dev/null | head -n 1")
   add(listener ~= "" and "warn" or "ok", "dev port " .. port, listener ~= "" and ("listener pid " .. listener:gsub("%s+$", "")) or "free")
@@ -585,8 +697,11 @@ if command == "routes" then
         for _, r in ipairs(normalized.routes) do
           out[#out + 1] = {
             id = r.id,
+            canonical_id = r.canonical_id,
             method = r.method,
             path = r.raw_path,
+            http = r.http,
+            message = r.message,
             handler_kind = r.handler.kind,
             params = schema_list(r.params),
             query = schema_list(r.query),
@@ -617,13 +732,31 @@ if command == "routes" then
         end
         return out
       end)(),
+      messages = (function()
+        local out = {}
+        for _, r in ipairs(normalized.messages or {}) do
+          out[#out + 1] = {
+            id = r.id,
+            canonical_id = r.canonical_id,
+            message = r.message,
+            handler_kind = r.handler.kind,
+            metadata = schema_list(r.params),
+            validation = validation_map(r.validation),
+            runtime = r.runtime,
+            scope = scope_summary(r.scope),
+            source_form = r.source_form or "message",
+          }
+        end
+        return out
+      end)(),
     }))
   else
     -- Human-readable output
     for _, r in ipairs(normalized.routes) do
       local src = r.source_form or "legacy"
-      io.write(string.format("  %-6s %-30s  handler=%-12s  source=%s\n",
-        r.method, r.raw_path, r.handler.kind, src))
+      local message = r.message and r.message.name or ""
+      io.write(string.format("  %-6s %-30s  message=%-24s  handler=%-12s  source=%s\n",
+        r.method, r.raw_path, message, r.handler.kind, src))
       if r.pipeline then
         for _, st in ipairs(r.pipeline) do
           local detail = st.strat
@@ -632,10 +765,15 @@ if command == "routes" then
           elseif st.strat == "inline_lua" then detail = detail .. " <inline>"
           end
           io.write(string.format("    %-10s %-8s  %s\n", st.kind, st.strat, detail))
-        end
       end
     end
+    for _, r in ipairs(normalized.messages or {}) do
+      local src = r.source_form or "message"
+      local message = r.message and r.message.name or ""
+      io.write(string.format("  MESSAGE %-27s  handler=%-12s  source=%s\n", message, r.handler.kind, src))
+    end
   end
+end
   return
 end
 
@@ -662,12 +800,14 @@ if command == "graph" then
   local emitter = require("codegen.emitter")
   local output = arg[3] or ".meteorite/graph/current"
   local mode = arg[4] or "release-static"
-  local result = emitter.emit(app, { output = output, mode = mode })
+  local backend = assert_backend(arg[5] or "fast_http")
+  local result = emitter.emit(app, { output = output, mode = mode, backend = backend })
   print("Meteorite graph")
   print("  graph: " .. result.graph_hash)
   print("  mode: " .. mode)
-  print("  backend: fast_http")
+  print("  backend: " .. backend)
   print("  routes: " .. tostring(#result.graph.routes))
+  print("  messages: " .. tostring(#(result.graph.messages or {})))
   if result.partitions then
     print("  partitions:")
     print("    route graph: " .. result.partitions.route_graph_hash)

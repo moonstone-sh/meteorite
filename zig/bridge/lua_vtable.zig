@@ -1,5 +1,7 @@
 const std = @import("std");
-const Header = @import("meteorite_protocol").Header;
+const protocol = @import("meteorite_protocol");
+const Header = protocol.Header;
+const CookieOptions = protocol.CookieOptions;
 
 /// Virtual table for dispatching context method calls from Lua C bindings
 /// to the compile-time-generated Context type in meteorite.zig.
@@ -13,8 +15,12 @@ pub const VTable = struct {
     body: *const fn (ctx: *anyopaque) anyerror![]const u8,
     param: *const fn (ctx: *anyopaque, name: []const u8) ?[]const u8,
     param_at: *const fn (ctx: *anyopaque, index: usize) ?[]const u8,
+    message: *const fn (ctx: *anyopaque) []const u8,
+    metadata: *const fn (ctx: *anyopaque, name: []const u8) ?[]const u8,
     query: *const fn (ctx: *anyopaque, name: []const u8) ?[]const u8,
+    query_all: *const fn (ctx: *anyopaque, name: []const u8) ?[][]const u8,
     header: *const fn (ctx: *anyopaque, name: []const u8) ?[]const u8,
+    set_cookie: *const fn (ctx: *anyopaque, buffer: []u8, name: []const u8, value: []const u8, options: CookieOptions) anyerror!Header,
     request_id: *const fn (ctx: *anyopaque) anyerror![]const u8,
     state_get: *const fn (ctx: *anyopaque, key: []const u8) ?[]const u8,
     state_set: *const fn (ctx: *anyopaque, key: []const u8, value: []const u8) anyerror!void,
@@ -67,16 +73,40 @@ pub fn makeVTable(comptime Ctx: type) VTable {
                 return typed.query(name);
             }
         }.f,
+        .query_all = struct {
+            fn f(ptr: *anyopaque, name: []const u8) ?[][]const u8 {
+                const typed: *Ctx = @ptrCast(@alignCast(ptr));
+                return typed.queryAll(name);
+            }
+        }.f,
         .param_at = struct {
             fn f(ptr: *anyopaque, index: usize) ?[]const u8 {
                 const typed: *Ctx = @ptrCast(@alignCast(ptr));
                 return typed.paramAt(index);
             }
         }.f,
+        .message = struct {
+            fn f(ptr: *anyopaque) []const u8 {
+                const typed: *Ctx = @ptrCast(@alignCast(ptr));
+                return typed.message();
+            }
+        }.f,
+        .metadata = struct {
+            fn f(ptr: *anyopaque, name: []const u8) ?[]const u8 {
+                const typed: *Ctx = @ptrCast(@alignCast(ptr));
+                return typed.metadata(name);
+            }
+        }.f,
         .header = struct {
             fn f(ptr: *anyopaque, name: []const u8) ?[]const u8 {
                 const typed: *Ctx = @ptrCast(@alignCast(ptr));
                 return typed.header(name);
+            }
+        }.f,
+        .set_cookie = struct {
+            fn f(ptr: *anyopaque, buffer: []u8, name: []const u8, value: []const u8, options: CookieOptions) !Header {
+                const typed: *Ctx = @ptrCast(@alignCast(ptr));
+                return typed.setCookie(buffer, name, value, options);
             }
         }.f,
         .request_id = struct {

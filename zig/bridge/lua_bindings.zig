@@ -238,6 +238,15 @@ pub fn l_set_cookie(L: ?*c.lua_State) callconv(.c) c_int {
     const options_arg: c_int = if (nargs >= offset + 3) offset + 3 else 0;
     const options = parseCookieOptions(L, options_arg) catch |err| return luaError(L, "set_cookie options invalid: {s}", .{@errorName(err)});
     var buffer: [4096]u8 = undefined;
+    if (offset == 1) {
+        if (lua_vtable.current_vtable) |rt| {
+            if (lua_vtable.current_ctx) |ctx| {
+                const header = rt.set_cookie(ctx, &buffer, name_ptr[0..name_len], value_ptr[0..value_len], options) catch |err| return luaError(L, "set_cookie failed: {s}", .{@errorName(err)});
+                _ = c.lua_pushlstring(L, @ptrCast(header.value.ptr), header.value.len);
+                return 1;
+            }
+        }
+    }
     const value = protocol.buildSetCookie(&buffer, name_ptr[0..name_len], value_ptr[0..value_len], options) catch |err| return luaError(L, "set_cookie invalid: {s}", .{@errorName(err)});
     _ = c.lua_pushlstring(L, @ptrCast(value.ptr), value.len);
     return 1;
@@ -301,6 +310,36 @@ pub fn l_query(L: ?*c.lua_State) callconv(.c) c_int {
     const name = c.lua_tolstring(L, 2, null);
     if (lua_vtable.current_vtable.?.query(lua_vtable.current_ctx.?, std.mem.span(name))) |value| {
         _ = c.lua_pushlstring(L, @ptrCast(value.ptr), value.len);
+    } else {
+        c.lua_pushnil(L);
+    }
+    return 1;
+}
+
+pub fn l_message(L: ?*c.lua_State) callconv(.c) c_int {
+    const value = lua_vtable.current_vtable.?.message(lua_vtable.current_ctx.?);
+    _ = c.lua_pushlstring(L, @ptrCast(value.ptr), value.len);
+    return 1;
+}
+
+pub fn l_metadata(L: ?*c.lua_State) callconv(.c) c_int {
+    const name = c.lua_tolstring(L, 2, null);
+    if (lua_vtable.current_vtable.?.metadata(lua_vtable.current_ctx.?, std.mem.span(name))) |value| {
+        _ = c.lua_pushlstring(L, @ptrCast(value.ptr), value.len);
+    } else {
+        c.lua_pushnil(L);
+    }
+    return 1;
+}
+
+pub fn l_query_all(L: ?*c.lua_State) callconv(.c) c_int {
+    const name = c.lua_tolstring(L, 2, null);
+    if (lua_vtable.current_vtable.?.query_all(lua_vtable.current_ctx.?, std.mem.span(name))) |values| {
+        c.lua_createtable(L, @intCast(values.len), 0);
+        for (values, 0..) |value, i| {
+            _ = c.lua_pushlstring(L, @ptrCast(value.ptr), value.len);
+            c.lua_rawseti(L, -2, @intCast(i + 1));
+        }
     } else {
         c.lua_pushnil(L);
     }

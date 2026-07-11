@@ -39,21 +39,21 @@ end)
 
 app:get("/users/:id", function(c)
   local repo = require("repo")
-  local user = repo.find_user(tonumber(c.params.id))
+  local user = repo.find_user(tonumber(c:param("id")))
   if not user then return c:json({ error = "not found" }, { status = 404 }) end
   return c:json(user)
 end)
 
 app:patch("/users/:id", function(c)
   local repo = require("repo")
-  local user = repo.update_user(tonumber(c.params.id), repo.read_user_input(c))
+  local user = repo.update_user(tonumber(c:param("id")), repo.read_user_input(c))
   if not user then return c:json({ error = "not found" }, { status = 404 }) end
   return c:json(user)
 end)
 
 app:delete("/users/:id", function(c)
   local repo = require("repo")
-  if not repo.delete_user(tonumber(c.params.id)) then
+  if not repo.delete_user(tonumber(c:param("id"))) then
     return c:json({ error = "not found" }, { status = 404 })
   end
   return c:json({ ok = true })
@@ -123,3 +123,82 @@ end
 
 return repo
 ```
+
+
+## Handler Context API
+
+### Parameter Convention and Context Shape
+
+Meteorite determines the context shape from the **first parameter name** of your
+inline Lua handler:
+
+| First param | `arg_mode`         | Context shape                                   |
+|-------------|--------------------|-------------------------------------------------|
+| `ctx` / `c` | `lazy_context`     | Methods only: `ctx:query()`, `ctx:param()`, etc. |
+| `req`       | `request_table`    | Pre-populated tables: `req.query.name`, `req.params.name` |
+| (none)      | `no_args`          | No context passed                               |
+| other       | `direct_params`    | Positional path-param arguments                 |
+
+**Recommended**: use `ctx` or `c` as the first parameter. The `lazy_context`
+mode gives you method-based access that works identically in compiled runtime
+and local `meteorite invoke`:
+
+```lua
+app:get("/users/:id", { params = { id = m.u64() } }, function(ctx)
+  return ctx:json({ id = ctx:param("id") })
+end)
+```
+
+### String Return Sugar
+
+Returning a bare string from a handler is sugar for `200 text/plain; charset=utf-8`:
+
+```lua
+app:get("/health", function()
+  return "ok"
+end)
+```
+
+This is equivalent to:
+
+```lua
+app:get("/health", function(ctx)
+  return ctx:text(200, "ok")
+end)
+```
+
+Use it for simple status/echo endpoints. For custom status codes, content types,
+or headers, return a response table or use a helper:
+
+```lua
+app:get("/json", function(ctx)
+  return ctx:json({ ok = true })
+end)
+
+app:get("/redirect", function()
+  return { status = 302, content_type = "text/plain; charset=utf-8", body = "redirect", headers = { Location = "/" } }
+end)
+```
+
+### Query Parameter Access
+
+Query values are percent-decoded and returned as strings (or converted types
+when declared with validators):
+
+```lua
+app:get("/search", { query = { q = m.string({ max = 100 }), page = m.u64({ optional = true }) } }, function(ctx)
+  return ctx:json({ q = ctx:query("q"), page = ctx:query("page") })
+end)
+```
+
+For repeated query parameters (`?tag=pepe&tag=pope`), use `ctx:query_all()`:
+
+```lua
+app:get("/filter", function(ctx)
+  local tags = ctx:query_all("tag") or {}
+  return ctx:json({ tags = tags })  -- { "pepe", "pope" }
+end)
+```
+
+`ctx:query("tag")` returns the first value (`"pepe"`). `ctx:query_all("tag")`
+returns all values as a Lua array.

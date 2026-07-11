@@ -89,7 +89,7 @@ return {
     local mode = opts.mode or "dev"
     local app = load_app(root, input, mode)
     if type(app) ~= "table" or not app.__meteorite_app then ctx.fail(input .. " must return a Meteorite app") end
-    local result = emitter.emit(app, { output = output, mode = mode })
+    local result = emitter.emit(app, { output = output, mode = mode, backend = opts.backend or "std_http" })
     local assets = graph_mod.AssetSet.new()
     assets:add(ctx.graph:add_asset({ kind = "meteorite_graph", output_path = result.output, virtual_path = result.output, metadata = { graph_hash = result.graph_hash, routes = #result.graph.routes } }))
     return assets
@@ -132,11 +132,11 @@ return {
     lua_root = lua_root or opts.lua_root
     local cmodule_task_sets = release_tasks.rebuild_lua_cmodules(ctx, root, opts, target_lua, lua_root, plugin_root())
 
-    local result = emitter.emit(app, { output = graph_output, mode = mode })
+    local result = emitter.emit(app, { output = graph_output, mode = mode, backend = opts.backend or "std_http" })
     if release_mode == "static" then release_contract.assert_static_graph(ctx, result.graph) end
     local task_assets = ctx:native_task({
       tool = opts.tool or "zig",
-      args = release_tasks.build_args_for(mode, { output = output, build_file = plugin_build_file(), project_root = ".", meteorite_cli = plugin_cli_file(), graph_input = opts.input or "src/main.lua", graph_output = opts.graph_output or ".meteorite/graph/current", backend = opts.backend, hybrid_profile = opts.hybrid_profile, ["hybrid-profile"] = opts["hybrid-profile"], router_dispatch = opts.router_dispatch, ["router-dispatch"] = opts["router-dispatch"], optimize = opts.optimize, target = opts.target, lua_root = lua_root }),
+      args = release_tasks.build_args_for(mode, { output = output, build_file = plugin_build_file(), project_root = ".", meteorite_cli = plugin_cli_file(), graph_input = opts.input or "src/main.lua", graph_output = opts.graph_output or ".meteorite/graph/current", backend = opts.backend, unix_socket_path = opts.unix_socket_path, ["unix-socket-path"] = opts["unix-socket-path"], unix_socket_mode = opts.unix_socket_mode, ["unix-socket-mode"] = opts["unix-socket-mode"], unix_socket_unlink_stale = opts.unix_socket_unlink_stale, ["unix-socket-unlink-stale"] = opts["unix-socket-unlink-stale"], hybrid_profile = opts.hybrid_profile, ["hybrid-profile"] = opts["hybrid-profile"], router_dispatch = opts.router_dispatch, ["router-dispatch"] = opts["router-dispatch"], optimize = opts.optimize, target = opts.target, lua_root = lua_root }),
       cwd = root,
       outputs = { output_path },
       cacheable = false,

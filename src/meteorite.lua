@@ -18,11 +18,55 @@ local site_macro = require("core.site")
 ---@field body? {max?: number|string, [string]: any}
 ---@field memory? {max_body?: number|string, request_arena?: number|string}
 ---@field capabilities? table<string, any>
+---@field message? string|{name?: string, pattern?: string}
+---@field metadata? table<string, MeteoriteSchemaValue>
 ---@field plugins? table
 ---@field context? table
 ---@field id? string
 
----@alias MeteoriteHandler string|fun(c: MeteoriteContext): any|{kind: "lua", module: string, path?: string}|{kind: "zig", symbol: string}|{kind: "zig_file", path: string, decl?: string}
+--- Handler context for inline Lua and Lua-file handlers.
+--- Use `ctx` or `c` as the first parameter name for lazy_context mode
+--- (method-based access). Use `req` for request_table mode (table access).
+---@class MeteoriteContext
+---@field params table<string, string|integer|number|boolean> Route path parameters (table access in request_table mode)
+---@field state table<string, any> Request-local mutable state
+---@field query table<string, string|integer|number|boolean|nil> Validated query values (table access in request_table mode)
+---@field param fun(self: MeteoriteContext, name: string): string|integer|nil Look up a route parameter by name
+---@field query fun(self: MeteoriteContext, name: string): string|nil Look up a percent-decoded query value (first-wins for repeated keys)
+---@field query_all fun(self: MeteoriteContext, name: string): string[]|nil Look up all values for a repeated query parameter
+---@field message fun(self: MeteoriteContext): string Native message name for ipc_unixsocket requests
+---@field metadata fun(self: MeteoriteContext, name: string): string|nil Native IPC metadata lookup; distinct from HTTP headers
+---@field header fun(self: MeteoriteContext, name: string): string|nil Case-insensitive HTTP request header lookup; nil on native IPC backends
+---@field body fun(self: MeteoriteContext): string Raw request body (cached, single-read)
+---@field json_body fun(self: MeteoriteContext): table|nil, string|nil Parse JSON body, returns (data, err)
+---@field form_body fun(self: MeteoriteContext): table|nil, string|nil Parse URL-encoded form body, returns (data, err)
+---@field text fun(self: MeteoriteContext, status_or_body: integer|string, body?: string, opts?: {headers?: table<string, string>}): table Response helper: text/plain; charset=utf-8
+---@field json fun(self: MeteoriteContext, status_or_value: integer|table, value?: table, opts?: {status?: integer, headers?: table<string, string>}): table Response helper: application/json
+---@field bytes fun(self: MeteoriteContext, status: integer, content_type: string, body: string, opts?: {headers?: table<string, string>}): table Response helper: arbitrary content type
+---@field cookie fun(self: MeteoriteContext, name: string): string|nil Parse request cookie by name
+---@field set_cookie fun(self: MeteoriteContext, name: string, value: string, opts?: {path?: string, domain?: string, max_age?: integer, expires?: string, secure?: boolean, http_only?: boolean, same_site?: string}): string Build a Set-Cookie header value with secure defaults
+---@field request_id fun(self: MeteoriteContext): string Get or generate a safe X-Request-ID
+---@field secure_headers fun(self: MeteoriteContext, opts?: table): table<string, string> Build secure response headers
+---@field cors_headers fun(self: MeteoriteContext, opts?: table): table<string, string> Build CORS response headers
+---@field constant_time_equal fun(self: MeteoriteContext, left: string, right: string): boolean Constant-time string comparison
+---@field basic_auth fun(self: MeteoriteContext): string|nil, string|nil Parse Basic auth, returns (username, password)
+---@field bearer_token fun(self: MeteoriteContext): string|nil Parse Bearer token from Authorization header
+---@field safe_header fun(self: MeteoriteContext, name: string): string|nil Redact sensitive header for logging
+---@field safe_headers fun(self: MeteoriteContext, names: string[]): table<string, string> Redact sensitive headers for logging
+---@field log fun(self: MeteoriteContext, level: string|table, message?: string|table, fields?: table, opts?: {format?: string}): table Structured logging helper
+---@field timing_stage fun(self: MeteoriteContext, metrics: table, name: string, fn: function, opts?: {desc?: string}): any Record a timing stage
+---@field server_timing fun(self: MeteoriteContext, metrics: table): table<string, string> Build Server-Timing header
+---@field http fun(self: MeteoriteContext, name: string): MeteoriteHttpClient Get HTTP capability client
+---@field auth fun(self: MeteoriteContext, name: string): MeteoriteAuthClient Get auth capability client
+---@field zig fun(self: MeteoriteContext, name: string): MeteoriteZigClient Get Zig helper capability
+---@field get fun(self: MeteoriteContext, key: string): any Get request-local state value
+---@field set fun(self: MeteoriteContext, key: string, value: any): any Set request-local state value
+---@field scope fun(self: MeteoriteContext, name: string): any Get scope context value
+
+---@alias MeteoriteHandler string|fun(c: MeteoriteContext): string|table|nil|{kind: "lua", module: string, path?: string}|{kind: "zig", symbol: string}|{kind: "zig_file", path: string, decl?: string}
+--- A bare string return is sugar for 200 text/plain; charset=utf-8.
+--- A table return provides {status?, content_type?, body?, headers?}.
+--- nil means no response (204 if no response helper was called).
 
 ---@type MeteoriteModule
 local M = {}
@@ -61,18 +105,18 @@ local function add_route(self, method, path_or_table, options_or_handler, maybe_
       if handler_stage.strat == "inline_lua" then
         declaration = route.declare(method, rc.route, {
           params = rc.params, query = rc.query, body = rc.body,
-          memory = rc.memory, capabilities = rc.capabilities, scope = scope,
+          memory = rc.memory, capabilities = rc.capabilities, message = rc.message, scope = scope,
         }, handler_stage.fn_ref)
         declaration.handler = { kind = "inline_lua", value = handler_stage.fn_ref }
       elseif handler_stage.strat == "lua" then
         declaration = route.declare(method, rc.route, {
           params = rc.params, query = rc.query, body = rc.body,
-          memory = rc.memory, capabilities = rc.capabilities, scope = scope,
+          memory = rc.memory, capabilities = rc.capabilities, message = rc.message, scope = scope,
         }, { kind = "lua", path = handler_stage.path, module = handler_stage.module })
       elseif handler_stage.strat == "zig" then
         declaration = route.declare(method, rc.route, {
           params = rc.params, query = rc.query, body = rc.body,
-          memory = rc.memory, capabilities = rc.capabilities, scope = scope,
+          memory = rc.memory, capabilities = rc.capabilities, message = rc.message, scope = scope,
         }, handler_stage.symbol and handler_stage.symbol or handler_stage.path)
         if handler_stage.path then
           declaration.handler = { kind = "zig_file", path = handler_stage.path, decl = handler_stage.decl or "handle" }
@@ -86,14 +130,14 @@ local function add_route(self, method, path_or_table, options_or_handler, maybe_
       -- Special file/dir handler
       declaration = route.declare(method, rc.route, {
         params = rc.params, query = rc.query, body = rc.body,
-        memory = rc.memory, capabilities = rc.capabilities, scope = scope,
+        memory = rc.memory, capabilities = rc.capabilities, message = rc.message, scope = scope,
       }, rc.handler)
       declaration.policy = rc.policy
     else
       -- No handler or pipeline — shouldn't happen after validation
       declaration = route.declare(method, rc.route, {
         params = rc.params, query = rc.query, body = rc.body,
-        memory = rc.memory, capabilities = rc.capabilities, scope = scope,
+        memory = rc.memory, capabilities = rc.capabilities, message = rc.message, scope = scope,
       }, "handlers.unreachable")
       declaration.policy = rc.policy
     end
@@ -182,6 +226,7 @@ end
 ---@field delete fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table
 ---@field delete fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table
 ---@field route fun(self: MeteoriteApp, method: string, path: string, options_or_handler?: MeteoriteRouteOptions|MeteoriteHandler, maybe_handler?: MeteoriteHandler): table
+---@field message fun(self: MeteoriteApp, name: string, options_or_handler?: MeteoriteRouteOptions|MeteoriteHandler, maybe_handler?: MeteoriteHandler): table
 ---@field use fun(self: MeteoriteApp, plugin_or_middleware: table|function, options?: table): MeteoriteApp
 ---@field mount fun(self: MeteoriteApp, prefix: string, options_or_fn?: table|function, maybe_fn?: function): MeteoriteApp
 ---@field scope fun(self: MeteoriteApp, prefix: string, options_or_fn?: table|function, maybe_fn?: function): MeteoriteApp
@@ -245,6 +290,26 @@ end
 ---@return table
 function App:route(method, path, options_or_handler, maybe_handler)
   return add_route(self, string.upper(method), path, options_or_handler, maybe_handler)
+end
+
+---@param name string
+---@param options? MeteoriteRouteOptions
+---@param handler MeteoriteHandler
+---@return table
+function App:message(name, options, handler)
+  if handler == nil then
+    handler = options
+    options = {}
+  end
+  options = options or {}
+  if self.__meteorite_scope then options.scope = self.__meteorite_scope end
+  options.params = options.metadata or options.params or {}
+  options.message = { name = name }
+  options.message_source = "message"
+  local declaration = route.declare("OTHER", "/__meteorite/message/" .. tostring(name):gsub("%.", "/"), options, handler)
+  declaration.source_form = "message_signature"
+  self.routes[#self.routes + 1] = declaration
+  return declaration
 end
 
 ---@param path string
@@ -348,6 +413,38 @@ end
 function App:normalize(opts)
   return route.normalize_app(self, opts or {})
 end
+
+--- HTTP capability client for outbound requests.
+---@class MeteoriteHttpClient
+---@field get fun(self: MeteoriteHttpClient, path: string, opts?: table): MeteoriteHttpResponse
+---@field post fun(self: MeteoriteHttpClient, path: string, opts?: table): MeteoriteHttpResponse
+---@field put fun(self: MeteoriteHttpClient, path: string, opts?: table): MeteoriteHttpResponse
+---@field patch fun(self: MeteoriteHttpClient, path: string, opts?: table): MeteoriteHttpResponse
+---@field delete fun(self: MeteoriteHttpClient, path: string, opts?: table): MeteoriteHttpResponse
+
+---@class MeteoriteHttpResponse
+---@field status integer
+---@field headers table<string, string>
+---@field body any
+
+--- Auth capability client for token management.
+---@class MeteoriteAuthClient
+---@field bearer fun(self: MeteoriteAuthClient): string Get bearer token
+---@field authorization fun(self: MeteoriteAuthClient): string Get authorization header value
+---@field headers fun(self: MeteoriteAuthClient): table<string, string> Get auth headers table
+---@field refresh fun(self: MeteoriteAuthClient): string Refresh token
+
+--- Zig helper capability client.
+---@class MeteoriteZigClient
+---@field [string] any Zig helper functions
+
+--- Plugin/middleware specification for scoped execution.
+---@class MeteoritePlugin
+---@field kind string Plugin kind identifier
+---@field id string Unique plugin id
+---@field execute fun(ctx: MeteoriteContext): string|table|nil Plugin entry point; return a response to short-circuit
+---@field options table Plugin options
+---@field __meteorite_plugin true
 
 ---@class MeteoriteModule
 ---@field patterns table

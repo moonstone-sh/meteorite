@@ -128,10 +128,14 @@ end
 
 function report.schema_ir(graph)
   local routes = {}
+  local messages = {}
   for _, route in ipairs(graph.routes or {}) do
     local validation = route.validation or {}
     routes[#routes + 1] = {
       id = route.id,
+      canonical_id = route.canonical_id,
+      http = route.http,
+      message = route.message,
       method = helpers.method_enum(route.method),
       path = route.raw_path,
       params = object_schema(route.params),
@@ -143,14 +147,28 @@ function report.schema_ir(graph)
       responses = response_schemas(route.responses),
     }
   end
+  for _, route in ipairs(graph.messages or {}) do
+    local validation = route.validation or {}
+    messages[#messages + 1] = {
+      id = route.id,
+      canonical_id = route.canonical_id,
+      message = route.message,
+      metadata = object_schema(route.params),
+      json_body = object_schema(validation.json_body),
+      form_body = object_schema(validation.form_body),
+      responses = response_schemas(route.responses),
+    }
+  end
   return {
     format = "meteorite.schema-ir.v0",
     routes = routes,
+    messages = messages,
   }
 end
 
 function report.openapi_plan(graph)
   local routes = {}
+  local messages = {}
   for _, route in ipairs(graph.routes or {}) do
     local validation = route.validation or {}
     local json_body = object_schema(validation.json_body)
@@ -165,6 +183,9 @@ function report.openapi_plan(graph)
     append_all(parameters, parameter_list("cookie", validation.cookies))
     routes[#routes + 1] = {
       id = route.id,
+      canonical_id = route.canonical_id,
+      http = route.http,
+      message = route.message,
       method = helpers.method_enum(route.method),
       path = route.raw_path,
       template = path_template(route.raw_path),
@@ -180,10 +201,25 @@ function report.openapi_plan(graph)
       security = security_schemes(route),
     }
   end
+  for _, route in ipairs(graph.messages or {}) do
+    local validation = route.validation or {}
+    messages[#messages + 1] = {
+      id = route.id,
+      canonical_id = route.canonical_id,
+      message = route.message,
+      metadata = object_schema(route.params),
+      json_body = object_schema(validation.json_body),
+      form_body = object_schema(validation.form_body),
+      responses = response_count(route.responses) > 0 and response_schemas(route.responses) or {
+        default = { description = "Meteorite message response schema not declared", missing_schema = true },
+      },
+    }
+  end
   return {
     format = "meteorite.openapi-plan.v0",
     openapi = "3.1.0",
     routes = routes,
+    messages = messages,
   }
 end
 
@@ -231,6 +267,9 @@ function report.route_to_zon(route)
   }
   return {
     id = route.id,
+    canonical_id = route.canonical_id,
+    http = route.http,
+    message = route.message,
     method = helpers.method_enum(route.method),
     raw_path = route.raw_path,
     path = { segments = segments },
@@ -266,7 +305,7 @@ function report.memory_report(graph, routes_text)
   local peak_bytes = 0
   local max_uri_bytes, max_path_bytes, max_query_bytes = 0, 0, 0
   local max_query_pairs, max_path_segments = 0, 0
-  for _, route in ipairs(graph.routes or {}) do
+  for _, route in ipairs(graph.nodes or graph.routes or {}) do
     local memory = route.memory or {}
     if (memory.estimated_peak_bytes or 0) > peak_bytes then
       peak_route = route
@@ -301,11 +340,12 @@ function report.memory_report(graph, routes_text)
   }
 end
 
-function report.emit_build_report(graph, output, mode)
+function report.emit_build_report(graph, output, mode, backend)
+  backend = backend or "fast_http"
   local inline, zig = 0, 0
   local validation_counts = { params = 0, query = 0, headers = 0, cookies = 0, json_body = 0, form_body = 0 }
   local missing_response_schemas = 0
-  for _, route in ipairs(graph.routes) do
+  for _, route in ipairs(graph.nodes or graph.routes) do
     if route.handler.kind == "inline_lua" then inline = inline + 1 end
     if route.handler.kind == "zig" or route.handler.kind == "zig_file" then zig = zig + 1 end
     validation_counts.params = validation_counts.params + #(route.params or {})
@@ -321,7 +361,9 @@ function report.emit_build_report(graph, output, mode)
   local lines = {
     "Meteorite build",
     "  mode: " .. (mode == "release-static" and "static" or "hybrid"),
-    "  backend: fast_http",
+    "  backend: " .. backend,
+    "  transport: " .. ((backend == "ipc_unixsocket" or backend == "ipc_unixsocket_http") and "unix" or "tcp"),
+    "  protocol: " .. (backend == "ipc_unixsocket" and "meteorite.ipc.v0" or "http/1.1"),
     "  Lua runtime: " .. (mode == "release-static" and "removed" or "included"),
     "  Lua state: single_locked",
     "  workers: auto",
@@ -525,6 +567,18 @@ function report.emit_luals_aids(graph, output)
     "---@param name string",
     "---@return string|nil",
     "function Context:header(name) end",
+    "",
+    "---@param name string",
+    "---@return string|nil",
+    "function Context:query(name) end",
+    "",
+    "---@param name string",
+    "---@return string[]|nil",
+    "function Context:query_all(name) end",
+    "",
+    "---@param name string",
+    "---@return string|integer|nil",
+    "function Context:param(name) end",
     "",
     "---@return string",
     "function Context:request_id() end",

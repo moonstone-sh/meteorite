@@ -62,13 +62,16 @@ pub fn build(b: *std.Build) void {
     const graph_output = b.option([]const u8, "graph-output", "Generated Meteorite graph directory") orelse ".meteorite/graph/current";
     const lua_root = b.option([]const u8, "lua-root", "Lua runtime root with include/ and lib/") orelse ".moonstone/env/libexec/lua/files";
     const hybrid_profile = b.option([]const u8, "hybrid-profile", "Hybrid profile") orelse "default";
-    const backend = b.option([]const u8, "backend", "HTTP backend: fast_http or std_http") orelse "fast_http";
+    const backend = b.option([]const u8, "backend", "Meteorite backend: ipc_unixsocket, ipc_unixsocket_http, std_http, or fast_http") orelse "fast_http";
     const fast_http_strategy = b.option([]const u8, "fast-http-strategy", "fast_http strategy: threaded_probe or pool") orelse "threaded_probe";
     const fast_http_workers = b.option(u16, "fast-http-workers", "fast_http pool worker count; 0 means CPU count") orelse 0;
     const fast_http_queue = b.option(u16, "fast-http-queue", "fast_http pool queue limit") orelse 1024;
+    const unix_socket_path = b.option([]const u8, "unix-socket-path", "unix_socket path") orelse "/tmp/meteorite.sock";
+    const unix_socket_mode = b.option([]const u8, "unix-socket-mode", "unix_socket filesystem mode") orelse "0660";
+    const unix_socket_unlink_stale = b.option(bool, "unix-socket-unlink-stale", "unlink stale unix_socket path when safe") orelse true;
     const router_dispatch = b.option([]const u8, "router-dispatch", "Router dispatch strategy: method_buckets, static_fast_path, param_matchers, or legacy_scan") orelse "method_buckets";
-    if (!std.mem.eql(u8, backend, "std_http") and !std.mem.eql(u8, backend, "fast_http")) {
-        std.debug.panic("unsupported -Dbackend={s}; expected std_http or fast_http", .{backend});
+    if (!std.mem.eql(u8, backend, "ipc_unixsocket") and !std.mem.eql(u8, backend, "ipc_unixsocket_http") and !std.mem.eql(u8, backend, "std_http") and !std.mem.eql(u8, backend, "fast_http")) {
+        std.debug.panic("unsupported -Dbackend={s}; expected ipc_unixsocket, ipc_unixsocket_http, std_http, or fast_http", .{backend});
     }
     if (!std.mem.eql(u8, fast_http_strategy, "threaded_probe") and !std.mem.eql(u8, fast_http_strategy, "pool")) {
         std.debug.panic("unsupported -Dfast-http-strategy={s}; expected threaded_probe or pool", .{fast_http_strategy});
@@ -83,11 +86,13 @@ pub fn build(b: *std.Build) void {
         b.standardOptimizeOption(.{});
     const lua_runtime = !std.mem.eql(u8, mode, "release-static");
     const lua_state_strategy = if (lua_runtime and std.mem.eql(u8, hybrid_profile, "optimized")) "per_thread_cached_refs" else if (lua_runtime) "per_request_state" else "none";
+    const is_native_ipc = std.mem.eql(u8, backend, "ipc_unixsocket");
+    const is_unix_transport = is_native_ipc or std.mem.eql(u8, backend, "ipc_unixsocket_http");
 
     const project_graph_input = join(b, &.{ project_root, graph_input });
     const project_graph_output = join(b, &.{ project_root, graph_output });
     const project_lua_root = join(b, &.{ project_root, lua_root });
-    const graph_step = b.addSystemCommand(&.{ join(b, &.{ project_root, ".moonstone/env/bin/lua" }), meteorite_cli, "graph", project_graph_input, project_graph_output, mode });
+    const graph_step = b.addSystemCommand(&.{ join(b, &.{ project_root, ".moonstone/env/bin/lua" }), meteorite_cli, "graph", project_graph_input, project_graph_output, mode, backend });
 
     // Generated build metadata so the server can report exactly what was compiled.
     const build_info_content = std.fmt.allocPrint(b.allocator,
@@ -95,9 +100,21 @@ pub fn build(b: *std.Build) void {
         \\
         \\pub const meteorite_mode = "{s}";
         \\pub const backend = "{s}";
+        \\pub const transport = "{s}";
+        \\pub const protocol = "{s}";
         \\pub const fast_http_strategy = "{s}";
         \\pub const fast_http_workers = {};
         \\pub const fast_http_queue = {};
+        \\pub const unix_socket_path = "{s}";
+        \\pub const unix_socket_mode = "{s}";
+        \\pub const unix_socket_unlink_stale = {};
+        \\pub const capability_http_headers = {};
+        \\pub const capability_cookies = {};
+        \\pub const capability_cors = {};
+        \\pub const capability_redirects = {};
+        \\pub const capability_ipc_metadata = {};
+        \\pub const capability_peer_credentials = {};
+        \\pub const capability_static_files = {};
         \\pub const lua_runtime = {};
         \\pub const hybrid_profile = "{s}";
         \\pub const lua_state_strategy = "{s}";
@@ -109,7 +126,29 @@ pub fn build(b: *std.Build) void {
         \\pub const abi = @tagName(builtin.abi);
         \\pub const target = cpu_arch ++ "-" ++ os_tag ++ "-" ++ abi;
         \\
-    , .{ mode, backend, fast_http_strategy, fast_http_workers, fast_http_queue, lua_runtime, hybrid_profile, lua_state_strategy, router_dispatch }) catch @panic("OOM");
+    , .{
+        mode,
+        backend,
+        if (is_unix_transport) "unix" else "tcp",
+        if (is_native_ipc) "meteorite.ipc.v0" else "http/1.1",
+        fast_http_strategy,
+        fast_http_workers,
+        fast_http_queue,
+        unix_socket_path,
+        unix_socket_mode,
+        unix_socket_unlink_stale,
+        !is_native_ipc,
+        !is_native_ipc,
+        !is_native_ipc,
+        !is_native_ipc,
+        is_native_ipc,
+        false,
+        !is_native_ipc,
+        lua_runtime,
+        hybrid_profile,
+        lua_state_strategy,
+        router_dispatch,
+    }) catch @panic("OOM");
     const write_build_info = b.addWriteFiles();
     const build_info_file = write_build_info.add("build_info.zig", build_info_content);
     graph_step.step.dependOn(&write_build_info.step);
