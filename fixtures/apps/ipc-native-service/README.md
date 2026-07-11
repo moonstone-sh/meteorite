@@ -5,6 +5,7 @@ Purpose: exercises the native `ipc_unixsocket` backend authoring model.
 This fixture intentionally uses `app:message(...)` instead of HTTP routes. It covers:
 
 - Exact native message names such as `health.get` and `users.create`.
+- Canonical table-form message authoring such as `app:message({ name = "system.ping", handler = ... })`.
 - IPC metadata validation via `metadata = { id = m.u64() }`.
 - JSON body validation using `content_type=application/json` IPC metadata.
 - Native context APIs: `ctx:message()`, `ctx:metadata()`, `ctx:request_id()`.

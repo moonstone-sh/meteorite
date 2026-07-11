@@ -105,18 +105,18 @@ local function add_route(self, method, path_or_table, options_or_handler, maybe_
       if handler_stage.strat == "inline_lua" then
         declaration = route.declare(method, rc.route, {
           params = rc.params, query = rc.query, body = rc.body,
-          memory = rc.memory, capabilities = rc.capabilities, message = rc.message, scope = scope,
+          memory = rc.memory, capabilities = rc.capabilities, message = rc.message, message_source = rc.message_source, scope = scope,
         }, handler_stage.fn_ref)
         declaration.handler = { kind = "inline_lua", value = handler_stage.fn_ref }
       elseif handler_stage.strat == "lua" then
         declaration = route.declare(method, rc.route, {
           params = rc.params, query = rc.query, body = rc.body,
-          memory = rc.memory, capabilities = rc.capabilities, message = rc.message, scope = scope,
+          memory = rc.memory, capabilities = rc.capabilities, message = rc.message, message_source = rc.message_source, scope = scope,
         }, { kind = "lua", path = handler_stage.path, module = handler_stage.module })
       elseif handler_stage.strat == "zig" then
         declaration = route.declare(method, rc.route, {
           params = rc.params, query = rc.query, body = rc.body,
-          memory = rc.memory, capabilities = rc.capabilities, message = rc.message, scope = scope,
+          memory = rc.memory, capabilities = rc.capabilities, message = rc.message, message_source = rc.message_source, scope = scope,
         }, handler_stage.symbol and handler_stage.symbol or handler_stage.path)
         if handler_stage.path then
           declaration.handler = { kind = "zig_file", path = handler_stage.path, decl = handler_stage.decl or "handle" }
@@ -130,14 +130,14 @@ local function add_route(self, method, path_or_table, options_or_handler, maybe_
       -- Special file/dir handler
       declaration = route.declare(method, rc.route, {
         params = rc.params, query = rc.query, body = rc.body,
-        memory = rc.memory, capabilities = rc.capabilities, message = rc.message, scope = scope,
+        memory = rc.memory, capabilities = rc.capabilities, message = rc.message, message_source = rc.message_source, scope = scope,
       }, rc.handler)
       declaration.policy = rc.policy
     else
       -- No handler or pipeline — shouldn't happen after validation
       declaration = route.declare(method, rc.route, {
         params = rc.params, query = rc.query, body = rc.body,
-        memory = rc.memory, capabilities = rc.capabilities, message = rc.message, scope = scope,
+        memory = rc.memory, capabilities = rc.capabilities, message = rc.message, message_source = rc.message_source, scope = scope,
       }, "handlers.unreachable")
       declaration.policy = rc.policy
     end
@@ -297,6 +297,19 @@ end
 ---@param handler MeteoriteHandler
 ---@return table
 function App:message(name, options, handler)
+  if type(name) == "table" then
+    local decl = {}
+    for key, value in pairs(name) do decl[key] = value end
+    local message_name = decl.name or (type(decl.message) == "table" and decl.message.name)
+    assert(type(message_name) == "string" and message_name ~= "", "message declaration requires name")
+    decl.route = decl.route or ("/__meteorite/message/" .. tostring(message_name):gsub("%.", "/"))
+    decl.params = decl.metadata or decl.params or {}
+    decl.message = { name = message_name }
+    decl.message_source = "message"
+    local declaration = add_route(self, "OTHER", decl)
+    declaration.source_form = "message_canonical"
+    return declaration
+  end
   if handler == nil then
     handler = options
     options = {}

@@ -176,16 +176,23 @@ local function normalize_message_name(value)
   return normalized
 end
 
+local function inferred_message_segment(value)
+  local segment = tostring(value or ""):lower():gsub("%W+", "_"):gsub("_+", "_"):gsub("^_", ""):gsub("_$", "")
+  if segment == "" then return nil end
+  if not segment:match("^[%a_]") then segment = "_" .. segment end
+  return segment
+end
+
 local function infer_message_name(method, raw_path, segments)
   local literals = {}
   for _, segment in ipairs(segments or {}) do
     if segment.kind == "literal" then
-      local value = segment.value:gsub("%W+", "_"):gsub("^_", ""):gsub("_$", "")
-      if value ~= "" then literals[#literals + 1] = value end
+      local value = inferred_message_segment(segment.value)
+      if value then literals[#literals + 1] = value end
     end
   end
-  local base = #literals > 0 and table.concat(literals, ".") or raw_path:gsub("^/+", ""):gsub("/.*$", "")
-  if base == "" then base = "root" end
+  local base = #literals > 0 and table.concat(literals, ".") or inferred_message_segment(raw_path:gsub("^/+", ""):gsub("/.*$", ""))
+  if not base or base == "" then base = "root" end
   local suffix = method_message_suffix[method] or tostring(method):lower()
   return normalize_message_name(base .. "." .. suffix)
 end

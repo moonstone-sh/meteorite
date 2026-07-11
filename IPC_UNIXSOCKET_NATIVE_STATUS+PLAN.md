@@ -34,7 +34,7 @@ HTTP semantics are intentionally unavailable here: CORS, cookies, redirects, sta
 ## Phase N1 — Message Authoring API
 
 - [x] Add `app:message(name, handler)` and `app:message(name, options, handler)`.
-- [ ] Add canonical table form `app:message({ name = "users.get", metadata = ..., body = ..., pipeline = ... })`.
+- [x] Add canonical table form `app:message({ name = "users.get", metadata = ..., body = ..., pipeline = ... })`.
 - [x] Validate message names as dot-separated identifiers.
 - [x] Store message graph nodes separately from HTTP routes.
 - [x] Preserve existing handler strategies: inline Lua, Lua file/module, Zig symbol/file, and pipeline stages.
@@ -48,6 +48,8 @@ HTTP semantics are intentionally unavailable here: CORS, cookies, redirects, sta
 - [x] Release manifests include message entries without inventing HTTP projections.
 
 Annotation: messages are now normalized into `graph.messages`, generated as `pub const messages`, emitted into `messages.zon`, and dispatched by native IPC without entering HTTP route buckets. Shared handler/codegen paths still reuse the route-shaped Zig node type internally until a deeper type rename is worthwhile.
+
+Annotation: canonical table-form messages now lower through the canonical route contract with an internal message route projection, preserving metadata/body/pipeline fields while still landing in `graph.messages` instead of HTTP route buckets.
 
 ## Phase N3 — Native Dispatch And Context
 

@@ -73,8 +73,11 @@ trap handle_signal INT TERM HUP
 start_meteorite() {
   local workers="$1"
   require_command zig
+  local label="meteorite-1worker"
+  if [[ "$workers" == "0" ]]; then label="meteorite-auto"; fi
+  local build_log="$OUT/${label}-build.log"
   echo "Building meteorite (workers=$workers)..."
-  ZIG_GLOBAL_CACHE_DIR="/tmp/zig-cache-bench" \
+  if ! ZIG_GLOBAL_CACHE_DIR="/tmp/zig-cache-bench" \
     zig build install-server \
     -Dgraph-input="fixtures/apps/bench-service/src/main.lua" \
     -Dgraph-output=".meteorite/graph/bench" \
@@ -82,11 +85,12 @@ start_meteorite() {
     -Dhybrid-profile=optimized \
     -Dfast-http-strategy=pool \
     -Dfast-http-workers="$workers" \
-    -- dist/server >/dev/null 2>&1
+    -- dist/server >"$build_log" 2>&1; then
+    echo "Meteorite build failed for $label; showing $build_log" >&2
+    cat "$build_log" >&2 || true
+    return 1
+  fi
   assert_bench_graph
-
-  local label="meteorite-1worker"
-  if [[ "$workers" == "0" ]]; then label="meteorite-auto"; fi
 
   ./dist/server >"$OUT/${label}.log" 2>&1 &
   SERVER_PID=$!
@@ -216,4 +220,3 @@ start_pegasus() {
   SERVER_STATS_FILE="$OUT/${label}-stats.log"
   start_stats_tracker "$SERVER_PID" "$SERVER_STATS_FILE"
 }
-

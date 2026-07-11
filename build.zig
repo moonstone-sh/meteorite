@@ -335,7 +335,7 @@ pub fn build(b: *std.Build) void {
     if (lua_runtime) exe.link_gc_sections = false;
     exe.step.dependOn(&graph_step.step);
 
-    const install_server = b.addSystemCommand(&.{ "sh", "-c", "out=\"${2:-dist/server}\"; dir=$(dirname \"$out\"); mkdir -p \"$dir\"; cp \"$1\" \"$out\"; if [ -d \"$3/static\" ]; then rm -rf \"$dir/static\"; cp -R \"$3/static\" \"$dir/static\"; fi", "sh" });
+    const install_server = b.addSystemCommand(&.{ "sh", "-c", "out=\"${2:-dist/server}\"; dir=$(dirname \"$out\"); mkdir -p \"$dir\"; rm -f \"$out\"; cp \"$1\" \"$out\"; if [ -d \"$3/static\" ]; then rm -rf \"$dir/static\"; cp -R \"$3/static\" \"$dir/static\"; fi", "sh" });
     install_server.addFileArg(exe.getEmittedBin());
     if (b.args) |args| {
         if (args.len > 0) install_server.addArg(args[0]) else install_server.addArg("dist/server");

@@ -32,6 +32,7 @@ rm -f "$NATIVE_BIN" "$HTTP_BIN" "$NATIVE_BUILD_LOG" "$HTTP_BUILD_LOG" "$NATIVE_L
 
 test -f "$NATIVE_GRAPH/messages.zon"
 grep -q 'health.get' "$NATIVE_GRAPH/messages.zon"
+grep -q 'system.ping' "$NATIVE_GRAPH/messages.zon"
 grep -q 'users.get' "$NATIVE_GRAPH/messages.zon"
 grep -q 'users.create' "$NATIVE_GRAPH/messages.zon"
 
@@ -122,45 +123,49 @@ assert_equal(health["body"], "ok:health.get", "health body")
 alias = send("health/get", request_id=11)
 assert_equal(alias["result"], RESULT_NOT_FOUND, "alias result")
 
-missing = send("users.get", request_id=12)
+ping = send("system.ping", request_id=12)
+assert_equal(ping["result"], RESULT_OK, "canonical message result")
+assert_equal(ping["body"], "pong:system.ping", "canonical message body")
+
+missing = send("users.get", request_id=13)
 assert_equal(missing["result"], RESULT_VALIDATION_ERROR, "missing metadata result")
 assert "meteorite.validation.domain=metadata" in missing["metadata"]
 assert "meteorite.validation.field=id" in missing["metadata"]
 assert "meteorite.validation.reason=missing" in missing["metadata"]
 
-invalid = send("users.get", "id=abc\n", request_id=13)
+invalid = send("users.get", "id=abc\n", request_id=14)
 assert_equal(invalid["result"], RESULT_VALIDATION_ERROR, "invalid metadata result")
 assert "meteorite.validation.reason=invalid" in invalid["metadata"]
 
-user = send("users.get", "id=42\n", request_id=14)
+user = send("users.get", "id=42\n", request_id=15)
 assert_equal(user["result"], RESULT_OK, "user result")
 user_body = json.loads(user["body"])
 assert_equal(user_body["id"], 42, "user id")
 assert_equal(user_body["message"], "users.get", "user message")
 assert_equal(user_body["header_is_http_only"], True, "header separation")
 
-bad_json = send("users.create", "content_type=application/json\n", '{"id":1}', request_id=15)
+bad_json = send("users.create", "content_type=application/json\n", '{"id":1}', request_id=16)
 assert_equal(bad_json["result"], RESULT_VALIDATION_ERROR, "json validation result")
 assert "meteorite.validation.domain=json_body" in bad_json["metadata"]
 assert "meteorite.validation.field=name" in bad_json["metadata"]
 
-created = send("users.create", "content_type=application/json\n", '{"id":7,"name":"alice"}', request_id=16)
+created = send("users.create", "content_type=application/json\n", '{"id":7,"name":"alice"}', request_id=17)
 assert_equal(created["result"], RESULT_OK, "json create result")
 created_body = json.loads(created["body"])
 assert_equal(created_body["id"], 7, "created id")
 assert_equal(created_body["name"], "alice", "created name")
 
-stats = send("meteorite.bench.stats", request_id=17)
+stats = send("meteorite.bench.stats", request_id=18)
 assert_equal(stats["result"], RESULT_OK, "stats result")
 stats_body = json.loads(stats["body"])
-assert stats_body["accepted_total"] >= 7
-assert stats_body["completed_total"] >= 6
-assert stats_body["requests_served"] >= 7
+assert stats_body["accepted_total"] >= 8
+assert stats_body["completed_total"] >= 7
+assert stats_body["requests_served"] >= 8
 
-reset = send("meteorite.bench.stats.reset", request_id=18)
+reset = send("meteorite.bench.stats.reset", request_id=19)
 assert_equal(reset["result"], RESULT_OK, "reset result")
 
-meta = send("meteorite.bench.meta", request_id=19)
+meta = send("meteorite.bench.meta", request_id=20)
 assert_equal(meta["result"], RESULT_OK, "meta result")
 meta_body = json.loads(meta["body"])
 assert_equal(meta_body["backend"], "ipc_unixsocket", "meta backend")

@@ -6,6 +6,13 @@ app:message("health.get", function(ctx)
   return ctx:text("ok:" .. ctx:message())
 end)
 
+app:message({
+  name = "system.ping",
+  handler = function(ctx)
+    return ctx:text("pong:" .. ctx:message())
+  end,
+})
+
 app:message("users.get", {
   metadata = {
     id = m.u64(),
