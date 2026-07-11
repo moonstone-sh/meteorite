@@ -21,6 +21,8 @@ Fixtures are small, purpose-built Meteorite apps used for demos, acceptance test
 - `apps/static-site` exercises `m.file`, `m.dir`, `m.site`, and static release packaging.
 - `apps/bench-service` contains benchmark-only endpoints consumed by `bench/run.sh` and related benchmark scripts.
 - `apps/web-standards` exercises HTTP standards behavior such as response headers, CORS headers, redirect headers, and Lua response helper parity.
+- `apps/ipc-native-service` exercises native `ipc_unixsocket` message authoring with `app:message`, IPC metadata, JSON body validation, and native context APIs.
+- `apps/ipc-unixsocket-http-service` captures the planned `ipc_unixsocket_http` compatibility fixture using ordinary HTTP route authoring over a future Unix socket HTTP transport.
 
 ## Publication Rule
 

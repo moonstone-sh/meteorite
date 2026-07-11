@@ -401,6 +401,22 @@ pub fn compile(comptime spec: anytype) type {
         }
 
         fn dispatchNativeMessage(allocator: std.mem.Allocator, io: Io, request: *backend.Request, message_name: []const u8) !bool {
+            if (std.mem.eql(u8, message_name, "meteorite.bench.meta")) {
+                const json = try metaJson(allocator);
+                try backend.respondBytes(request, 200, "application/json", json);
+                return true;
+            }
+            if (std.mem.eql(u8, message_name, "meteorite.bench.stats")) {
+                const json = try countersJson(allocator);
+                try backend.respondBytes(request, 200, "application/json", json);
+                return true;
+            }
+            if (std.mem.eql(u8, message_name, "meteorite.bench.stats.reset")) {
+                backend.resetAuditCounters();
+                bench_stats.reset();
+                try backend.respondText(request, 200, "ok");
+                return true;
+            }
             inline for (graph.messages) |route| {
                 if (try dispatchNativeMessageRoute(route, allocator, io, request, message_name)) return true;
             }
@@ -1130,6 +1146,11 @@ pub fn compile(comptime spec: anytype) type {
             return std.ascii.eqlIgnoreCase(media_type, "application/json") or std.ascii.eqlIgnoreCase(media_type, "application/problem+json");
         }
 
+        fn jsonBodyValidationDomain(comptime RequestType: type) []const u8 {
+            if (comptime @hasField(RequestType, "frame_buffer")) return "json_body";
+            return "json";
+        }
+
         fn jsonValueValid(comptime json_spec: graph.ParamSpec, value: std.json.Value) bool {
             switch (json_spec.kind) {
                 .string, .slug, .uuid, .hex, .email, .token, .pattern => {
@@ -1159,19 +1180,20 @@ pub fn compile(comptime spec: anytype) type {
 
         fn validateJsonBody(comptime specs: []const graph.ParamSpec, request: *backend.Request, allocator: std.mem.Allocator) !?ValidationError {
             if (specs.len == 0) return null;
+            const domain = comptime jsonBodyValidationDomain(backend.Request);
             if (!jsonContentTypeValid(request)) return null;
-            const body = backend.readBody(request, allocator, 1024 * 1024) catch return .{ .domain = "json", .field = "body", .reason = "invalid" };
-            var parsed = std.json.parseFromSlice(std.json.Value, allocator, body, .{}) catch return .{ .domain = "json", .field = "body", .reason = "invalid" };
+            const body = backend.readBody(request, allocator, 1024 * 1024) catch return .{ .domain = domain, .field = "body", .reason = "invalid" };
+            var parsed = std.json.parseFromSlice(std.json.Value, allocator, body, .{}) catch return .{ .domain = domain, .field = "body", .reason = "invalid" };
             defer parsed.deinit();
             const object = switch (parsed.value) {
                 .object => |object| object,
-                else => return .{ .domain = "json", .field = "body", .reason = "invalid" },
+                else => return .{ .domain = domain, .field = "body", .reason = "invalid" },
             };
             inline for (specs) |json_spec| {
                 if (object.get(json_spec.name)) |value| {
-                    if (!jsonValueValid(json_spec, value)) return .{ .domain = "json", .field = json_spec.name, .reason = "invalid" };
+                    if (!jsonValueValid(json_spec, value)) return .{ .domain = domain, .field = json_spec.name, .reason = "invalid" };
                 } else if (!json_spec.optional) {
-                    return .{ .domain = "json", .field = json_spec.name, .reason = "missing" };
+                    return .{ .domain = domain, .field = json_spec.name, .reason = "missing" };
                 }
             }
             return null;

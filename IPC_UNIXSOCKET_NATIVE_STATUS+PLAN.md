@@ -65,17 +65,23 @@ Annotation: N3 now has a native message-only dispatch path. `health.get` matches
 
 - [x] Validate message metadata through message schemas.
 - [x] Map metadata validation failures to `validation_error` with IPC diagnostic metadata.
-- [ ] Count accepted/completed messages, malformed frames, oversized frames, protocol errors, early closes, bytes read/written, active connections, and inflight messages.
-- [ ] Provide IPC-safe stats/control messages without requiring HTTP.
-- [ ] Validate JSON/body domains through message schemas with IPC diagnostic metadata.
+- [x] Count accepted/completed messages, malformed frames, oversized frames, protocol errors, early closes, bytes read/written, active connections, and inflight messages.
+- [x] Provide IPC-safe stats/control messages without requiring HTTP.
+- [x] Validate JSON/body domains through message schemas with IPC diagnostic metadata.
 
 Annotation: message metadata validators now run before handler dispatch. Missing/invalid metadata emits validation diagnostics as IPC metadata keys (`meteorite.validation.domain`, `meteorite.validation.field`, `meteorite.validation.reason`) and maps to the IPC `validation_error` result code, while HTTP backends keep their existing `400` + `X-Meteorite-Validation-*` contract.
 
+Annotation: IPC observability now uses request/message-level `accepted_total`, `completed_total`, `requests_served`, active/inflight counters, byte counters, malformed/oversized/protocol/early-close counters, and resettable audit counters. Native control messages `meteorite.bench.meta`, `meteorite.bench.stats`, and `meteorite.bench.stats.reset` expose the existing safe JSON metadata/stats path over IPC without requiring an HTTP endpoint.
+
+Annotation: IPC JSON validation accepts `content_type=application/json` metadata as the transport-native equivalent of HTTP `Content-Type`. JSON body validation keeps the HTTP `json` validation domain for HTTP backends and emits `json_body` in IPC diagnostic metadata.
+
 ## Acceptance Tests
 
-- `app:message("health.get", ...)` serves over `ipc_unixsocket`.
-- `app:get("/health", ...)` does not serve over `ipc_unixsocket`.
-- IPC route bytes `GET /health` return `not_found` under `ipc_unixsocket`.
-- Unknown message names return `not_found`.
-- Missing/invalid metadata returns `validation_error`.
-- `std_http`, `fast_http`, and `ipc_unixsocket_http` remain unaffected.
+- [x] `app:message("health.get", ...)` serves over `ipc_unixsocket`.
+- [x] Slash-style aliases such as `health/get` return `not_found` under `ipc_unixsocket`.
+- [x] Missing/invalid metadata returns `validation_error` with IPC diagnostic metadata.
+- [x] JSON body validation returns `validation_error` with `json_body` diagnostic metadata.
+- [x] Native control messages expose stats/meta/reset over IPC.
+- [x] `ipc_unixsocket_http` fixture remains graph-valid and compile-gated until implementation lands.
+
+Annotation: `fixtures/tests/ipc-backends.sh` now builds and runs `fixtures/apps/ipc-native-service`, sends real `meteorite.ipc.v0` frames over a Unix socket, verifies message dispatch/validation/control-message behavior, and verifies the planned `ipc_unixsocket_http` fixture still reaches the intentional compile gate.

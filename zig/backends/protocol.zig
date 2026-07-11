@@ -109,6 +109,7 @@ pub const AtomicCounters = struct {
     inflight_current: AtomicCounter = AtomicCounter.init(0),
     inflight_max: AtomicCounter = AtomicCounter.init(0),
     total_connections: AtomicCounter = AtomicCounter.init(0),
+    accepted_total: AtomicCounter = AtomicCounter.init(0),
     completed_total: AtomicCounter = AtomicCounter.init(0),
     threads_spawned: AtomicCounter = AtomicCounter.init(0),
     requests_served: AtomicCounter = AtomicCounter.init(0),
@@ -157,7 +158,7 @@ pub fn snapshotCounters(c: *const AtomicCounters) Counters {
         .inflight_max = c.inflight_max.load(.monotonic),
         .total_connections = total,
         .accepted_connections = total,
-        .accepted_total = total,
+        .accepted_total = c.accepted_total.load(.monotonic),
         .completed_total = c.completed_total.load(.monotonic),
         .threads_spawned = c.threads_spawned.load(.monotonic),
         .requests_served = served,
@@ -191,6 +192,7 @@ pub fn connectionEnded(c: *AtomicCounters) void {
 }
 
 pub fn requestStarted(c: *AtomicCounters) void {
+    inc(&c.accepted_total);
     const active = c.inflight_current.fetchAdd(1, .monotonic) + 1;
     maxCounter(&c.inflight_max, active);
 }
@@ -203,7 +205,9 @@ pub fn requestCompleted(c: *AtomicCounters) void {
 pub fn resetAuditCounters(c: *AtomicCounters) void {
     const current = c.inflight_current.load(.monotonic);
     c.inflight_max.store(current, .monotonic);
+    c.accepted_total.store(0, .monotonic);
     c.completed_total.store(0, .monotonic);
+    c.requests_served.store(0, .monotonic);
     c.queue_depth.store(0, .monotonic);
     c.max_queue_depth.store(0, .monotonic);
     c.budget_rejections_total.store(0, .monotonic);
@@ -234,6 +238,32 @@ pub fn droppedConnection(c: *AtomicCounters) void {
 pub fn setQueueDepth(c: *AtomicCounters, value: u64) void {
     c.queue_depth.store(value, .monotonic);
     maxCounter(&c.max_queue_depth, value);
+}
+
+test "request counters track accepted completed and served independently" {
+    var counters: AtomicCounters = .{};
+    requestStarted(&counters);
+    try std.testing.expectEqual(@as(u64, 1), snapshotCounters(&counters).accepted_total);
+    try std.testing.expectEqual(@as(u64, 1), snapshotCounters(&counters).inflight_current);
+    inc(&counters.requests_served);
+    requestCompleted(&counters);
+    const snap = snapshotCounters(&counters);
+    try std.testing.expectEqual(@as(u64, 1), snap.accepted_total);
+    try std.testing.expectEqual(@as(u64, 1), snap.completed_total);
+    try std.testing.expectEqual(@as(u64, 1), snap.requests_served);
+    try std.testing.expectEqual(@as(u64, 0), snap.inflight_current);
+}
+
+test "audit reset clears per-run request counters" {
+    var counters: AtomicCounters = .{};
+    requestStarted(&counters);
+    inc(&counters.requests_served);
+    requestCompleted(&counters);
+    resetAuditCounters(&counters);
+    const snap = snapshotCounters(&counters);
+    try std.testing.expectEqual(@as(u64, 0), snap.accepted_total);
+    try std.testing.expectEqual(@as(u64, 0), snap.completed_total);
+    try std.testing.expectEqual(@as(u64, 0), snap.requests_served);
 }
 
 pub fn reasonPhrase(status: u16) []const u8 {

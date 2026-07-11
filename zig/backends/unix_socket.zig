@@ -245,6 +245,7 @@ pub fn header(req: *Request, header_name: []const u8) ?[]const u8 {
         const separator = std.mem.indexOfScalar(u8, line, '=') orelse continue;
         const metadata_name = line[0..separator];
         if (std.ascii.eqlIgnoreCase(metadata_name, header_name)) return line[separator + 1 ..];
+        if (std.ascii.eqlIgnoreCase(header_name, "content-type") and std.ascii.eqlIgnoreCase(metadata_name, "content_type")) return line[separator + 1 ..];
     }
     return null;
 }
@@ -300,6 +301,7 @@ pub fn respondBytesWithHeaders(req: *Request, status: u16, content_type: []const
     });
     try req.writer.interface.writeAll(encoded);
     try req.writer.interface.flush();
+    proto.inc(&counters.requests_served);
     proto.add(&counters.bytes_written, encoded.len);
 }
 
@@ -335,6 +337,12 @@ test "HTTP validation status maps to IPC validation when diagnostics are present
     try std.testing.expectEqual(proto.ResultCode.malformed_message, ipcResultCodeForStatus(400, false));
     try std.testing.expectEqual(proto.ResultCode.validation_error, ipcResultCodeForStatus(400, true));
     try std.testing.expectEqual(proto.ResultCode.validation_error, ipcResultCodeForStatus(422, false));
+}
+
+test "IPC metadata content_type aliases content-type" {
+    var req: Request = undefined;
+    req.metadata_value = "content_type=application/json\n";
+    try std.testing.expectEqualStrings("application/json", header(&req, "content-type") orelse return error.MissingContentType);
 }
 
 pub fn respondStatic(req: *Request, status: u16, content_type: []const u8, content_length: u64, cache_control: []const u8, etag: []const u8, content_encoding: ?[]const u8, body: []const u8, head_only: bool) !void {
