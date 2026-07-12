@@ -210,11 +210,13 @@ Annotation: native IPC middleware coverage verifies scoped plugin state, plugin 
 - [x] Add IPC-safe equivalents of bench metadata and bench stats without requiring HTTP endpoints.
 - [x] Add CLI or control-message access for `meteorite ipc stats` and `meteorite ipc inspect`.
 - [x] Ensure benchmark rows can distinguish throughput from admission failures, malformed messages, and backpressure.
-- [ ] Update benchmark claim audits to label IPC rows separately from HTTP rows.
+- [x] Update benchmark claim audits to label IPC rows separately from HTTP rows.
 
 Annotation: IPC performance claims are only valid if the counters expose queueing, rejection, and protocol-error behavior. A high RPS number without admission and completion accounting is not acceptable.
 
 Annotation: native IPC fixture coverage now asserts stats/meta control messages over IPC, CLI `stats`/`inspect`, accepted/completed/request counters, active/inflight counters, queue/admission/backpressure fields, byte counters, and correlated protocol-error accounting from an unsupported-version frame.
+
+Annotation: benchmark summary claim classes now derive IPC-specific labels from row metadata: `native-ipc` for `ipc_unixsocket` / `meteorite.ipc.v0` rows and `http-over-uds` for `ipc_unixsocket_http` rows. Meteorite benchmark rows also persist backend, transport, and protocol metadata when `/__bench/meta` is available.
 
 ## Phase U10 — IPC CLI Tooling
 

@@ -437,6 +437,24 @@ def configured_concurrency_not_observed(configured: int, observed_open_connectio
 def invalid_hybrid_proof(tier: str, lua_pcalls_per_request: float) -> bool:
     return tier.startswith("lua-") and lua_pcalls_per_request < 0.95
 
+def claim_class_from_meta(meta: dict) -> str:
+    raw = meta.get("claim_class", "static" if meta.get("tier") == "static" else "unknown")
+    backend = meta.get("backend", "")
+    transport = meta.get("transport", "")
+    protocol = meta.get("protocol", "")
+    ipc_class = ""
+    if backend == "ipc_unixsocket" or protocol == "meteorite.ipc.v0":
+        ipc_class = "native-ipc"
+    elif backend == "ipc_unixsocket_http" or (transport == "unix" and protocol == "http/1.1"):
+        ipc_class = "http-over-uds"
+    if not ipc_class:
+        return raw
+    if raw == "proof-only":
+        return ipc_class + ":proof-only"
+    if raw in ("", "unknown", "static", "framework-parity"):
+        return ipc_class
+    return ipc_class + ":" + raw
+
 def claim_grade_reasons(valid: list[Run], discarded: list[Run], sanity_notes: list[str], socket_errors: int, non2xx: int, environment_reasons: list[str]) -> list[str]:
     reasons = []
     if not valid:
@@ -484,7 +502,7 @@ def load_run(label: str, scenario: str, c: int, rep: int):
         label=label,
         scenario=scenario,
         meteorite_build_mode=meta.get("meteorite_build_mode", meteorite_build_mode),
-        claim_class=meta.get("claim_class", "static" if meta.get("tier") == "static" else "unknown"),
+        claim_class=claim_class_from_meta(meta),
         tier=meta.get("tier", "unknown"),
         concurrency=c,
         rep=rep,

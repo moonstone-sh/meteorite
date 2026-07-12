@@ -140,6 +140,9 @@ run_scenario() {
   fi
 
   echo "server_alive_before=1" >>"$meta_file"
+  if [[ "$label" == meteorite-* ]]; then
+    bench_meta_fields backend transport protocol 2>/dev/null >>"$meta_file" || true
+  fi
   local server_fd_count_before server_fd_count_after loadgen_fd_count_before loadgen_fd_count_after server_fd_count_max loadgen_fd_count_max fd_usage_high fd_usage_critical soft_nofile_num
   server_fd_count_before="$(fd_count_for_pid "$SERVER_PID")"
   echo "server_fd_count_before=$server_fd_count_before" >>"$meta_file"
