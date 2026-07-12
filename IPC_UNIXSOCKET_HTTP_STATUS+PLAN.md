@@ -41,10 +41,10 @@ Annotation: the first implementation is intentionally conservative: `zig/backend
 
 - [x] Existing `app:get`, `app:post`, validators, and response helpers work unchanged.
 - [x] CORS/header smoke route emits HTTP headers over UDS.
-- [ ] Cookie, redirect, secure-header, static-file, conditional request, and `HEAD` tests pass over UDS.
+- [x] Cookie, redirect, secure-header, static-file, conditional request, and `HEAD` tests pass over UDS.
 - [x] `app:message` graph nodes are not dispatched by this backend unless a future explicit bridge is designed.
 
-Annotation: fixture coverage currently exercises normal HTTP routes, params, query parsing, JSON body validation, response headers, and runtime info over `curl --unix-socket`. Static files, middleware/mount breadth, cookies, redirects, conditional requests, `HEAD`, `OPTIONS`, and `405 Allow` still need dedicated compatibility assertions.
+Annotation: fixture coverage currently exercises normal HTTP routes, params, query parsing, JSON body validation, response headers, cookies, redirects, secure headers, static files, conditional `If-None-Match` handling, `HEAD`, and runtime info over `curl --unix-socket`. Middleware/mount breadth, `OPTIONS`, and `405 Allow` should still be added as broader compatibility assertions.
 
 ## Phase H3 — Tooling And Release
 

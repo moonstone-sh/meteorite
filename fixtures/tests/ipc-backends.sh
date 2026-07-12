@@ -280,6 +280,33 @@ curl --unix-socket "$HTTP_SOCK" -fsSI http://localhost/headers > /tmp/meteorite-
 grep -qi '^access-control-allow-origin: \*' /tmp/meteorite-ipc-http-headers.txt
 grep -qi '^x-meteorite-fixture: ipc_unixsocket_http' /tmp/meteorite-ipc-http-headers.txt
 
+curl --unix-socket "$HTTP_SOCK" -fsSI http://localhost/cookies/set > /tmp/meteorite-ipc-http-cookie.txt
+grep -qi '^set-cookie: session=uds;' /tmp/meteorite-ipc-http-cookie.txt
+grep -qi 'httponly' /tmp/meteorite-ipc-http-cookie.txt
+grep -qi 'samesite=lax' /tmp/meteorite-ipc-http-cookie.txt
+
+redirect_status=$(curl --unix-socket "$HTTP_SOCK" -sS -o /tmp/meteorite-ipc-http-redirect.body -w '%{http_code}' http://localhost/redirect)
+test "$redirect_status" = "302"
+curl --unix-socket "$HTTP_SOCK" -sSI http://localhost/redirect > /tmp/meteorite-ipc-http-redirect.txt
+grep -qi '^location: /health' /tmp/meteorite-ipc-http-redirect.txt
+
+curl --unix-socket "$HTTP_SOCK" -fsSI http://localhost/secure > /tmp/meteorite-ipc-http-secure.txt
+grep -qi '^x-content-type-options: nosniff' /tmp/meteorite-ipc-http-secure.txt
+grep -qi '^x-frame-options: DENY' /tmp/meteorite-ipc-http-secure.txt
+grep -qi '^referrer-policy: no-referrer' /tmp/meteorite-ipc-http-secure.txt
+
+curl --unix-socket "$HTTP_SOCK" -fsS http://localhost/static/hello.txt > /tmp/meteorite-ipc-http-static.txt
+grep -q '^hello over uds$' /tmp/meteorite-ipc-http-static.txt
+curl --unix-socket "$HTTP_SOCK" -fsSI http://localhost/static/hello.txt > /tmp/meteorite-ipc-http-static-headers.txt
+static_etag=$(awk 'BEGIN{IGNORECASE=1} /^etag:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); print; exit}' /tmp/meteorite-ipc-http-static-headers.txt)
+test -n "$static_etag"
+conditional_status=$(curl --unix-socket "$HTTP_SOCK" -sS -o /tmp/meteorite-ipc-http-conditional.body -w '%{http_code}' -H "If-None-Match: $static_etag" http://localhost/static/hello.txt)
+test "$conditional_status" = "304"
+
+curl --unix-socket "$HTTP_SOCK" -fsSI http://localhost/headable > /tmp/meteorite-ipc-http-head.txt
+grep -qi '^x-meteorite-head: ok' /tmp/meteorite-ipc-http-head.txt
+grep -qi '^content-length: 8' /tmp/meteorite-ipc-http-head.txt
+
 curl --unix-socket "$HTTP_SOCK" -fsS http://localhost/__meteorite/info > /tmp/meteorite-ipc-http-info.json
 python3 - /tmp/meteorite-ipc-http-info.json <<'PY'
 import json, sys

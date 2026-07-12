@@ -9,6 +9,7 @@ Expected behavior:
 - Graph generation accepts `backend = "ipc_unixsocket_http"`.
 - Server compilation succeeds with HTTP/1.1 semantics over a Unix domain socket.
 - Requests can be exercised with `curl --unix-socket` using normal HTTP routes, query strings, headers, and bodies.
+- Compatibility smoke covers cookies, redirects, secure headers, static files, conditional requests, and `HEAD`.
 
 Useful commands from the repository root:
 
