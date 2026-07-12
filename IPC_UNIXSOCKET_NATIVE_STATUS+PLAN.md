@@ -59,9 +59,11 @@ Annotation: canonical table-form messages now lower through the canonical route 
 - [x] Keep portable response/body helpers routed through the shared context vtable: `ctx:body`, `ctx:text`, `ctx:json`, `ctx:bytes`, `ctx:set`, `ctx:get`, `ctx:log`, `ctx:request_id`.
 - [x] Gate HTTP response headers, cookies, and redirects with backend capability diagnostics.
 - [x] Keep `ctx:header(name)` HTTP-only; native IPC uses `ctx:metadata(name)` instead.
-- [ ] Add IPC-specific coverage for `ctx:json_body` and richer metadata/body validation failures.
+- [x] Add IPC-specific coverage for `ctx:json_body` and richer metadata/body validation failures.
 
 Annotation: N3 now has a native message-only dispatch path. `health.get` matches only `message.name = "health.get"`; slash aliases such as `health/get` and HTTP route text such as `GET /health` return `not_found`. Lua handlers can read `ctx:message()` and `ctx:metadata("id")`; `ctx:header("id")` returns nil on `ipc_unixsocket`. HTTP-only response headers, cookies, and redirects are rejected through backend capabilities; Lua pcall failures currently surface as deterministic `internal_error` IPC responses with the specific capability error logged by the route boundary.
+
+Annotation: IPC fixture coverage now asserts malformed JSON, missing JSON fields, invalid JSON field types, successful `ctx:json_body()` parsing, and structured `meteorite.validation.*` response metadata for native IPC messages.
 
 ## Phase N4 — Validation And Observability
 

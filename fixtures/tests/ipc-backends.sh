@@ -144,28 +144,42 @@ assert_equal(user_body["id"], 42, "user id")
 assert_equal(user_body["message"], "users.get", "user message")
 assert_equal(user_body["header_is_http_only"], True, "header separation")
 
-bad_json = send("users.create", "content_type=application/json\n", '{"id":1}', request_id=16)
-assert_equal(bad_json["result"], RESULT_VALIDATION_ERROR, "json validation result")
+malformed_json = send("users.create", "content_type=application/json\n", '{"id":', request_id=16)
+assert_equal(malformed_json["result"], RESULT_VALIDATION_ERROR, "malformed json validation result")
+assert "meteorite.validation.domain=json_body" in malformed_json["metadata"]
+assert "meteorite.validation.field=body" in malformed_json["metadata"]
+assert "meteorite.validation.reason=invalid" in malformed_json["metadata"]
+
+bad_json = send("users.create", "content_type=application/json\n", '{"id":1}', request_id=17)
+assert_equal(bad_json["result"], RESULT_VALIDATION_ERROR, "json missing field validation result")
 assert "meteorite.validation.domain=json_body" in bad_json["metadata"]
 assert "meteorite.validation.field=name" in bad_json["metadata"]
+assert "meteorite.validation.reason=missing" in bad_json["metadata"]
 
-created = send("users.create", "content_type=application/json\n", '{"id":7,"name":"alice"}', request_id=17)
+invalid_json_field = send("users.create", "content_type=application/json\n", '{"id":"7","name":"alice"}', request_id=18)
+assert_equal(invalid_json_field["result"], RESULT_VALIDATION_ERROR, "json invalid field validation result")
+assert "meteorite.validation.domain=json_body" in invalid_json_field["metadata"]
+assert "meteorite.validation.field=id" in invalid_json_field["metadata"]
+assert "meteorite.validation.reason=invalid" in invalid_json_field["metadata"]
+
+created = send("users.create", "content_type=application/json\n", '{"id":7,"name":"alice"}', request_id=19)
 assert_equal(created["result"], RESULT_OK, "json create result")
 created_body = json.loads(created["body"])
 assert_equal(created_body["id"], 7, "created id")
 assert_equal(created_body["name"], "alice", "created name")
+assert_equal(created_body["message"], "users.create", "created message from ctx:json_body handler")
 
-stats = send("meteorite.bench.stats", request_id=18)
+stats = send("meteorite.bench.stats", request_id=20)
 assert_equal(stats["result"], RESULT_OK, "stats result")
 stats_body = json.loads(stats["body"])
 assert stats_body["accepted_total"] >= 8
 assert stats_body["completed_total"] >= 7
 assert stats_body["requests_served"] >= 8
 
-reset = send("meteorite.bench.stats.reset", request_id=19)
+reset = send("meteorite.bench.stats.reset", request_id=21)
 assert_equal(reset["result"], RESULT_OK, "reset result")
 
-meta = send("meteorite.bench.meta", request_id=20)
+meta = send("meteorite.bench.meta", request_id=22)
 assert_equal(meta["result"], RESULT_OK, "meta result")
 meta_body = json.loads(meta["body"])
 assert_equal(meta_body["backend"], "ipc_unixsocket", "meta backend")
