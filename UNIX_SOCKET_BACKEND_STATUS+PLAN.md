@@ -124,11 +124,13 @@ Annotation: this is not just a backend convenience. Native messages are an IR co
 - [x] Introduce or refine a shared response object with portable fields: `result`, `status`, `content_type`, `metadata`, `headers`, `body`, and `close_policy`.
 - [x] Keep HTTP headers and IPC metadata distinct in type names, graph metadata, and diagnostics.
 - [x] Map HTTP requests into the shared request without changing existing `std_http` and `fast_http` behavior.
-- [ ] Map IPC frames into the shared request without pretending IPC metadata is raw HTTP headers.
+- [x] Map IPC frames into the shared request without pretending IPC metadata is raw HTTP headers.
 - [x] Preserve existing response helpers while making `ctx:text`, `ctx:json`, and `ctx:bytes` portable.
 - [x] Add backend capability facts for `http_headers`, `cookies`, `cors`, `redirects`, `ipc_metadata`, `peer_credentials`, and `static_files`.
 
 Annotation: this phase should reduce HTTP assumptions without a risky full rewrite. HTTP backends can continue to expose HTTP features, but portable handler execution should start depending on shared request/response concepts.
+
+Annotation: native IPC frames now populate backend-neutral request facts from message identity, metadata, body, content type, request ID, and counters. HTTP header helpers remain separate from IPC metadata; `ctx:metadata()` is the native accessor while `ctx:header()` remains HTTP-only.
 
 ## Phase U4 — Minimal UNIX Socket Listener
 
@@ -224,16 +226,18 @@ Annotation: the CLI is the developer bridge for IPC. Users should not need custo
 
 ## Phase U11 — Release And Deployment
 
-- [ ] Add `backend = "unix_socket"` to release manifest output.
-- [ ] Include `transport = "unix"`, `protocol = "meteorite.ipc.v0"`, socket config, and backend capabilities.
-- [ ] Include native message names in release graph metadata without leaking source paths.
-- [ ] Preserve static and hybrid release validation gates.
+- [x] Add `backend = "ipc_unixsocket"` to release manifest output.
+- [x] Include `transport = "unix"`, `protocol = "meteorite.ipc.v0"`, socket config, and backend capabilities.
+- [x] Include native message names in release graph metadata without leaking source paths.
+- [x] Preserve static and hybrid release validation gates.
 - [ ] Add copied-release smoke tests for `unix_socket` with source tree removed.
 - [ ] Verify copied releases can bind a configured socket and serve native-message requests.
 - [ ] Verify shutdown cleanup behavior matches `unlink_stale` and does not remove unsafe paths.
 - [ ] Add systemd, launchd, and supervisor notes for socket paths and permissions.
 
 Annotation: releases should make IPC deployment auditable. Manifest metadata may include intentional socket config, but must not leak project roots, build directories, or host-only source paths.
+
+Annotation: release manifest unit coverage now verifies `ipc_unixsocket` backend metadata, Unix transport/protocol facts, safe socket config, native message entries, and native capabilities. The aggregate plan uses the canonical backend spelling `ipc_unixsocket`; legacy `unix_socket` remains historical terminology only.
 
 ## Phase U12 — Peer Credentials And Local Authorization
 
