@@ -261,14 +261,17 @@ Annotation: UNIX sockets have local security semantics that HTTP does not. Meteo
 
 ## Phase U13 — Documentation And Examples
 
-- [ ] Add an IPC hello example using `users.get`-style native messages.
-- [ ] Add JSON API, middleware, worker RPC, and peer-auth examples.
-- [ ] Document backend selection by CLI and project manifest.
-- [ ] Document native message naming, including slash-to-dot normalization and collision rules.
-- [ ] Document IPC frame basics and compatibility boundaries.
-- [ ] Document portable ctx APIs versus HTTP-only helpers.
-- [ ] Document benchmark methodology for IPC and required counters.
-- [ ] Document deployment with socket permissions and process supervisors.
+- [x] Add an IPC hello example using `users.get`-style native messages.
+- [x] Add JSON API, middleware, and worker RPC examples.
+- [ ] Add peer-auth example after peer credential support lands.
+- [x] Document backend selection by CLI and project manifest.
+- [x] Document native message naming, including slash-to-dot normalization and collision rules.
+- [x] Document IPC frame basics and compatibility boundaries.
+- [x] Document portable ctx APIs versus HTTP-only helpers.
+- [x] Document benchmark methodology for IPC and required counters.
+- [x] Document deployment with socket permissions and process supervisors.
+
+Annotation: IPC docs now live in `docs/ipc-unix-socket.md`; native examples live under `examples/unix-socket/`. Peer-auth remains intentionally pending until the backend exposes peer credentials and authorization policy.
 
 Annotation: docs should teach users that changing backend is configuration, while changing from HTTP concepts to native IPC messages is an intentional graph-level capability.
 
