@@ -174,28 +174,32 @@ Annotation: IPC dispatch now prefers graph-owned native message identity (`users
 
 ## Phase U7 — Lua Context Compatibility And Diagnostics
 
-- [ ] Ensure portable APIs work under all backends: `ctx:param`, `ctx:query`, `ctx:body`, `ctx:json_body`, `ctx:text`, `ctx:json`, `ctx:bytes`, `ctx:set`, `ctx:get`, `ctx:log`, and `ctx:request_id`.
-- [ ] Add `ctx:message()` or equivalent portable access to the native message name.
-- [ ] Add `ctx:metadata(name)` or equivalent IPC-safe metadata accessor.
-- [ ] Keep `ctx:header` and `ctx:headers` HTTP-specific unless an explicit metadata bridge is requested.
-- [ ] Make CORS, cookies, redirects, secure headers, static file helpers, ETag helpers, and conditional request helpers fail clearly under `unix_socket`.
+- [x] Ensure portable APIs work under all backends: `ctx:param`, `ctx:query`, `ctx:body`, `ctx:json_body`, `ctx:text`, `ctx:json`, `ctx:bytes`, `ctx:set`, `ctx:get`, `ctx:log`, and `ctx:request_id`.
+- [x] Add `ctx:message()` or equivalent portable access to the native message name.
+- [x] Add `ctx:metadata(name)` or equivalent IPC-safe metadata accessor.
+- [x] Keep `ctx:header` and `ctx:headers` HTTP-specific unless an explicit metadata bridge is requested.
+- [x] Make CORS, cookies, redirects, secure headers, static file helpers, ETag helpers, and conditional request helpers fail clearly under `unix_socket`.
 - [ ] Prefer compile-time diagnostics for statically detectable backend-incompatible helpers.
 - [ ] Use deterministic runtime errors for dynamic helper usage that cannot be proven at graph-build time.
 
 Annotation: the compatibility promise is “portable Meteorite routes run unchanged,” not “all HTTP features magically become IPC features.”
 
+Annotation: native IPC fixture coverage now exercises message/metadata accessors, JSON/body helpers, binary bytes responses, request IDs, scoped plugin state via `ctx:set`/`ctx:get`, logging, and HTTP helper separation. Dynamic HTTP-only helper use is still reported through deterministic backend capability errors at the route boundary.
+
 ## Phase U8 — Middleware, Hooks, Error Boundary, And Validation
 
-- [ ] Run scoped middleware and hooks for IPC requests through the same pipeline contract as HTTP.
-- [ ] Preserve before/after ordering, short-circuit behavior, post-handler mutation, and error boundaries.
+- [x] Run scoped middleware and hooks for IPC requests through the same pipeline contract as HTTP.
+- [x] Preserve before/after ordering, short-circuit behavior, post-handler mutation, and error boundaries.
 - [ ] Extend resource contracts with IPC resources: `request.message`, `request.metadata`, `request.peer`, `response.result`, and `response.metadata`.
 - [ ] Preserve existing HTTP resource contracts without weakening them.
-- [ ] Reuse params, query, body, JSON body, and schema validation where applicable.
-- [ ] Add metadata/envelope validation only where it is explicitly represented in graph metadata.
-- [ ] Map validation failures to `validation_error` with structured response metadata.
-- [ ] Include validator coverage and backend capability facts in graph JSON and build reports.
+- [x] Reuse params, query, body, JSON body, and schema validation where applicable.
+- [x] Add metadata/envelope validation only where it is explicitly represented in graph metadata.
+- [x] Map validation failures to `validation_error` with structured response metadata.
+- [x] Include validator coverage and backend capability facts in graph JSON and build reports.
 
 Annotation: middleware should be graph/pipeline behavior, not HTTP-backend behavior. HTTP-only middleware should fail clearly or require explicit backend gating.
+
+Annotation: native IPC middleware coverage verifies scoped plugin state, plugin short-circuit responses, bytes/body handling through middleware-gated messages, and plugin error-boundary mapping to deterministic `internal_error` IPC responses. Metadata and JSON-body validation failures are asserted as structured `meteorite.validation.*` response metadata.
 
 ## Phase U9 — Observability And Benchmark Honesty
 

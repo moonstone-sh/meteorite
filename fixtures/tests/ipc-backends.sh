@@ -37,6 +37,9 @@ grep -q 'health.get' "$NATIVE_GRAPH/messages.zon"
 grep -q 'system.ping' "$NATIVE_GRAPH/messages.zon"
 grep -q 'users.get' "$NATIVE_GRAPH/messages.zon"
 grep -q 'users.create' "$NATIVE_GRAPH/messages.zon"
+grep -q 'middleware.state' "$NATIVE_GRAPH/messages.zon"
+grep -q 'middleware.bytes' "$NATIVE_GRAPH/messages.zon"
+grep -q 'middleware.error' "$NATIVE_GRAPH/messages.zon"
 
 zig build install-server \
   -Dmode=release-hybrid \
@@ -75,6 +78,7 @@ sock_path = sys.argv[1]
 RESULT_OK = 0
 RESULT_NOT_FOUND = 1
 RESULT_VALIDATION_ERROR = 3
+RESULT_INTERNAL_ERROR = 9
 
 def recv_all(sock, size):
     chunks = []
@@ -139,10 +143,12 @@ invalid = send("users.get", "id=abc\n", request_id=14)
 assert_equal(invalid["result"], RESULT_VALIDATION_ERROR, "invalid metadata result")
 assert "meteorite.validation.reason=invalid" in invalid["metadata"]
 
-user = send("users.get", "id=42\n", request_id=15)
+user = send("users.get", "id=42\nquery=verbose=true\n", request_id=15)
 assert_equal(user["result"], RESULT_OK, "user result")
 user_body = json.loads(user["body"])
 assert_equal(user_body["id"], 42, "user id")
+assert_equal(user_body["param_id"], 42, "user param id")
+assert_equal(user_body["query_verbose"], True, "user query verbose")
 assert_equal(user_body["message"], "users.get", "user message")
 assert_equal(user_body["header_is_http_only"], True, "header separation")
 
@@ -170,6 +176,26 @@ created_body = json.loads(created["body"])
 assert_equal(created_body["id"], 7, "created id")
 assert_equal(created_body["name"], "alice", "created name")
 assert_equal(created_body["message"], "users.create", "created message from ctx:json_body handler")
+
+blocked = send("middleware.state", request_id=23)
+assert_equal(blocked["result"], RESULT_OK, "middleware short-circuit result")
+assert_equal(blocked["body"], "middleware:blocked", "middleware short-circuit body")
+
+middleware_state = send("middleware.state", "allow=yes\n", request_id=24)
+assert_equal(middleware_state["result"], RESULT_OK, "middleware state result")
+middleware_body = json.loads(middleware_state["body"])
+assert_equal(middleware_body["message"], "middleware.state", "middleware message")
+assert_equal(middleware_body["state"], "ipc", "middleware state")
+assert middleware_body["request_id"], "middleware request id present"
+
+bytes_response = send("middleware.bytes", "allow=yes\n", b"abc\x00xyz", request_id=25)
+assert_equal(bytes_response["result"], RESULT_OK, "bytes response result")
+assert_equal(bytes_response["content_type"], "application/octet-stream", "bytes content type")
+assert_equal(bytes_response["body"], "abc\x00xyz", "bytes response body")
+
+middleware_error = send("middleware.error", request_id=26)
+assert_equal(middleware_error["result"], RESULT_INTERNAL_ERROR, "middleware error boundary result")
+assert_equal(middleware_error["body"], "internal server error", "middleware error body")
 
 stats = send("meteorite.bench.stats", request_id=20)
 assert_equal(stats["result"], RESULT_OK, "stats result")
