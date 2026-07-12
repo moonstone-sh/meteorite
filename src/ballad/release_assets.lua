@@ -116,7 +116,10 @@ end
 
 function assets_mod.add_hybrid_lua_assets(ctx, assets, root, graph)
   local seen = {}
-  for _, route in ipairs(graph.routes or {}) do
+  local nodes = {}
+  for _, route in ipairs(graph.routes or {}) do nodes[#nodes + 1] = route end
+  for _, message in ipairs(graph.messages or {}) do nodes[#nodes + 1] = message end
+  for _, route in ipairs(nodes) do
     if route.handler and route.handler.kind == "inline_lua" then
       local chunk_path = route.handler.lifted and route.handler.lifted.chunk_path
       add_project_lua_file(ctx, assets, root, chunk_path, "meteorite_lua_chunk", { route = route.id }, seen)

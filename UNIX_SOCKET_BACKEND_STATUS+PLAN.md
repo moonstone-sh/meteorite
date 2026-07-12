@@ -234,14 +234,16 @@ Annotation: the CLI is the developer bridge for IPC. Users should not need custo
 - [x] Include `transport = "unix"`, `protocol = "meteorite.ipc.v0"`, socket config, and backend capabilities.
 - [x] Include native message names in release graph metadata without leaking source paths.
 - [x] Preserve static and hybrid release validation gates.
-- [ ] Add copied-release smoke tests for `unix_socket` with source tree removed.
-- [ ] Verify copied releases can bind a configured socket and serve native-message requests.
-- [ ] Verify shutdown cleanup behavior matches `unlink_stale` and does not remove unsafe paths.
+- [x] Add copied-release smoke tests for `ipc_unixsocket` with source tree removed.
+- [x] Verify copied releases can bind a configured socket and serve native-message requests.
+- [x] Verify shutdown cleanup behavior matches `unlink_stale` and does not remove unsafe paths.
 - [ ] Add systemd, launchd, and supervisor notes for socket paths and permissions.
 
 Annotation: releases should make IPC deployment auditable. Manifest metadata may include intentional socket config, but must not leak project roots, build directories, or host-only source paths.
 
 Annotation: release manifest unit coverage now verifies `ipc_unixsocket` backend metadata, Unix transport/protocol facts, safe socket config, native message entries, and native capabilities. The aggregate plan uses the canonical backend spelling `ipc_unixsocket`; legacy `unix_socket` remains historical terminology only.
+
+Annotation: `fixtures/tests/ipc-release-smoke.sh` now builds a hybrid native IPC release, copies it to a temporary deploy root, hides the source tree, starts the copied binary, exercises native messages through `meteorite ipc`, and verifies manifest/socket facts. Hybrid release asset collection now includes Lua chunks from `graph.messages`, not just HTTP routes.
 
 ## Phase U12 — Peer Credentials And Local Authorization
 
