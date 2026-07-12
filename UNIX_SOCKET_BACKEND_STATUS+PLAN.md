@@ -203,16 +203,18 @@ Annotation: native IPC middleware coverage verifies scoped plugin state, plugin 
 
 ## Phase U9 — Observability And Benchmark Honesty
 
-- [ ] Count accepted connections and completed messages separately.
-- [ ] Count active connections, inflight messages, queue depth, max queue depth, worker queue max, and budget rejections.
-- [ ] Count backpressure, dropped connections, connection errors, malformed frames, oversized frames, protocol errors, and unauthorized peers.
-- [ ] Count bytes read and written at the IPC transport layer.
-- [ ] Add IPC-safe equivalents of bench metadata and bench stats without requiring HTTP endpoints.
-- [ ] Add CLI or control-message access for `meteorite ipc stats` and `meteorite ipc inspect`.
-- [ ] Ensure benchmark rows can distinguish throughput from admission failures, malformed messages, and backpressure.
+- [x] Count accepted connections and completed messages separately.
+- [x] Count active connections, inflight messages, queue depth, max queue depth, worker queue max, and budget rejections.
+- [x] Count backpressure, dropped connections, connection errors, malformed frames, oversized frames, protocol errors, and unauthorized peers.
+- [x] Count bytes read and written at the IPC transport layer.
+- [x] Add IPC-safe equivalents of bench metadata and bench stats without requiring HTTP endpoints.
+- [x] Add CLI or control-message access for `meteorite ipc stats` and `meteorite ipc inspect`.
+- [x] Ensure benchmark rows can distinguish throughput from admission failures, malformed messages, and backpressure.
 - [ ] Update benchmark claim audits to label IPC rows separately from HTTP rows.
 
 Annotation: IPC performance claims are only valid if the counters expose queueing, rejection, and protocol-error behavior. A high RPS number without admission and completion accounting is not acceptable.
+
+Annotation: native IPC fixture coverage now asserts stats/meta control messages over IPC, CLI `stats`/`inspect`, accepted/completed/request counters, active/inflight counters, queue/admission/backpressure fields, byte counters, and correlated protocol-error accounting from an unsupported-version frame.
 
 ## Phase U10 — IPC CLI Tooling
 

@@ -78,6 +78,7 @@ sock_path = sys.argv[1]
 RESULT_OK = 0
 RESULT_NOT_FOUND = 1
 RESULT_VALIDATION_ERROR = 3
+RESULT_MALFORMED_MESSAGE = 5
 RESULT_INTERNAL_ERROR = 9
 
 def recv_all(sock, size):
@@ -116,6 +117,27 @@ def send(route, metadata="", body=b"", request_id=1):
         "content_type": content_type,
         "metadata": response_metadata,
         "body": response_body,
+    }
+
+def send_bad_version(route, request_id=1):
+    route_bytes = route.encode()
+    frame_len = 20 + len(route_bytes)
+    frame = struct.pack("<IHHQHHI", frame_len, 99, 0, request_id, len(route_bytes), 0, 0) + route_bytes
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+        client.connect(sock_path)
+        client.sendall(frame)
+        header = recv_all(client, 26)
+        declared, version, flags, response_id, result, content_type_len, metadata_len, body_len = struct.unpack("<IHHQHHHI", header)
+        payload = recv_all(client, content_type_len + metadata_len + body_len)
+    return {
+        "declared": declared,
+        "version": version,
+        "flags": flags,
+        "request_id": response_id,
+        "result": result,
+        "content_type": payload[:content_type_len].decode(),
+        "metadata": payload[content_type_len:content_type_len + metadata_len].decode(),
+        "body": payload[content_type_len + metadata_len:].decode(),
     }
 
 def assert_equal(actual, expected, label):
@@ -197,12 +219,23 @@ middleware_error = send("middleware.error", request_id=26)
 assert_equal(middleware_error["result"], RESULT_INTERNAL_ERROR, "middleware error boundary result")
 assert_equal(middleware_error["body"], "internal server error", "middleware error body")
 
+bad_version = send_bad_version("health.get", request_id=27)
+assert_equal(bad_version["result"], RESULT_MALFORMED_MESSAGE, "bad version result")
+assert_equal(bad_version["request_id"], 27, "bad version request correlation")
+
 stats = send("meteorite.bench.stats", request_id=20)
 assert_equal(stats["result"], RESULT_OK, "stats result")
 stats_body = json.loads(stats["body"])
 assert stats_body["accepted_total"] >= 8
 assert stats_body["completed_total"] >= 7
 assert stats_body["requests_served"] >= 8
+assert stats_body["active_connections"] >= 1
+assert stats_body["inflight_current"] >= 1
+assert stats_body["bytes_read"] > 0
+assert stats_body["bytes_written"] > 0
+assert stats_body["protocol_errors"] >= 1
+for counter in ["queue_depth", "max_queue_depth", "worker_queue_depth_max", "budget_rejections_total", "backpressure_total", "dropped_connections", "malformed_frames", "oversized_frames", "connection_errors"]:
+    assert counter in stats_body, counter
 
 reset = send("meteorite.bench.stats.reset", request_id=21)
 assert_equal(reset["result"], RESULT_OK, "reset result")
