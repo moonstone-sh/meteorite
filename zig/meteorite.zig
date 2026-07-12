@@ -8,6 +8,7 @@ pub const backends = struct {
     pub const std_http = @import("backends/std_http.zig");
     pub const fast_http = @import("backends/fast_http.zig");
     pub const unix_socket = @import("backends/unix_socket.zig");
+    pub const unix_socket_http = @import("backends/unix_socket_http.zig");
 };
 
 pub const ListenConfig = struct {

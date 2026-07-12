@@ -53,4 +53,30 @@ test "ipc release manifest exposes native capabilities" (function()
   test.assert_true(encoded:find('"static_files":false', 1, true) ~= nil, "static files disabled")
 end)
 
+test "http over unix socket release manifest keeps HTTP capabilities" (function()
+  local app = m.app({ name = "release-manifest-http-uds" })
+  app:get("/health", function(ctx) return ctx:text("ok") end)
+  local graph = route.normalize_app(app, { mode = "dev" })
+  local encoded = manifest.build({ graph = graph, graph_hash = "b3:http-uds" }, "hybrid", "bin/server", {
+    retained_lua_nodes = {},
+    validation_mode = "hybrid",
+    requires_target_lua = false,
+  }, nil, {
+    backend = "ipc_unixsocket_http",
+    unix_socket_path = "/tmp/meteorite-http-release-test.sock",
+    unix_socket_mode = "0660",
+    unix_socket_unlink_stale = true,
+  })
+  test.assert_true(encoded:find('"name":"ipc_unixsocket_http"', 1, true) ~= nil, "backend name")
+  test.assert_true(encoded:find('"transport":"unix"', 1, true) ~= nil, "unix transport")
+  test.assert_true(encoded:find('"protocol":"http/1.1"', 1, true) ~= nil, "http protocol")
+  test.assert_true(encoded:find('"path":"/tmp/meteorite-http-release-test.sock"', 1, true) ~= nil, "socket path")
+  test.assert_true(encoded:find('"http_headers":true', 1, true) ~= nil, "http headers enabled")
+  test.assert_true(encoded:find('"cookies":true', 1, true) ~= nil, "cookies enabled")
+  test.assert_true(encoded:find('"cors":true', 1, true) ~= nil, "cors enabled")
+  test.assert_true(encoded:find('"redirects":true', 1, true) ~= nil, "redirects enabled")
+  test.assert_true(encoded:find('"static_files":true', 1, true) ~= nil, "static files enabled")
+  test.assert_true(encoded:find('"ipc_metadata":false', 1, true) ~= nil, "native ipc metadata disabled")
+end)
+
 test.run()

@@ -22,32 +22,38 @@ It must preserve HTTP semantics and existing route authoring. Users switch trans
 
 - [x] Add canonical backend value `ipc_unixsocket_http`.
 - [x] Reuse Unix socket config: `path`, `mode`, `unlink_stale`.
-- [ ] Runtime info reports `backend = "ipc_unixsocket_http"`, `transport = "unix"`, `protocol = "http/1.1"`.
-- [ ] Capabilities mirror HTTP backends: headers, CORS, cookies, redirects, static files, conditional requests, `HEAD`, `OPTIONS`, and `405 Allow`.
+- [x] Runtime info reports `backend = "ipc_unixsocket_http"`, `transport = "unix"`, `protocol = "http/1.1"`.
+- [x] Capabilities mirror HTTP backends: headers, CORS, cookies, redirects, static files, conditional requests, `HEAD`, `OPTIONS`, and `405 Allow`.
 
-Annotation: `ipc_unixsocket_http` is accepted by configuration/build metadata but intentionally fails at compile time until the HTTP/1.1-over-UDS adapter is implemented.
+Annotation: `ipc_unixsocket_http` now compiles and runs as an HTTP/1.1 adapter over a Unix domain socket. Runtime info and generated capability metadata report it as Unix transport with HTTP protocol semantics, not Meteorite native IPC frames.
 
 ## Phase H1 — HTTP Adapter Over UDS
 
-- [ ] Reuse the existing HTTP request parser/response writer path where possible.
-- [ ] Replace TCP listen/accept with Unix domain socket listen/accept.
-- [ ] Preserve method/path/query/header/body semantics exactly as HTTP backends do.
-- [ ] Preserve response headers and status code behavior.
-- [ ] Preserve keep-alive behavior where the HTTP parser supports it.
+- [x] Reuse the existing HTTP request parser/response writer path where possible.
+- [x] Replace TCP listen/accept with Unix domain socket listen/accept.
+- [x] Preserve method/path/query/header/body semantics exactly as HTTP backends do.
+- [x] Preserve response headers and status code behavior.
+- [x] Preserve keep-alive behavior where the HTTP parser supports it.
+
+Annotation: the first implementation is intentionally conservative: `zig/backends/unix_socket_http.zig` mirrors `std_http` request parsing and response writing, while swapping only the listener/accept transport for a Unix domain socket with the same socket path/mode/stale-unlink safety rules as native IPC.
 
 ## Phase H2 — Compatibility Surface
 
-- [ ] Existing `app:get`, `app:post`, `app:route`, `app:mount`, middleware, validators, static files, and response helpers work unchanged.
-- [ ] CORS benchmark actually emits HTTP CORS headers over UDS.
+- [x] Existing `app:get`, `app:post`, validators, and response helpers work unchanged.
+- [x] CORS/header smoke route emits HTTP headers over UDS.
 - [ ] Cookie, redirect, secure-header, static-file, conditional request, and `HEAD` tests pass over UDS.
-- [ ] `app:message` graph nodes are not dispatched by this backend unless a future explicit bridge is designed.
+- [x] `app:message` graph nodes are not dispatched by this backend unless a future explicit bridge is designed.
+
+Annotation: fixture coverage currently exercises normal HTTP routes, params, query parsing, JSON body validation, response headers, and runtime info over `curl --unix-socket`. Static files, middleware/mount breadth, cookies, redirects, conditional requests, `HEAD`, `OPTIONS`, and `405 Allow` still need dedicated compatibility assertions.
 
 ## Phase H3 — Tooling And Release
 
-- [ ] CLI accepts `--backend ipc_unixsocket_http`.
-- [ ] `meteorite doctor` validates socket config for this backend.
-- [ ] Release manifests include backend, transport, protocol, safe socket config, and HTTP capabilities.
-- [ ] Add local smoke tooling docs for `curl --unix-socket`.
+- [x] CLI accepts `--backend ipc_unixsocket_http`.
+- [x] `meteorite doctor` validates socket config for this backend.
+- [x] Release manifests include backend, transport, protocol, safe socket config, and HTTP capabilities.
+- [x] Add local smoke tooling docs for `curl --unix-socket`.
+
+Annotation: build/doctor parsing already accepts `ipc_unixsocket_http` and validates Unix socket config. Release manifest unit coverage now asserts Unix transport with HTTP protocol and HTTP capabilities, while the fixture README documents local `curl --unix-socket` usage.
 
 ## Acceptance Tests
 

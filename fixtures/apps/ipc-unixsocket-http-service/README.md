@@ -1,14 +1,14 @@
 # IPC Unix Socket HTTP Service Fixture
 
-Purpose: captures the planned `ipc_unixsocket_http` compatibility backend shape.
+Purpose: exercises the `ipc_unixsocket_http` compatibility backend shape.
 
 This fixture intentionally uses normal HTTP route authoring (`app:get`, `app:post`, params, query, headers, JSON body validation). It should eventually run unchanged over HTTP semantics transported by a Unix socket.
 
-Current expected behavior:
+Expected behavior:
 
 - Graph generation accepts `backend = "ipc_unixsocket_http"`.
-- Server compilation fails with the intentional compile gate until the backend is implemented.
-- The fixture exists so that future implementation work has a stable app contract to unlock.
+- Server compilation succeeds with HTTP/1.1 semantics over a Unix domain socket.
+- Requests can be exercised with `curl --unix-socket` using normal HTTP routes, query strings, headers, and bodies.
 
 Useful commands from the repository root:
 
@@ -22,4 +22,4 @@ zig build install-server \
   -Dunix-socket-path=/tmp/meteorite-ipc-http-fixture.sock
 ```
 
-When `ipc_unixsocket_http` is implemented, this fixture should become a runnable black-box compatibility test mirroring the same app under `std_http`/`fast_http`.
+This fixture is intentionally separate from `ipc-native-service`: it must not dispatch `app:message` nodes or Meteorite IPC frames.

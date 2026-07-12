@@ -18,11 +18,13 @@ NATIVE_BIN="/tmp/meteorite-ipc-native-fixture-server"
 HTTP_BIN="/tmp/meteorite-ipc-http-fixture-server"
 NATIVE_BUILD_LOG="/tmp/meteorite-ipc-native-fixture-build.log"
 HTTP_BUILD_LOG="/tmp/meteorite-ipc-http-fixture-build.log"
+HTTP_LOG="/tmp/meteorite-ipc-http-fixture-server.log"
+HTTP_SOCK="/tmp/meteorite-ipc-http-fixture.sock"
 NATIVE_LOG="/tmp/meteorite-ipc-native-fixture-server.log"
 NATIVE_SOCK="/tmp/meteorite-ipc-native-fixture.sock"
 
 rm -rf "$NATIVE_GRAPH" "$HTTP_GRAPH"
-rm -f "$NATIVE_BIN" "$HTTP_BIN" "$NATIVE_BUILD_LOG" "$HTTP_BUILD_LOG" "$NATIVE_LOG" "$NATIVE_SOCK"
+rm -f "$NATIVE_BIN" "$HTTP_BIN" "$NATIVE_BUILD_LOG" "$HTTP_BUILD_LOG" "$NATIVE_LOG" "$HTTP_LOG" "$NATIVE_SOCK" "$HTTP_SOCK"
 
 "$LUA_BIN" src/cli/main.lua graph \
   fixtures/apps/ipc-native-service/src/main.lua \
@@ -229,25 +231,73 @@ grep -q '/health' "$HTTP_GRAPH/routes.zon"
 grep -q '/users/:id' "$HTTP_GRAPH/routes.zon"
 grep -q '/echo' "$HTTP_GRAPH/routes.zon"
 
-set +e
 zig build install-server \
   -Dmode=release-hybrid \
   -Dbackend=ipc_unixsocket_http \
   -Dgraph-input=fixtures/apps/ipc-unixsocket-http-service/src/main.lua \
   -Dgraph-output="$HTTP_GRAPH" \
-  -Dunix-socket-path=/tmp/meteorite-ipc-http-fixture.sock \
-  -- "$HTTP_BIN" >"$HTTP_BUILD_LOG" 2>&1
-status=$?
-set -e
+  -Dunix-socket-path="$HTTP_SOCK" \
+  -- "$HTTP_BIN" >"$HTTP_BUILD_LOG"
 
-if [[ "$status" -eq 0 ]]; then
-  echo "expected ipc_unixsocket_http build to fail until backend implementation lands" >&2
-  exit 1
-fi
+test -x "$HTTP_BIN"
 
-grep -q 'ipc_unixsocket_http is planned but not implemented' "$HTTP_BUILD_LOG"
+"$HTTP_BIN" >"$HTTP_LOG" 2>&1 &
+http_pid=$!
+register_pid "$http_pid"
+
+for _ in $(seq 1 100); do
+  if [[ -S "$HTTP_SOCK" ]]; then break; fi
+  if ! kill -0 "$http_pid" 2>/dev/null; then
+    echo "HTTP-over-UDS fixture server exited before socket was ready" >&2
+    cat "$HTTP_LOG" >&2 || true
+    exit 1
+  fi
+  sleep 0.1
+done
+test -S "$HTTP_SOCK"
+
+http_health=$(curl --unix-socket "$HTTP_SOCK" -fsS http://localhost/health)
+test "$http_health" = "ok"
+
+curl --unix-socket "$HTTP_SOCK" -fsS 'http://localhost/users/42?verbose=true' > /tmp/meteorite-ipc-http-users.json
+python3 - /tmp/meteorite-ipc-http-users.json <<'PY'
+import json, sys
+body = json.load(open(sys.argv[1]))
+assert body == {"id": 42, "verbose": True}, body
+PY
+
+curl --unix-socket "$HTTP_SOCK" -fsS \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"hello"}' \
+  http://localhost/echo > /tmp/meteorite-ipc-http-echo.json
+python3 - /tmp/meteorite-ipc-http-echo.json <<'PY'
+import json, sys
+body = json.load(open(sys.argv[1]))
+assert body == {"message": "hello"}, body
+PY
+
+curl --unix-socket "$HTTP_SOCK" -fsSI http://localhost/headers > /tmp/meteorite-ipc-http-headers.txt
+grep -qi '^access-control-allow-origin: \*' /tmp/meteorite-ipc-http-headers.txt
+grep -qi '^x-meteorite-fixture: ipc_unixsocket_http' /tmp/meteorite-ipc-http-headers.txt
+
+curl --unix-socket "$HTTP_SOCK" -fsS http://localhost/__meteorite/info > /tmp/meteorite-ipc-http-info.json
+python3 - /tmp/meteorite-ipc-http-info.json <<'PY'
+import json, sys
+info = json.load(open(sys.argv[1]))
+assert info["backend"] == "ipc_unixsocket_http", info
+assert info["transport"] == "unix", info
+assert info["protocol"] == "http/1.1", info
+cap = info["capabilities"]
+assert cap["http_headers"] is True, cap
+assert cap["cors"] is True, cap
+assert cap["cookies"] is True, cap
+assert cap["redirects"] is True, cap
+assert cap["static_files"] is True, cap
+PY
+
+kill "$http_pid" 2>/dev/null || true
 
 rm -rf "$NATIVE_GRAPH" "$HTTP_GRAPH"
-rm -f "$NATIVE_BIN" "$HTTP_BIN" "$NATIVE_SOCK"
+rm -f "$NATIVE_BIN" "$HTTP_BIN" "$NATIVE_SOCK" "$HTTP_SOCK"
 
 echo "ipc backend fixtures: ok"
