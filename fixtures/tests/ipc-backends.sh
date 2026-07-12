@@ -186,6 +186,36 @@ assert_equal(meta_body["backend"], "ipc_unixsocket", "meta backend")
 assert_equal(meta_body["protocol"], "meteorite.ipc.v0", "meta protocol")
 PY
 
+cli_health=$("$LUA_BIN" src/cli/main.lua ipc send --socket "$NATIVE_SOCK" --message health.get)
+case "$cli_health" in
+  *$'ok	text/plain; charset=utf-8	ok:health.get'*) ;;
+  *) echo "unexpected ipc cli health output: $cli_health" >&2; exit 1 ;;
+esac
+
+cli_route=$("$LUA_BIN" src/cli/main.lua ipc send --socket "$NATIVE_SOCK" --route users/get --metadata id=42 --json)
+case "$cli_route" in
+  *'"result_name":"ok"'*'users.get'*) ;;
+  *) echo "unexpected ipc cli route output: $cli_route" >&2; exit 1 ;;
+esac
+
+cli_created=$("$LUA_BIN" src/cli/main.lua ipc send --socket "$NATIVE_SOCK" --message users.create --content-type application/json --body '{"id":8,"name":"bob"}' --json)
+case "$cli_created" in
+  *'"result_name":"ok"'*'bob'*) ;;
+  *) echo "unexpected ipc cli json body output: $cli_created" >&2; exit 1 ;;
+esac
+
+cli_stats=$("$LUA_BIN" src/cli/main.lua ipc stats --socket "$NATIVE_SOCK")
+case "$cli_stats" in
+  *'"result_name":"ok"'*'accepted_total'*) ;;
+  *) echo "unexpected ipc cli stats output: $cli_stats" >&2; exit 1 ;;
+esac
+
+cli_inspect=$("$LUA_BIN" src/cli/main.lua ipc inspect --socket "$NATIVE_SOCK")
+case "$cli_inspect" in
+  *'"result_name":"ok"'*'ipc_unixsocket'*) ;;
+  *) echo "unexpected ipc cli inspect output: $cli_inspect" >&2; exit 1 ;;
+esac
+
 kill "$server_pid" 2>/dev/null || true
 
 "$LUA_BIN" src/cli/main.lua graph \

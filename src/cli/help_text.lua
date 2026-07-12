@@ -15,6 +15,7 @@ Commands:
   graph     Generate the Meteorite graph
   doctor    Check local project/tool readiness
   invoke    Invoke a route in-process for diagnostics
+  ipc       Send native IPC messages over UNIX sockets
 
 Examples:
   meteorite init my-app
@@ -24,6 +25,7 @@ Examples:
   meteorite build --mode hybrid
   meteorite build --mode release-static
   meteorite doctor
+  meteorite ipc send --socket /tmp/meteorite.sock --message health.get
 
 Run `meteorite help <command>` for command-specific help.]]
 
@@ -127,5 +129,33 @@ Usage:
 Example:
   meteorite invoke src/main.lua GET /health
   meteorite invoke --json -H "Origin: https://app.example" src/main.lua GET /security/cors]]
+
+help.ipc = [[Meteorite IPC
+
+Usage:
+  meteorite ipc send --socket <path> --message <name> [flags]
+  meteorite ipc send --socket <path> --route users/get [flags]
+  meteorite ipc send --socket <path> --method GET --path /users/123 [flags]
+  meteorite ipc stats --socket <path>
+  meteorite ipc inspect --socket <path>
+
+Flags:
+  --json                       Print structured JSON
+  --body <text>                Send a request body
+  --body-file <path>           Read request body from a file
+  --content-type <type>        Add content_type IPC metadata
+  --metadata key=value         Add IPC metadata; repeatable
+
+Notes:
+  --message sends an exact native message name such as users.get.
+  --route normalizes slash form like users/get to users.get for local tooling.
+  --method/--path sends an explicit compatibility target such as GET /users/123.
+
+Examples:
+  meteorite ipc send --socket /tmp/meteorite.sock --message health.get
+  meteorite ipc send --socket /tmp/meteorite.sock --route users/get --metadata id=42
+  meteorite ipc send --socket /tmp/meteorite.sock --message users.create --content-type application/json --body '{"id":7,"name":"alice"}' --json
+  meteorite ipc stats --socket /tmp/meteorite.sock
+  meteorite ipc inspect --socket /tmp/meteorite.sock]]
 
 return help

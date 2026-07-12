@@ -619,6 +619,7 @@ if command == "init" then init_project(); return end
 if command == "build" then build_project(); return end
 if command == "dev" then dev_project(); return end
 if command == "doctor" then doctor_project(); return end
+if command == "ipc" then require("cli.ipc").run(arg); return end
 if command == "routes" then
   --- Inspect route declarations and pipelines.
   --- Usage: meteorite routes [--graph] [input]

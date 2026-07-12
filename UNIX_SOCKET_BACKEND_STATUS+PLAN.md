@@ -210,13 +210,15 @@ Annotation: IPC performance claims are only valid if the counters expose queuein
 
 ## Phase U10 — IPC CLI Tooling
 
-- [ ] Add `meteorite ipc send --socket <path> --message users.get`.
-- [ ] Add compatibility send mode: `meteorite ipc send --socket <path> --route users/get` normalized to `users.get`.
-- [ ] Add HTTP-compat send mode: `meteorite ipc send --socket <path> --method GET --path /users/123` only for graph routes with compatibility metadata.
-- [ ] Add `--content-type`, `--body`, `--metadata key=value`, and `--json` output support.
-- [ ] Add `meteorite ipc stats --socket <path>`.
-- [ ] Add `meteorite ipc inspect --socket <path>` for backend/protocol/capability metadata.
-- [ ] Ensure CLI diagnostics distinguish unknown message, malformed response, protocol mismatch, and socket connection failure.
+- [x] Add `meteorite ipc send --socket <path> --message users.get`.
+- [x] Add compatibility send mode: `meteorite ipc send --socket <path> --route users/get` normalized to `users.get`.
+- [x] Add HTTP-compat send mode: `meteorite ipc send --socket <path> --method GET --path /users/123` only for graph routes with compatibility metadata.
+- [x] Add `--content-type`, `--body`, `--metadata key=value`, and `--json` output support.
+- [x] Add `meteorite ipc stats --socket <path>`.
+- [x] Add `meteorite ipc inspect --socket <path>` for backend/protocol/capability metadata.
+- [x] Ensure CLI diagnostics distinguish unknown message, malformed response, protocol mismatch, and socket connection failure.
+
+Annotation: `meteorite ipc` now provides a Python-backed local Unix socket client from the Lua CLI. It supports exact native messages, slash-to-dot local route normalization, explicit method/path compatibility targets, metadata/body/content-type flags, JSON output, and bench stats/meta control messages. The IPC fixture exercises send, route normalization, JSON body send, stats, and inspect against a live `ipc_unixsocket` server.
 
 Annotation: the CLI is the developer bridge for IPC. Users should not need custom scripts to test a native-message route.
 
