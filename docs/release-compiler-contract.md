@@ -108,17 +108,17 @@ Still pending:
 Meteorite should be organized by compiler/runtime responsibility, not by historical growth. Large mixed-purpose files should be split until each module owns one clear concern.
 
 - [x] Unroll Lua source into `src/{core,codegen,ballad,cli,utils}` with public Meteorite facades.
-- [ ] Finish splitting `src/codegen/emitter.lua` into focused compiler modules:
+- [x] Finish splitting `src/codegen/emitter.lua` into focused compiler modules:
   - [x] static asset compiler/scanner/manifest builder;
-  - [ ] Zig graph type/table emitter;
-  - [ ] handler binding/stub sync;
+  - [x] Zig graph type/table emitter;
+  - [x] handler binding/stub sync;
   - [x] partition hash/diff reporting;
-  - [ ] build report/LSP aid generation.
-- [ ] Finish splitting `src/meteorite.lua` into:
-  - [ ] public DSL/app construction;
+  - [x] build report/LSP aid generation.
+- [x] Finish splitting `src/meteorite.lua` into:
+  - [x] public DSL/app construction;
   - [x] route macros such as `m.site`;
   - [x] handler factories such as `m.file` and `m.dir`;
-  - [ ] schema/validator exports.
+  - [x] schema/validator exports.
 - [x] Split `src/ballad/` into:
   - [x] release contract validation;
   - [x] release manifest generation;
@@ -134,19 +134,22 @@ Meteorite should be organized by compiler/runtime responsibility, not by histori
 - [x] Add CLI discovery/readiness commands:
   - [x] `meteorite help` / `--help` and command-specific help;
   - [x] `meteorite doctor` readiness checks.
-- [ ] Split `zig/bridge.zig` into Lua runtime responsibilities:
-  - [ ] Lua state lifecycle;
-  - [ ] cached inline handler refs and live reload epochs;
-  - [ ] Lua context API bindings;
-  - [ ] capability bridge calls;
-  - [ ] debug/dev-only state.
-- [ ] Split `zig/meteorite.zig` into server responsibilities:
-  - [ ] request dispatch/router integration;
-  - [ ] static file serving;
-  - [ ] request validation/limits;
-  - [ ] diagnostics/meta endpoints.
-- [ ] Replace shell-based static scanning with a portable Lua/Zig filesystem walker.
-- [ ] Replace manually concatenated JSON release manifests with the local JSON encoder.
+- [x] Split `zig/bridge.zig` into Lua runtime responsibilities:
+  - [x] Lua state lifecycle;
+  - [x] cached inline handler refs and live reload epochs;
+  - [x] Lua context API bindings;
+  - [x] Lua context table and handler argument construction;
+  - [x] embedded Lua context helper source strings;
+  - [x] Lua return-value response handling;
+  - [x] capability bridge calls;
+  - [x] debug/dev-only state.
+- [x] Split `zig/meteorite.zig` into server responsibilities:
+  - [x] request dispatch/router integration;
+  - [x] static file serving;
+  - [x] request validation/limits;
+  - [x] diagnostics/meta endpoints.
+- [x] Replace shell-based static scanning with a portable Lua/Zig filesystem walker.
+- [x] Replace manually concatenated JSON release manifests with the local JSON encoder.
 - [ ] Add scenario tests for:
   - [x] `meteorite init` minimal/static/hybrid local developer flow;
   - [x] `meteorite help` and `meteorite doctor` smoke coverage;
@@ -156,10 +159,10 @@ Meteorite should be organized by compiler/runtime responsibility, not by histori
   - [x] native hybrid release packaging Lua C modules;
   - [x] cross-target hybrid release with target Lua source provenance (`fixtures/tests/cross-target.sh`);
   - [ ] cross-target hybrid release with rebuilt Lua C modules;
-  - [ ] no host absolute paths or `.moonstone/env` leaks in static release text metadata.
+- [ ] no host absolute paths or `.moonstone/env` leaks in static release text metadata.
 - [x] Ensure Moonstone Lua runtime packages expose upstream source provenance, not prebuilt runtime blobs, so Meteorite can cross-build transportable hybrid releases such as `aarch64-linux-musl`.
 - [x] Document the dev workflow and release ownership boundary (`meteorite dev`, Ballad-owned release via `meteorite.ballad`).
-- [ ] Document the stable v0.1 deploy layout contract as a concise contract section.
+- [x] Document the stable v0.1 deploy layout contract as a concise contract section.
 
 ## Fixture Publication Checklist
 
@@ -187,6 +190,54 @@ Fixtures should be shaped like small public examples, not incidental local scrat
    - pure Lua package modules;
    - target-built Lua C modules.
 7. Meteorite emits artifact-local runtime metadata and uses it at startup for `LUA_PATH`/`LUA_CPATH`.
+
+## Stable v0.1 Deploy Layout Contract
+
+A release export is a self-contained directory tree. It must be movable to another path on the same target platform without depending on the source checkout, `.meteorite/graph/`, `.moonstone/env/`, `.zig-cache/`, or `dist/server` from the developer machine.
+
+Required root files and directories:
+
+```text
+dist/release/
+├── bin/
+│   └── server
+├── meteorite-release.json
+├── static/              # only when static assets are retained
+├── lua/                 # hybrid only: pure Lua modules and lifted chunks
+├── lib/                 # hybrid only: Lua C modules and runtime libs when needed
+└── runtime/source/      # cross-target hybrid only: source provenance artifacts
+```
+
+The release manifest is the source of truth for the layout. It records:
+
+- `format = "meteorite.release.v0"`;
+- release `mode`, target ABI, backend transport/protocol, and graph hash;
+- retained Lua runtime node count and details;
+- static asset entries with request path, artifact path, content type, length, ETag, cache policy, and compressed variants;
+- target Lua runtime status, source kind, and packaged source artifact path when applicable;
+- backend socket configuration for Unix-socket transports.
+
+Static release guarantees:
+
+- no retained Lua runtime execution nodes;
+- no required Lua runtime tree;
+- no source-checkout dependency after copying the release directory;
+- static assets are copied into the release artifact rather than served from source paths.
+
+Hybrid release guarantees:
+
+- lifted inline Lua chunks and Lua handler/module sources needed at request time are copied into the release artifact;
+- same-host releases may package the host Moonstone runtime/module trees as artifact-local `lua/` and `lib/` trees;
+- cross-target releases must use target-compatible Lua runtime/module artifacts or fail before producing a misleading deployable release;
+- runtime lookup must be artifact-local through manifest/runtime metadata, not host `.moonstone/env` paths.
+
+Non-goals for v0.1:
+
+- serverless or edge packaging;
+- built-in process supervision;
+- TLS termination;
+- container image generation;
+- automatic schema/client SDK publication.
 
 ## Missing Runtime Source Diagnostic
 
