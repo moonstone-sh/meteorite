@@ -47,8 +47,8 @@ cat .meteorite/graph/current/openapi.json | python3 -m json.tool
 # Generate a transport-agnostic Lua client from the same route graph
 meteorite client lua src/main.lua .meteorite/client.lua
 
-# Serve it with Swagger UI (optional)
-# Copy openapi.json to a static directory and point Swagger UI at it
+# Generate an optional Swagger UI static HTML asset
+meteorite openapi swagger-ui site/dist/docs.html ./openapi.json
 ```
 
 ## OpenAPI 3.1 Mapping
@@ -233,7 +233,7 @@ Meteorite-specific metadata (route IDs, canonical IDs, message projections). The
 - [x] Generated Lua client for service-to-service calls (`meteorite client lua`)
 - [x] Compatibility tests for generated Lua client request construction
 - [x] Promote undocumented-route diagnostics from warning to fail-by-mode with `strict_docs` / `METEORITE_STRICT_DOCS=1`
-- [ ] Swagger UI static template as optional release asset
+- [x] Swagger UI static template as optional release asset (`meteorite openapi swagger-ui`)
 
 ## Client Generation Strategy
 

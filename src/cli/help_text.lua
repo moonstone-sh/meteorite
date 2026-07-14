@@ -16,6 +16,7 @@ Commands:
   doctor    Check local project/tool readiness
   invoke    Invoke a route in-process for diagnostics
   client    Generate client code from the route graph
+  openapi   Generate OpenAPI-adjacent static assets
   ipc       Send native IPC messages over UNIX sockets
 
 Examples:
@@ -27,6 +28,7 @@ Examples:
   meteorite build --mode release-static
   meteorite doctor
   meteorite client lua src/main.lua .meteorite/client.lua
+  meteorite openapi swagger-ui public/docs.html ./openapi.json
   meteorite ipc send --socket /tmp/meteorite.sock --message health.get
 
 Run `meteorite help <command>` for command-specific help.]]
@@ -149,6 +151,17 @@ Targets:
 
 Examples:
   meteorite client lua src/main.lua .meteorite/client.lua]]
+
+help.openapi = [[Meteorite OpenAPI
+
+Usage:
+  meteorite openapi swagger-ui [output] [spec-url]
+
+Commands:
+  swagger-ui  Write a static Swagger UI HTML asset that loads openapi.json
+
+Examples:
+  meteorite openapi swagger-ui public/docs.html ./openapi.json]]
 
 help.ipc = [[Meteorite IPC
 
