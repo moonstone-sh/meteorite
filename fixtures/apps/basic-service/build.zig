@@ -94,6 +94,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const cached_time_module = b.createModule(.{
+        .root_source_file = b.path("../../../zig/server/cached_time.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
     const bridge_bench_stats_module = b.createModule(.{
         .root_source_file = b.path("../../../zig/bridge/lua_bench_stats.zig"),
         .target = target,
@@ -137,6 +142,7 @@ pub fn build(b: *std.Build) void {
     });
     meteorite_module.addImport("build_options", build_info_module);
     meteorite_module.addImport("meteorite_protocol", protocol_module);
+    meteorite_module.addImport("server/cached_time.zig", cached_time_module);
     meteorite_module.addImport("server/signals", signals_module);
     meteorite_module.addImport("server/http_date", http_date_module);
     meteorite_module.addImport("bridge/lua_bench_stats", bridge_bench_stats_module);

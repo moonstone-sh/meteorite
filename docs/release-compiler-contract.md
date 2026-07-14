@@ -147,6 +147,7 @@ Meteorite should be organized by compiler/runtime responsibility, not by histori
   - [x] request dispatch/router integration;
   - [x] static file serving;
   - [x] request validation/limits;
+  - [x] cached Date header clock;
   - [x] diagnostics/meta endpoints.
 - [x] Replace shell-based static scanning with a portable Lua/Zig filesystem walker.
 - [x] Replace manually concatenated JSON release manifests with the local JSON encoder.

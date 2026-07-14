@@ -29,6 +29,7 @@ pub fn compile(comptime spec: anytype) type {
         const graph = spec.graph;
         const backend = spec.backend;
         const build_info = @import("build_options");
+        const cached_time = @import("server/cached_time.zig");
         const signals = @import("server/signals.zig");
         const http_date = @import("server/http_date.zig");
         const server_static = @import("server/static_files.zig");
@@ -49,24 +50,10 @@ pub fn compile(comptime spec: anytype) type {
             try serve(io, .{});
         }
 
-        var global_cached_time_started = std.atomic.Value(bool).init(false);
-        var global_cached_time = std.atomic.Value(i64).init(0);
-
-        fn timerWorker(io: Io) void {
-            while (true) {
-                global_cached_time.store(Io.Timestamp.now(io, .real).toSeconds(), .release);
-                io.sleep(.{ .nanoseconds = std.time.ns_per_s }, .real) catch {};
-            }
-        }
-
         pub fn serve(io: Io, config: ListenConfig) !void {
             if (build_info.require_peer_credentials and !build_info.capability_peer_credentials) return error.PeerCredentialsUnsupported;
 
-            if (!global_cached_time_started.swap(true, .acquire)) {
-                global_cached_time.store(Io.Timestamp.now(io, .real).toSeconds(), .release);
-                const thread = std.Thread.spawn(.{}, timerWorker, .{io}) catch unreachable;
-                thread.detach();
-            }
+            cached_time.start(io);
 
             var server = if (@hasField(backend.ListenConfig, "path"))
                 try backend.listen(.{ .path = build_info.unix_socket_path, .mode = build_info.unix_socket_mode, .unlink_stale = build_info.unix_socket_unlink_stale, .io = io })
@@ -240,7 +227,7 @@ pub fn compile(comptime spec: anytype) type {
                 request.close_after_response = !@hasField(@TypeOf(request.*), "frame_buffer");
                 // Cache current time for Date header in responses
                 if (@hasField(@TypeOf(request.*), "date_seconds")) {
-                    request.date_seconds = global_cached_time.load(.acquire);
+                    request.date_seconds = cached_time.seconds();
                 }
                 backend.requestStarted();
                 serveRequest(arena, io, request) catch |err| {
