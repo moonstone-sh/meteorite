@@ -948,6 +948,21 @@ expect_invalid_response_header /headers/invalid/zig-name-crlf
 expect_invalid_response_header /headers/invalid/zig-value-crlf
 expect_invalid_response_header /headers/invalid/zig-reserved
 expect_invalid_response_header /headers/invalid/post-hook-value-crlf
+for needle in \
+  'pipeline stage error' \
+  'route=/headers/invalid/post-hook-value-crlf' \
+  'stage_id=post_header_injection_hook' \
+  'kind=hook' \
+  'strat=zig' \
+  'phase=post_handler' \
+  'symbol=response_post_header_injection_hook' \
+  'error=InvalidResponseHeader'; do
+  if ! grep -q "$needle" "$LOG"; then
+    echo "expected pipeline stage diagnostic to include $needle" >&2
+    cat "$LOG" >&2
+    exit 1
+  fi
+done
 
 expect_body cors:simple /cors/simple
 expect_header /cors/simple Access-Control-Allow-Origin '*'

@@ -291,7 +291,7 @@ graph-readable contract. See `src/core/contract.lua` for the implementation.
 - [x] Native stage compilation contract for Zig stages (stage paths captured in graph, Zig stages call graph bindings)
 - [x] Dev endpoint `/__meteorite/graph` for runtime graph inspection
 - [x] Graph JSON snapshot tests (`tests/routes_graph.lua`)
-- [ ] Diagnostics: pipeline failure with route id, stage id, kind, strat, path, owner
+- [x] Diagnostics: pipeline failure with route id, stage id, kind, strat, path, owner
 - [x] Dev endpoint `/__meteorite/graph` for runtime graph inspection
 - [ ] Runtime transform execution (v0.1 stubs transforms, need request-time execution)
 - [ ] Runtime hook execution (v0.1 stubs hooks, need phase-bound execution)

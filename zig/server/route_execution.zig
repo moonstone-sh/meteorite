@@ -63,6 +63,25 @@ pub fn Execution(comptime graph: anytype, comptime lua_runtime: anytype, comptim
             return true;
         }
 
+        pub fn respondRouteStageError(comptime stage: graph.PipelineStage, ctx: anytype, err: anyerror) !bool {
+            std.debug.print(
+                "pipeline stage error route_id={s} route={s} stage_id={s} kind={s} strat={s} phase={s} path={s} symbol={s} owner={s} error={s}\n",
+                .{
+                    ctx.route.id,
+                    ctx.route.raw_path,
+                    stage.id,
+                    @tagName(stage.kind),
+                    @tagName(stage.strat),
+                    @tagName(stage.phase),
+                    stage.path,
+                    stage.symbol,
+                    stage.owner,
+                    @errorName(err),
+                },
+            );
+            return respondRouteError(ctx, err);
+        }
+
         pub fn executeRouteBody(comptime route: graph.Route, ctx: anytype, allocator: std.mem.Allocator, io: anytype, request: anytype, captures: anytype) !bool {
             if (route.pipeline.len > 0) {
                 inline for (route.pipeline) |stage| {
@@ -70,8 +89,8 @@ pub fn Execution(comptime graph: anytype, comptime lua_runtime: anytype, comptim
                         .inline_lua => {
                             if (stage.kind == .handle) {
                                 switch (route.handler) {
-                                    .inline_lua => |handler| callLuaHandler(route, handler, ctx) catch |err| return respondRouteError(ctx, err),
-                                    .lua_file => |handler| callLuaHandler(route, handler, ctx) catch |err| return respondRouteError(ctx, err),
+                                    .inline_lua => |handler| callLuaHandler(route, handler, ctx) catch |err| return respondRouteStageError(stage, ctx, err),
+                                    .lua_file => |handler| callLuaHandler(route, handler, ctx) catch |err| return respondRouteStageError(stage, ctx, err),
                                     else => {},
                                 }
                             }
@@ -79,18 +98,18 @@ pub fn Execution(comptime graph: anytype, comptime lua_runtime: anytype, comptim
                         .lua => {
                             if (stage.kind == .handle) {
                                 switch (route.handler) {
-                                    .inline_lua => |handler| callLuaHandler(route, handler, ctx) catch |err| return respondRouteError(ctx, err),
-                                    .lua_file => |handler| callLuaHandler(route, handler, ctx) catch |err| return respondRouteError(ctx, err),
+                                    .inline_lua => |handler| callLuaHandler(route, handler, ctx) catch |err| return respondRouteStageError(stage, ctx, err),
+                                    .lua_file => |handler| callLuaHandler(route, handler, ctx) catch |err| return respondRouteStageError(stage, ctx, err),
                                     else => {},
                                 }
                             }
                         },
                         .zig => {
                             if (stage.kind == .handle) {
-                                graph.bindings.callRoute(route.id, ctx) catch |err| return respondRouteError(ctx, err);
+                                graph.bindings.callRoute(route.id, ctx) catch |err| return respondRouteStageError(stage, ctx, err);
                             }
                             if (stage.kind == .hook and stage.phase == .post_handler) {
-                                graph.bindings.callHandlerBySymbol(stage.symbol, ctx) catch |err| return respondRouteError(ctx, err);
+                                graph.bindings.callHandlerBySymbol(stage.symbol, ctx) catch |err| return respondRouteStageError(stage, ctx, err);
                             }
                         },
                         .rust => {},
