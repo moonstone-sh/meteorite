@@ -159,7 +159,7 @@ Meteorite should be organized by compiler/runtime responsibility, not by histori
   - [x] native hybrid release packaging Lua C modules;
   - [x] cross-target hybrid release with target Lua source provenance (`fixtures/tests/cross-target.sh`);
   - [ ] cross-target hybrid release with rebuilt Lua C modules;
-- [ ] no host absolute paths or `.moonstone/env` leaks in static release text metadata.
+- [x] no host absolute paths or `.moonstone/env` leaks in static release text metadata.
 - [x] Ensure Moonstone Lua runtime packages expose upstream source provenance, not prebuilt runtime blobs, so Meteorite can cross-build transportable hybrid releases such as `aarch64-linux-musl`.
 - [x] Document the dev workflow and release ownership boundary (`meteorite dev`, Ballad-owned release via `meteorite.ballad`).
 - [x] Document the stable v0.1 deploy layout contract as a concise contract section.

@@ -32,6 +32,40 @@ grep -q '__meteorite/info' deploy/README.md
 test ! -e fixtures/apps/static-site/dist/server
 ! find fixtures/apps/static-site/dist/release -path '*/.moonstone/env*' -print -quit | grep -q .
 ! grep -R "${ROOT}/fixtures/apps/static-site/site/dist" fixtures/apps/static-site/dist/release >/tmp/meteorite-release-smoke-source-grep.log 2>&1
+python3 - fixtures/apps/static-site/dist/release "$ROOT" <<'PY'
+import json
+import os
+import pathlib
+import sys
+
+release_root = pathlib.Path(sys.argv[1])
+source_root = sys.argv[2]
+forbidden = [
+    source_root,
+    "/Users/",
+    ".moonstone/env",
+    "fixtures/apps/static-site/site/dist",
+    "fixtures/apps/static-site/src",
+]
+text_suffixes = {".json", ".zon", ".txt", ".lua", ".zig", ".toml", ".md"}
+
+for path in release_root.rglob("*"):
+    if not path.is_file():
+        continue
+    rel = path.relative_to(release_root).as_posix()
+    if path.suffix not in text_suffixes and rel != "meteorite-release.json":
+        continue
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    for needle in forbidden:
+        assert needle not in text, f"host/source path leak in {rel}: {needle}"
+
+manifest = json.loads((release_root / "meteorite-release.json").read_text(encoding="utf-8"))
+assert manifest["runtime_source"]["status"] == "not_required", manifest["runtime_source"]
+assert manifest["target_lua"]["status"] == "not_required", manifest["target_lua"]
+for asset in manifest["static"]["assets"]:
+    assert not os.path.isabs(asset["artifact_path"]), asset
+    assert asset["artifact_path"].startswith("static/"), asset
+PY
 python3 - fixtures/apps/static-site/dist/release/meteorite-release.json <<'PY'
 import json
 import sys

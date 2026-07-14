@@ -53,7 +53,7 @@ pub fn Matcher(comptime graph: anytype, comptime backend: anytype, comptime prot
             inline for (route.path) |segment| {
                 switch (segment) {
                     .literal => {},
-                    .param, .catch_all_param => return false,
+                    .param, .catch_all_param, .wildcard => return false,
                 }
             }
             return true;
