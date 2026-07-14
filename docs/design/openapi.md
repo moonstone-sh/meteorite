@@ -44,7 +44,7 @@ meteorite graph src/main.lua .meteorite/graph/current hybrid
 # View the spec
 cat .meteorite/graph/current/openapi.json | python3 -m json.tool
 
-# Generate a transport-agnostic Lua client from the same route graph
+# Generate a transport-agnostic Lua client from routes and native messages
 meteorite client lua src/main.lua .meteorite/client.lua
 
 # Generate an optional Swagger UI static HTML asset
@@ -230,7 +230,7 @@ Meteorite-specific metadata (route IDs, canonical IDs, message projections). The
 - [x] Route-description DSL (`summary`, `description`, `tags`, `operationId`, `responses`)
 - [x] TypeScript client generation path via standard OpenAPI tools
 - [x] Detect undocumented routes and warn in release modes
-- [x] Generated Lua client for service-to-service calls (`meteorite client lua`)
+- [x] Generated Lua client for HTTP routes and native IPC messages (`meteorite client lua`)
 - [x] Compatibility tests for generated Lua client request construction
 - [x] Promote undocumented-route diagnostics from warning to fail-by-mode with `strict_docs` / `METEORITE_STRICT_DOCS=1`
 - [x] Swagger UI static template as optional release asset (`meteorite openapi swagger-ui`)
@@ -249,10 +249,10 @@ This is the primary client-generation artifact. The strategy is:
    like `openapi-generator` or `hey-api/openapi-ts`. No custom Meteorite tooling
    needed; the spec is standards-compliant.
 
-3. **Lua client** — for Moonstone/Meteorite service-to-service calls. Can be
-   generated from `openapi.json` or directly from the route graph metadata
-   (`routes.zon`, `schemas.zon`) for tighter integration with Meteorite's
-   typed param/query validators.
+3. **Lua client** — for Moonstone/Meteorite service-to-service calls. Generated
+   directly from route graph metadata so it can emit both HTTP route calls
+   (`method`, `path`, `headers`, `body`) and native IPC message calls
+   (`message`, `metadata`, `content_type`, `body`).
 
 4. **No runtime inference** — unlike Hono RPC which relies on TypeScript
    type-level inference at build time, Meteorite's spec is a serialized artifact

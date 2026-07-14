@@ -13,6 +13,19 @@ local function sorted_routes(graph)
   return routes
 end
 
+local function sorted_messages(graph)
+  local messages = {}
+  for _, route in ipairs((graph and graph.messages) or {}) do
+    messages[#messages + 1] = route
+  end
+  table.sort(messages, function(a, b)
+    local left = tostring((a.message and a.message.name) or "") .. " " .. tostring(a.id or "")
+    local right = tostring((b.message and b.message.name) or "") .. " " .. tostring(b.id or "")
+    return left < right
+  end)
+  return messages
+end
+
 local function identifier(value)
   value = tostring(value or "")
   value = value:gsub("[^%w_]+", "_"):gsub("_+", "_"):gsub("^_+", ""):gsub("_+$", "")
@@ -26,6 +39,21 @@ local function route_name(route, seen)
   local candidate = route.operation_id or route.operationId or meta.operationId
   if not candidate and route.message and route.message.name then candidate = route.message.name end
   if not candidate then candidate = tostring(route.method or "GET"):lower() .. "_" .. tostring(route.raw_path or route.path or "/") end
+  local name = identifier(candidate)
+  local base = name
+  local suffix = 2
+  while seen[name] do
+    name = base .. "_" .. tostring(suffix)
+    suffix = suffix + 1
+  end
+  seen[name] = true
+  return name
+end
+
+local function message_name(route, seen)
+  local candidate = route.operation_id or route.operationId
+  if not candidate and route.message and route.message.name then candidate = route.message.name end
+  if not candidate then candidate = route.id or route.canonical_id or "message" end
   local name = identifier(candidate)
   local base = name
   local suffix = 2
@@ -105,12 +133,31 @@ function lua_client.emit(graph, opts)
   lines[#lines + 1] = "}"
   lines[#lines + 1] = ""
 
+  local message_entries = {}
+  lines[#lines + 1] = identifier(module_name) .. ".messages = {"
+  for _, route in ipairs(sorted_messages(graph)) do
+    local name = message_name(route, seen)
+    local message = route.message and route.message.name or route.id or route.canonical_id
+    message_entries[#message_entries + 1] = { name = name, route = route, message = message }
+    lines[#lines + 1] = string.format("  %s = { message = %s },", name, quote(message))
+  end
+  lines[#lines + 1] = "}"
+  lines[#lines + 1] = ""
+
   for _, entry in ipairs(route_entries) do
     local route = entry.route
     lines[#lines + 1] = "function " .. identifier(module_name) .. ":" .. entry.name .. "(args)"
     lines[#lines + 1] = "  args = args or {}"
     lines[#lines + 1] = "  local path = append_query(apply_path(" .. quote(route.raw_path or route.path) .. ", args.params), args.query)"
     lines[#lines + 1] = "  return self._request({ method = " .. quote(route.method) .. ", path = path, headers = args.headers, body = args.body })"
+    lines[#lines + 1] = "end"
+    lines[#lines + 1] = ""
+  end
+
+  for _, entry in ipairs(message_entries) do
+    lines[#lines + 1] = "function " .. identifier(module_name) .. ":" .. entry.name .. "(args)"
+    lines[#lines + 1] = "  args = args or {}"
+    lines[#lines + 1] = "  return self._request({ message = " .. quote(entry.message) .. ", metadata = args.metadata, body = args.body, content_type = args.content_type })"
     lines[#lines + 1] = "end"
     lines[#lines + 1] = ""
   end
@@ -125,6 +172,9 @@ function lua_client.route_names(graph)
   local names = {}
   for _, route in ipairs(sorted_routes(graph)) do
     names[#names + 1] = route_name(route, seen)
+  end
+  for _, route in ipairs(sorted_messages(graph)) do
+    names[#names + 1] = message_name(route, seen)
   end
   return names
 end
