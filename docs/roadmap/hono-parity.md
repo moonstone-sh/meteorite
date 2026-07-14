@@ -205,7 +205,7 @@ Hono wins mindshare partly by running across many JS runtimes. Meteorite’s equ
 - [x] Cross-target release diagnostics are friendly and early.
 - [x] Container deployment template exists.
 - [x] Systemd/launchd/supervisor examples exist.
-- [x] Serverless/edge story is explicitly out of scope or planned as adapter work.
+- [x] Serverless/edge story is explicitly out of scope for P0 and rejected by release adapter validation; future support would be adapter work.
 - [x] Graceful shutdown and health/readiness endpoints are documented.
 
 ## Phase H10 — Serious Release Must-Haves

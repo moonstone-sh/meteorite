@@ -268,6 +268,6 @@ Annotation: IPC JSON validation accepts `content_type=application/json` metadata
 - [x] Missing/invalid metadata returns `validation_error` with IPC diagnostic metadata.
 - [x] JSON body validation returns `validation_error` with `json_body` diagnostic metadata.
 - [x] Native control messages expose stats/meta/reset over IPC.
-- [x] `ipc_unixsocket_http` fixture remains graph-valid and compile-gated until implementation lands.
+- [x] `ipc_unixsocket_http` fixture builds and serves HTTP/1.1 routes over a Unix domain socket.
 
-Annotation: `fixtures/tests/ipc-backends.sh` now builds and runs `fixtures/apps/ipc-native-service`, sends real `meteorite.ipc.v0` frames over a Unix socket, verifies message dispatch/validation/control-message behavior, and verifies the planned `ipc_unixsocket_http` fixture still reaches the intentional compile gate.
+Annotation: `fixtures/tests/ipc-backends.sh` now builds and runs `fixtures/apps/ipc-native-service`, sends real `meteorite.ipc.v0` frames over a Unix socket, verifies message dispatch/validation/control-message behavior, and verifies the `ipc_unixsocket_http` fixture serves normal HTTP routes through `curl --unix-socket`.

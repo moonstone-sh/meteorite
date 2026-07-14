@@ -27,4 +27,4 @@ Examples:
 - `middleware`: scoped plugins, metadata auth, request state, and body reads.
 - `worker-rpc`: RPC-style message names and request logging.
 
-Peer credential authorization is intentionally not represented here yet; it belongs to the planned peer-auth phase.
+Peer credential authorization is exercised by `fixtures/apps/ipc-native-service` via `peer.whoami`; these examples stay focused on message authoring patterns.

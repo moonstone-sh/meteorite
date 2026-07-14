@@ -2,7 +2,7 @@
 
 Purpose: exercises the `ipc_unixsocket_http` compatibility backend shape.
 
-This fixture intentionally uses normal HTTP route authoring (`app:get`, `app:post`, params, query, headers, JSON body validation). It should eventually run unchanged over HTTP semantics transported by a Unix socket.
+This fixture intentionally uses normal HTTP route authoring (`app:get`, `app:post`, params, query, headers, JSON body validation). It runs unchanged over HTTP semantics transported by a Unix socket.
 
 Expected behavior:
 

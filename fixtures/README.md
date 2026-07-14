@@ -23,7 +23,7 @@ Fixtures are small, purpose-built Meteorite apps used for demos, acceptance test
 - `apps/bench-service` contains benchmark-only endpoints consumed by `bench/run.sh` and related benchmark scripts.
 - `apps/web-standards` exercises HTTP standards behavior such as response headers, CORS headers, redirect headers, and Lua response helper parity.
 - `apps/ipc-native-service` exercises native `ipc_unixsocket` message authoring with `app:message`, IPC metadata, JSON body validation, and native context APIs.
-- `apps/ipc-unixsocket-http-service` captures the planned `ipc_unixsocket_http` compatibility fixture using ordinary HTTP route authoring over a future Unix socket HTTP transport.
+- `apps/ipc-unixsocket-http-service` exercises ordinary HTTP route authoring over the implemented `ipc_unixsocket_http` Unix socket HTTP transport.
 - `fixtures/examples/unix-socket` contains runnable native Unix-socket IPC authoring examples; these are demos, while `apps/ipc-native-service` remains the focused test fixture.
 
 ## Publication Rule
