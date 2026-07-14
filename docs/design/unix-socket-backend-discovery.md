@@ -484,7 +484,7 @@ Annotation: `fixtures/tests/ipc-release-smoke.sh` now builds a hybrid native IPC
 - [ ] Fail startup when peer credentials are required but unsupported on the target platform.
 - [ ] Reject unauthorized peers with deterministic `unauthorized_peer` result code.
 - [ ] Count unauthorized peer attempts separately from malformed protocol errors.
-- [ ] Document platform differences for Linux, macOS, and unsupported targets.
+- [x] Document platform differences for Linux, macOS, and unsupported targets.
 
 Annotation: UNIX sockets have local security semantics that HTTP does not. Meteorite should expose them as IPC capabilities, not as fake headers.
 
