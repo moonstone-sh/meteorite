@@ -16,6 +16,44 @@ cleanup_port() {
 
 cleanup_port
 rm -rf fixtures/apps/static-site/dist fixtures/apps/static-site/.meteorite/release fixtures/apps/static-site/.meteorite/graph/static-site-basic-release
+missing_static_root="$(mktemp -d /tmp/meteorite-release-missing-static.XXXXXX)"
+mkdir -p "$missing_static_root/src"
+cat > "$missing_static_root/src/main.lua" <<'LUA'
+local m = require("meteorite")
+local app = m.app({ name = "missing-static-source" })
+app:get("/missing.txt", m.file("site/dist/missing.txt", { content_type = "text/plain" }))
+return app
+LUA
+cat > "$missing_static_root/partiture.lua" <<LUA
+local ballad = require("ballad")
+
+return ballad.partiture(function(p)
+  local meteorite = p:use("meteorite.ballad")
+  local release = meteorite.release({
+    input = "$missing_static_root/src/main.lua",
+    output = "$missing_static_root/.meteorite/release/server",
+    graph_output = "$missing_static_root/.meteorite/graph/release",
+    mode = "static",
+    backend = "std_http",
+  })
+  p.sink.directory(release, { out = "$missing_static_root/dist/release", file_graph = true })
+end)
+LUA
+set +e
+(
+  cd "$ROOT"
+  LUA_PATH="$LUA_PROJECT_PATH" luajit ../ballad/src/main.lua play "$missing_static_root/partiture.lua" \
+    >/tmp/meteorite-release-missing-static.log 2>&1
+)
+missing_static_status=$?
+set -e
+if [ "$missing_static_status" -eq 0 ]; then
+  echo "expected static release export with deleted site/dist source to fail" >&2
+  exit 1
+fi
+grep -q 'static file not found' /tmp/meteorite-release-missing-static.log
+grep -q 'site/dist/missing.txt' /tmp/meteorite-release-missing-static.log
+
 LUA_PATH="$LUA_PROJECT_PATH" luajit ../ballad/src/main.lua play fixtures/apps/static-site/partiture.lua >/tmp/meteorite-release-smoke-ballad.log
 
 test -x fixtures/apps/static-site/dist/release/bin/server
