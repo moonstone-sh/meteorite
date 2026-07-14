@@ -289,13 +289,11 @@ graph-readable contract. See `src/core/contract.lua` for the implementation.
 - [x] First-party plugin: idempotency (`src/core/plugins/idempotency.lua`)
 - [x] Pipeline stage representation in Zig graph types (PipelineStage in graph.zig, pipeline field on Route)
 - [x] Native stage compilation contract for Zig stages (stage paths captured in graph, Zig stages call graph bindings)
-- [ ] Diagnostics: pipeline failure with route id, stage id, kind, strat, path, owner
 - [x] Dev endpoint `/__meteorite/graph` for runtime graph inspection
 - [ ] Graph JSON snapshot tests
 - [ ] Diagnostics: pipeline failure with route id, stage id, kind, strat, path, owner
 - [x] Dev endpoint `/__meteorite/graph` for runtime graph inspection
-- [ ] Graph JSON snapshot tests
 - [ ] Runtime transform execution (v0.1 stubs transforms, need request-time execution)
 - [ ] Runtime hook execution (v0.1 stubs hooks, need phase-bound execution)
 - [x] Plugin wiring into meteorite.lua app:use (graph plugins registered, run_passes in normalize_app)
-- [ ] Documentation: canonical route contract, pipeline declaration, transform notation
+- [x] Documentation: canonical route contract, pipeline declaration, transform notation (`docs/design/route-contract.md`)

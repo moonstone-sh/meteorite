@@ -19,6 +19,7 @@ docs/
 ├── release-compiler-contract.md
 ├── design/
 │   ├── openapi.md
+│   ├── route-contract.md
 │   └── unix-socket-backend-discovery.md
 ├── roadmap/
 │   ├── hono-parity.md
