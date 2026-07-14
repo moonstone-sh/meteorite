@@ -96,8 +96,7 @@ local function message_record(route)
   }
 end
 
-local function print_json(normalized)
-  local json = require("utils.json")
+function routes.to_graph(normalized)
   local route_records = {}
   for _, route in ipairs(normalized.routes) do
     route_records[#route_records + 1] = route_record(route)
@@ -106,11 +105,16 @@ local function print_json(normalized)
   for _, route in ipairs(normalized.messages or {}) do
     message_records[#message_records + 1] = message_record(route)
   end
-  print(json.encode({
+  return {
     format = "meteorite.routes.v0",
     routes = route_records,
     messages = message_records,
-  }))
+  }
+end
+
+local function print_json(normalized)
+  local json = require("utils.json")
+  print(json.encode(routes.to_graph(normalized)))
 end
 
 local function print_human(normalized)
