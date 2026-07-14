@@ -66,7 +66,7 @@ Backends:
   fast_http            High-performance HTTP backend
   std_http             Zig std HTTP backend
   ipc_unixsocket       Native Meteorite IPC over UNIX sockets
-  ipc_unixsocket_http  HTTP/1.1 over UNIX sockets (planned)
+  ipc_unixsocket_http  HTTP/1.1 over UNIX sockets
 
 Unix socket flags:
   --unix-socket-path <path>
