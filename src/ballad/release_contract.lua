@@ -130,6 +130,28 @@ local function runtime_source_from_opts(opts)
   return os.getenv("METEORITE_LUA_SOURCE"), os.getenv("METEORITE_LUA_SOURCE_KIND")
 end
 
+local function runtime_field(opts, names)
+  local runtime = opts.runtime or {}
+  for _, name in ipairs(names) do
+    if opts[name] then return opts[name] end
+    if runtime[name] then return runtime[name] end
+  end
+  return nil
+end
+
+local function runtime_is_luajit(opts)
+  local values = {
+    runtime_field(opts, { "runtime_kind", "kind", "family", "runtime", "name", "id" }),
+    runtime_field(opts, { "runtime_name", "runtime_id", "interpreter", "implementation" }),
+    runtime_field(opts, { "version", "runtime_version" }),
+  }
+  for _, value in ipairs(values) do
+    local text = tostring(value or ""):lower()
+    if text:find("luajit", 1, true) then return true end
+  end
+  return false
+end
+
 local function runtime_source_is_rebuildable(source, kind)
   if not source or source == "" then return false end
   if not kind or kind == "" then return true end
@@ -155,6 +177,20 @@ function contract_mod.validate_target_lua(ctx, root, contract, opts)
   end
 
   local source, source_kind = runtime_source_from_opts(opts)
+  if contract_mod.is_cross_target(target) and runtime_is_luajit(opts) then
+    ctx.fail(table.concat({
+      "meteorite.release({ mode = 'hybrid', target = '" .. tostring(target) .. "' }) cannot cross-compile LuaJIT yet.",
+      "",
+      "Runtime:",
+      "  " .. tostring(runtime_field(opts, { "runtime_kind", "kind", "family", "runtime", "name", "id" }) or "luajit"),
+      "",
+      "Reason:",
+      "  LuaJIT requires a target matrix plus a host buildvm stage; Meteorite currently only rebuilds PUC Lua from upstream source archives with zig cc.",
+      "",
+      "Remediation:",
+      "  use a PUC Lua runtime for cross-target hybrid releases, build same-host hybrid, or build static after replacing retained Lua runtime handlers/plugins.",
+    }, "\n"))
+  end
   if contract_mod.is_cross_target(target) and (not source or source == "") then
     local lines = {
       "meteorite.release({ mode = 'hybrid', target = '" .. tostring(target) .. "' }) failed the release compiler contract.",
