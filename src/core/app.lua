@@ -160,6 +160,8 @@ end
 ---@field all fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table
 ---@field route fun(self: MeteoriteApp, method: string, path: string, options_or_handler?: MeteoriteRouteOptions|MeteoriteHandler, maybe_handler?: MeteoriteHandler): table
 ---@field message fun(self: MeteoriteApp, name: string, options_or_handler?: MeteoriteRouteOptions|MeteoriteHandler, maybe_handler?: MeteoriteHandler): table
+---@field websocket fun(self: MeteoriteApp, path: string, ...): nil Unsupported in the current release; fails with an explicit diagnostic
+---@field ws fun(self: MeteoriteApp, path: string, ...): nil Unsupported alias for websocket
 ---@field use fun(self: MeteoriteApp, plugin_or_middleware: table|function, options?: table): MeteoriteApp
 ---@field mount fun(self: MeteoriteApp, prefix: string, options_or_fn?: table|function, maybe_fn?: function): MeteoriteApp
 ---@field scope fun(self: MeteoriteApp, prefix: string, options_or_fn?: table|function, maybe_fn?: function): MeteoriteApp
@@ -223,6 +225,26 @@ end
 ---@return table
 function App:route(method, path, options_or_handler, maybe_handler)
   return add_route(self, string.upper(method), path, options_or_handler, maybe_handler)
+end
+
+local function unsupported_websocket(path)
+  error(table.concat({
+    "Meteorite does not support WebSocket routes in the current service-layer release.",
+    "",
+    "Requested path: " .. tostring(path or "<unknown>"),
+    "",
+    "Reason: Meteorite currently compiles request/response HTTP and native IPC graphs; connection-upgrade lifecycle, backpressure, and long-lived stream contracts are not part of the release compiler contract yet.",
+    "",
+    "Use an external WebSocket service/proxy beside the compiled Meteorite server, or expose polling/native IPC messages until WebSocket support is designed.",
+  }, "\n"), 2)
+end
+
+function App:websocket(path, ...)
+  return unsupported_websocket(path)
+end
+
+function App:ws(path, ...)
+  return unsupported_websocket(path)
 end
 
 ---@param name string

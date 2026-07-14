@@ -186,6 +186,7 @@ Hono has a WebSocket helper with `onOpen`, `onMessage`, `onClose`, and `onError`
 - [x] Decide if WebSocket is in scope for the next serious release; if not, mark as explicit P2.
 - [x] If in scope, design upgrade handling in `fast_http` and `std_http` separately.
   - **Decision:** Non-goal for v0.1. WebSocket is P2.
+  - **Implementation:** `app:websocket()` and `app:ws()` fail immediately with an explicit unsupported-feature diagnostic instead of silently compiling an incomplete graph.
 - [x] Define Lua handler lifecycle for WebSocket callbacks and state.
   - **Decision:** Non-goal for v0.1. WebSocket is P2.
 - [x] Define backpressure, message size, close codes, ping/pong, and error behavior.

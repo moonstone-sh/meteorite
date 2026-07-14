@@ -159,16 +159,16 @@ For systemd, launchd, or another supervisor:
 - Do not place sockets inside source/build directories.
 - Treat `ipc_unixsocket_http` as HTTP from an application-security perspective, even though the transport is local.
 
-Peer credential authorization is planned separately. Until that lands, use filesystem permissions, process supervision, and OS user/group ownership as the local access boundary.
+Peer credential authorization is available on supported local Unix-socket platforms, but it complements filesystem permissions, process supervision, and OS user/group ownership rather than replacing them.
 
 ## Peer Credential Portability
 
-Peer credentials are platform-specific and remain a planned IPC capability, not a current authorization boundary:
+Peer credentials are platform-specific IPC facts:
 
 - Linux exposes Unix-socket peer credentials through `SO_PEERCRED` (`pid`, `uid`, `gid`).
 - macOS and BSD-family systems expose similar but not identical local peer facts through platform-specific socket APIs such as `LOCAL_PEERCRED`/`getpeereid`.
 - Unsupported targets must fail startup if peer credentials are required by config, rather than silently allowing all peers.
-- `-Drequire-peer-credentials=true` is already fail-closed: because peer credential reading is not implemented yet, startup returns `PeerCredentialsUnsupported` instead of serving unauthenticated peers.
+- `-Drequire-peer-credentials=true` is fail-closed: unsupported targets return `PeerCredentialsUnsupported` at startup instead of serving unauthenticated peers.
 - Release manifests record peer policy fields (`require_peer_credentials`, `peer_allow_uid`, `peer_allow_gid`) under backend socket metadata for auditability.
 - When peer credentials are required, supported targets read local peer identity and expose safe facts through `ctx:peer()` as `{ uid, gid, pid? }`.
 - Unauthorized peers are rejected with the deterministic IPC `unauthorized_peer` result code and counted separately as `unauthorized_peers`.

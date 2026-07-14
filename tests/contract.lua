@@ -384,4 +384,18 @@ test "ipc backend accepts IPC resource annotations" (function()
   test.assert_eq(#graph.messages, 1, "message graph builds")
 end)
 
+test "websocket routes fail with explicit unsupported diagnostic" (function()
+  local app = m.app({ name = "websocket-fail" })
+  test.assert_error(function()
+    app:websocket("/ws", function() end)
+  end, "does not support WebSocket routes", "websocket diagnostic")
+end)
+
+test "ws alias fails with same unsupported diagnostic" (function()
+  local app = m.app({ name = "websocket-alias-fail" })
+  test.assert_error(function()
+    app:ws("/ws", function() end)
+  end, "connection-upgrade lifecycle", "ws alias diagnostic")
+end)
+
 test.run()
