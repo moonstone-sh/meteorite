@@ -96,12 +96,12 @@ Cross-target PUC Lua compilation is now verified:
 - The full chain works: Moonstone store source provenance (`source_kind = "puc_lua_source"`, `source_payload_path`) → Ballad `hydrate_runtime()` → Meteorite `release_contract.validate_target_lua()` → `build-target-lua.sh` → `zig build -Dlua-root=...`.
 - Fixed `build-target-lua.sh` find depth: `-maxdepth 2` → `-maxdepth 3` so `lua-<ver>/src/lua.c` is discovered in standard upstream source archives.
 
-Still pending:
+Known limitations:
 
 - LuaJIT support needs a separate target matrix and host `buildvm` stage.
 - Lua C-module rebuilds currently rely on package rockspecs and a local `luarocks` executable; packages without source/rockspec payloads fail with package-specific diagnostics.
 - Moonstone runtime/package descriptors should consistently publish source payloads for all production-supported hybrid targets.
-- `build.zig` `join()` does not handle absolute `-Dlua-root` paths; the Ballad release flow always uses relative paths so this is not a blocker for production releases.
+- `build.zig` preserves absolute `-Dgraph-input`, `-Dgraph-output`, and `-Dlua-root` paths when joining project-local build options.
 
 ## Responsibility-Structure Cleanup Checklist
 
@@ -277,9 +277,9 @@ graph-readable contract. See `src/core/contract.lua` for the implementation.
 - [x] Add migration hints for legacy route signatures
 - [x] Tests: contract parser (23 tests, 73 assertions)
 
-### Still pending
+### Implemented
 
-- [x] Transformer semantics: runtime execution model (pipeline executor in meteorite.zig, transform stages stubbed for v0.1)
+- [x] Transformer semantics: Zig transform stages run in pipeline order through generated stage bindings
 - [x] Handler semantics: pipeline with no explicit handler (transform-only flagged in contract.build)
 - [x] Hook phase enforcement: phase permissions at graph validation ()
 - [x] Plugin model: `PluginContract`, graph mutation API ()

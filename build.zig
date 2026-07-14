@@ -4,6 +4,11 @@ fn join(b: *std.Build, parts: []const []const u8) []const u8 {
     return std.fs.path.join(b.allocator, parts) catch @panic("OOM");
 }
 
+fn projectPath(b: *std.Build, project_root: []const u8, value: []const u8) []const u8 {
+    if (std.fs.path.isAbsolute(value)) return value;
+    return join(b, &.{ project_root, value });
+}
+
 fn cwdPath(path: []const u8) std.Build.LazyPath {
     return .{ .cwd_relative = path };
 }
@@ -89,9 +94,9 @@ pub fn build(b: *std.Build) void {
     const is_native_ipc = std.mem.eql(u8, backend, "ipc_unixsocket");
     const is_unix_transport = is_native_ipc or std.mem.eql(u8, backend, "ipc_unixsocket_http");
 
-    const project_graph_input = join(b, &.{ project_root, graph_input });
-    const project_graph_output = join(b, &.{ project_root, graph_output });
-    const project_lua_root = join(b, &.{ project_root, lua_root });
+    const project_graph_input = projectPath(b, project_root, graph_input);
+    const project_graph_output = projectPath(b, project_root, graph_output);
+    const project_lua_root = projectPath(b, project_root, lua_root);
     const graph_step = b.addSystemCommand(&.{ join(b, &.{ project_root, ".moonstone/env/bin/lua" }), meteorite_cli, "graph", project_graph_input, project_graph_output, mode, backend });
 
     // Generated build metadata so the server can report exactly what was compiled.
