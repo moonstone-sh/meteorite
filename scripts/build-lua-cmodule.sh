@@ -15,6 +15,16 @@ pkg=${6:-package}
 [ -n "$src" ] && [ -n "$rockspec" ] && [ -n "$lua_root" ] && [ -n "$out" ] && [ -n "$target" ] || usage
 [ -f "$src" ] || { echo "Lua C-module source payload not found for $pkg: $src" >&2; exit 1; }
 [ -f "$rockspec" ] || { echo "Lua C-module rockspec payload not found for $pkg: $rockspec" >&2; exit 1; }
+
+case "$lua_root" in
+  /*) ;;
+  *) lua_root="$(pwd)/$lua_root" ;;
+esac
+case "$out" in
+  /*) ;;
+  *) out="$(pwd)/$out" ;;
+esac
+
 [ -d "$lua_root/include" ] || { echo "target Lua include dir missing for $pkg: $lua_root/include" >&2; exit 1; }
 command -v luarocks >/dev/null 2>&1 || { echo "luarocks is required to rebuild Lua C module $pkg for $target" >&2; exit 1; }
 

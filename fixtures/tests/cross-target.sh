@@ -32,6 +32,44 @@ fi
 echo "cross-target: using Lua source: $LUA_SOURCE"
 echo "cross-target: target: $TARGET"
 
+CMODULE_FIXTURE_DIR="$(mktemp -d /tmp/meteorite-cross-cmodule.XXXXXX)"
+mkdir -p "$CMODULE_FIXTURE_DIR/src/mockcmodule" "$CMODULE_FIXTURE_DIR/bin"
+cat > "$CMODULE_FIXTURE_DIR/src/mockcmodule/mock.c" <<'C'
+int luaopen_mockcmodule(void) { return 0; }
+C
+tar -czf "$CMODULE_FIXTURE_DIR/mockcmodule.tar.gz" -C "$CMODULE_FIXTURE_DIR/src" mockcmodule
+cat > "$CMODULE_FIXTURE_DIR/mockcmodule-0.1-1.rockspec" <<'ROCKSPEC'
+package = "mockcmodule"
+version = "0.1-1"
+source = { url = "file://mockcmodule.tar.gz" }
+build = { type = "builtin", modules = { mockcmodule = "mock.c" } }
+ROCKSPEC
+cat > "$CMODULE_FIXTURE_DIR/bin/luarocks" <<'SH'
+#!/usr/bin/env sh
+set -eu
+tree=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --tree)
+      tree="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+[ -n "$tree" ] || { echo "fake luarocks missing --tree" >&2; exit 1; }
+mkdir -p "$tree/lib/lua/5.4"
+printf 'synthetic target cmodule\n' > "$tree/lib/lua/5.4/mockcmodule.so"
+SH
+chmod +x "$CMODULE_FIXTURE_DIR/bin/luarocks"
+cleanup_cross_target() {
+  rm -rf "$CMODULE_FIXTURE_DIR"
+  cleanup_all
+}
+trap cleanup_cross_target EXIT INT TERM HUP
+
 # Ensure the fixture has a .moonstone/env/bin/lua for build.zig's graph step.
 # The release flow generates the graph via emitter.emit() in Lua, but build.zig
 # also runs a graph step that needs a Lua binary at {project_root}/.moonstone/env/bin/lua.
@@ -60,8 +98,11 @@ cleanup_port
 rm -rf fixtures/apps/hybrid-demo/dist/release fixtures/apps/hybrid-demo/.meteorite/graph/release
 
 LUA_PATH="$LUA_PROJECT_PATH" \
+PATH="$CMODULE_FIXTURE_DIR/bin:$PATH" \
 METEORITE_CROSS_TARGET="$TARGET" \
 METEORITE_LUA_SOURCE="$LUA_SOURCE" \
+METEORITE_CMODULE_SOURCE="$CMODULE_FIXTURE_DIR/mockcmodule.tar.gz" \
+METEORITE_CMODULE_ROCKSPEC="$CMODULE_FIXTURE_DIR/mockcmodule-0.1-1.rockspec" \
 ZIG_GLOBAL_CACHE_DIR="$ZIG_CACHE_DIR" \
   luajit ../ballad/src/main.lua play fixtures/apps/hybrid-demo/partiture-cross-target.lua \
   >/tmp/meteorite-cross-target-ballad.log 2>&1
@@ -105,6 +146,10 @@ fi
 if [ -d fixtures/apps/hybrid-demo/dist/release/runtime ]; then
   echo "cross-target: runtime source asset present"
 fi
+
+test -f fixtures/apps/hybrid-demo/dist/release/lib/5.4/mockcmodule.so
+grep -q 'synthetic target cmodule' fixtures/apps/hybrid-demo/dist/release/lib/5.4/mockcmodule.so
+echo "cross-target: target Lua C module rebuilt"
 
 # Verify lifted inline Lua chunks are in the release
 if ls fixtures/apps/hybrid-demo/dist/release/.meteorite/lua/inline/*.lua 2>/dev/null | head -1 | grep -q .; then

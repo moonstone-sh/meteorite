@@ -150,7 +150,7 @@ Meteorite should be organized by compiler/runtime responsibility, not by histori
   - [x] diagnostics/meta endpoints.
 - [x] Replace shell-based static scanning with a portable Lua/Zig filesystem walker.
 - [x] Replace manually concatenated JSON release manifests with the local JSON encoder.
-- [ ] Add scenario tests for:
+- [x] Add scenario tests for:
   - [x] `meteorite init` minimal/static/hybrid local developer flow;
   - [x] `meteorite help` and `meteorite doctor` smoke coverage;
   - [x] inline Lua live reload with two or more edits;
@@ -158,7 +158,7 @@ Meteorite should be organized by compiler/runtime responsibility, not by histori
   - [x] native hybrid release packaging pure Lua modules;
   - [x] native hybrid release packaging Lua C modules;
   - [x] cross-target hybrid release with target Lua source provenance (`fixtures/tests/cross-target.sh`);
-  - [ ] cross-target hybrid release with rebuilt Lua C modules;
+  - [x] cross-target hybrid release with rebuilt Lua C modules;
 - [x] no host absolute paths or `.moonstone/env` leaks in static release text metadata.
 - [x] Ensure Moonstone Lua runtime packages expose upstream source provenance, not prebuilt runtime blobs, so Meteorite can cross-build transportable hybrid releases such as `aarch64-linux-musl`.
 - [x] Document the dev workflow and release ownership boundary (`meteorite dev`, Ballad-owned release via `meteorite.ballad`).
