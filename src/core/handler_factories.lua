@@ -34,7 +34,7 @@ function factories.dir(root, opts)
   opts = opts or {}
   assert(type(root) == "string" and root ~= "", "m.dir root must be a non-empty string")
   assert(type(opts.param) == "string" and opts.param ~= "", "m.dir requires opts.param")
-  assert(opts.index == nil or opts.index == false, "m.dir index files are not supported yet; declare explicit m.file routes")
+  assert(opts.index == nil or opts.index == false, "m.dir index files are not supported in the current release; declare explicit m.file routes")
   return {
     kind = "dir",
     root = root,

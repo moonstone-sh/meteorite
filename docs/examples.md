@@ -224,6 +224,28 @@ end)
 `ctx:query("tag")` returns the first value (`"pepe"`). `ctx:query_all("tag")`
 returns all values as a Lua array.
 
+## Static Directories
+
+Use `m.dir()` for explicit wildcard directory serving. Directory index lookup is
+not implicit in the current release; declare the index file as its own `m.file()`
+route so the graph and release manifest stay explicit.
+
+```lua
+local m = require("meteorite")
+local app = m.app({ name = "static-example" })
+
+app:get("/", m.file("site/dist/index.html", {
+  content_type = "text/html; charset=utf-8",
+}))
+
+app:get("/assets/:path*", m.dir("site/dist/assets", {
+  param = "path",
+  immutable = true,
+}))
+
+return app
+```
+
 ## Route Priority and Matching Order
 
 Meteorite routes are matched in **registration order** — the first route that
