@@ -765,6 +765,16 @@ if [[ "$lua_classification" != $'reload	Lua-only handler chunks changed' ]]; the
   echo "expected Lua-only classification, got: $lua_classification" >&2
   exit 1
 fi
+(
+  cd "$dev_reload_root/lua"
+  perl -0pi -e 's/two/three/' src/main.lua
+  LUA_PATH="$ROOT/src/?.lua;$ROOT/src/?/init.lua;src/?.lua;src/?/init.lua;;" "$ROOT/.moonstone/env/bin/lua" "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current hybrid >/tmp/meteorite-web-standards-dev-lua-3.log
+)
+lua_second_classification="$($ROOT/.moonstone/env/bin/lua "$ROOT/src/cli/dev.lua" --classify-partitions "$dev_reload_root/lua/.meteorite/graph/current")"
+if [[ "$lua_second_classification" != $'reload	Lua-only handler chunks changed' ]]; then
+  echo "expected second Lua-only classification, got: $lua_second_classification" >&2
+  exit 1
+fi
 
 printf 'one\n' > "$dev_reload_root/asset/public/hello.txt"
 cat > "$dev_reload_root/asset/src/main.lua" <<'LUA'

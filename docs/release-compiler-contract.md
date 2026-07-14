@@ -153,7 +153,7 @@ Meteorite should be organized by compiler/runtime responsibility, not by histori
 - [ ] Add scenario tests for:
   - [x] `meteorite init` minimal/static/hybrid local developer flow;
   - [x] `meteorite help` and `meteorite doctor` smoke coverage;
-  - [ ] inline Lua live reload with two or more edits;
+  - [x] inline Lua live reload with two or more edits;
   - [ ] static release export after deleting source `site/dist`;
   - [x] native hybrid release packaging pure Lua modules;
   - [x] native hybrid release packaging Lua C modules;
