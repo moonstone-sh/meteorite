@@ -8,6 +8,7 @@
 
 ---@type RouteModule
 local profiles = require("core.profile")
+local contract = require("core.contract")
 
 local route = {}
 
@@ -73,6 +74,7 @@ end
 ---@param handler any  Handler (string, function, or table)
 ---@return table  Route declaration
 function route.declare(method, path, options, handler)
+  contract.reject_unsupported_body_features(options, method .. " " .. tostring(path))
   local memory = options.memory or {}
   if options.body and options.body.max ~= nil and memory.max_body == nil then
     memory.max_body = options.body.max

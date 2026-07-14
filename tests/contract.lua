@@ -398,4 +398,22 @@ test "ws alias fails with same unsupported diagnostic" (function()
   end, "connection-upgrade lifecycle", "ws alias diagnostic")
 end)
 
+test "legacy multipart route option fails explicitly" (function()
+  local app = m.app({ name = "multipart-legacy-fail" })
+  test.assert_error(function()
+    app:post("/upload", { multipart = { max_parts = 8 } }, function() end)
+  end, "does not support multipart form parsing", "legacy multipart diagnostic")
+end)
+
+test "canonical multipart body option fails explicitly" (function()
+  local app = m.app({ name = "multipart-canonical-fail" })
+  test.assert_error(function()
+    app:post({
+      route = "/upload",
+      body = { multipart = { max_parts = 8 } },
+      handler = function() end,
+    })
+  end, "temp-file policy", "canonical multipart diagnostic")
+end)
+
 test.run()

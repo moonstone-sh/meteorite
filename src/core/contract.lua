@@ -11,6 +11,7 @@
 --- @field PipelineBuilder fun(route_id: string): PipelineBuilder  Create a pipeline builder
 --- @field lower_handler_to_stage fun(handler: any): StageContract|nil, table|nil  Lower legacy handler to stage
 --- @field validate_route_declaration fun(decl: table): string  Validate and return form ("canonical"|"legacy")
+--- @field reject_unsupported_body_features fun(opts: table, route_label?: string): void  Reject body features outside the current release contract
 --- @field build fun(method: string, decl: table, scope: table?): RouteContract  Build a RouteContract from any form
 --- @field serialize fun(route_contract: RouteContract): table  Serialize for graph inspection
 
@@ -40,6 +41,27 @@
 
 local contract = {}
 local hooks = require("core.hooks")
+
+local function unsupported_multipart(route_label)
+  local lines = {
+    "Meteorite does not support multipart form parsing in the current service-layer release.",
+    "",
+    "Reason: multipart requires explicit per-route limits, temp-file policy, streaming/backpressure semantics, filename sanitization, and cleanup guarantees that are P1 design work rather than P0 release behavior.",
+    "Hint: use raw ctx:body() with route body limits for small payloads, or put uploads behind an external upload service until the multipart parser contract is implemented.",
+  }
+  if route_label then table.insert(lines, 2, "route: " .. route_label) end
+  error(table.concat(lines, "\n"))
+end
+
+function contract.reject_unsupported_body_features(opts, route_label)
+  if type(opts) ~= "table" then return end
+  if opts.multipart ~= nil or opts.multipart_body ~= nil then
+    unsupported_multipart(route_label)
+  end
+  if type(opts.body) == "table" and opts.body.multipart ~= nil then
+    unsupported_multipart(route_label)
+  end
+end
 
 --- @class StageContract
 --- @field id? string  Stage identifier (must be unique within route)
@@ -421,6 +443,8 @@ local function validate_route_declaration(decl)
       }, "\n"))
     end
 
+    contract.reject_unsupported_body_features(decl, decl.route)
+
     -- Check conflicting handler and pipeline
     if decl.handler ~= nil and decl.pipeline ~= nil then
       error(table.concat({
@@ -447,6 +471,8 @@ local function validate_route_declaration(decl)
 
     return "canonical"
   end
+
+  contract.reject_unsupported_body_features(decl, decl[1] or decl.path)
 
   return "legacy"
 end
