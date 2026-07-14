@@ -23,12 +23,12 @@ The audit found and fixed one fixture-local build drift:
 | `bash fixtures/tests/release-smoke.sh` | Pass | Static release layout, copied release execution, no-source-leak checks. |
 | `bash fixtures/tests/ipc-release-smoke.sh` | Pass | IPC release manifest/release smoke path. |
 | `zig build` | Pass | Root showcase-service build sanity check. |
-| `METEORITE_CROSS_TARGET_ALLOW_SKIP=1 bash fixtures/tests/cross-target.sh` | Skip | Local PUC Lua source archive was unavailable. |
+| `METEORITE_CROSS_TARGET_ALLOW_SKIP=1 bash fixtures/tests/cross-target.sh` | Pass | Discovered PUC Lua source from the Moonstone runtime store and produced an `aarch64-linux-gnu` hybrid release. |
 
 ## Environment Notes
 
 - Zig build commands needed access to Zig's standard library and global cache outside the workspace sandbox.
-- Local cross-target Lua source archive was not present at `../moonstone-tools/scripts/runtime/src/lua-5.4.7.tar.gz`, so `moon run test-cross-target` was not part of this audit run.
+- Local cross-target Lua source archive was not present at `../moonstone-tools/scripts/runtime/src/lua-5.4.7.tar.gz`, but the Moonstone runtime store exposed `source_kind = "puc_lua_source"` with `sources/source.tar.gz`; `fixtures/tests/cross-target.sh` now discovers that store source automatically from `.moonstone/env/dependencies.toml`.
 - Several fixture release builds intentionally print strict-doc diagnostics for undocumented fixture routes; those diagnostics are expected coverage, not audit failures.
 
 ## Current Supported Release Path
@@ -39,7 +39,7 @@ The audit found and fixed one fixture-local build drift:
 
 ## Still Not Release-Unlocked
 
-- Cross-target hybrid remains conditional on Moonstone runtime/package source provenance and local availability of the upstream PUC Lua source archive.
+- Cross-target hybrid remains conditional on Moonstone runtime/package source provenance. The local Moonstone store currently provides the upstream PUC Lua source archive for `moonstone/lua` 5.4.7.
 - LuaJIT cross-target hybrid remains explicitly unsupported until a target matrix and host `buildvm` stage exist.
 - Lua C-module cross-target rebuilds require source payloads, rockspec payloads, supported archive formats, and a host `luarocks` executable.
 - WebSockets, multipart route parsing, streaming responses, trusted proxy IP canonicalization, and serverless/edge adapters remain explicit non-goals or P1/P2 work for this release line.

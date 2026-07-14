@@ -28,6 +28,32 @@ local function add_file_asset(ctx, assets, root, source_path, virtual_path, kind
   }))
 end
 
+local function normalize_relative(value)
+  local out = {}
+  for part in tostring(value or ""):gmatch("[^/]+") do
+    if part == ".." then
+      if #out > 0 then out[#out] = nil end
+    elseif part ~= "." and part ~= "" then
+      out[#out + 1] = part
+    end
+  end
+  return table.concat(out, "/")
+end
+
+local function resolve_project_file(root, rel_path)
+  if not rel_path or rel_path == "" then return nil, nil end
+  local root_prefix = tostring(root or "."):gsub("/+$", "") .. "/"
+  local candidates = rel_path:sub(1, 1) == "/" and { rel_path } or { join(root or ".", rel_path), rel_path }
+  for _, full in ipairs(candidates) do
+    if file_exists(full) then
+      local virtual_path = full:sub(1, #root_prefix) == root_prefix and full:sub(#root_prefix + 1) or rel_path
+      if virtual_path:sub(1, 1) == "/" then return nil, nil end
+      return full, normalize_relative(virtual_path)
+    end
+  end
+  return nil, nil
+end
+
 local function copy_tree_assets(ctx, assets, root, source_dir, dest_dir, kind)
   local full_dir = join(root, source_dir)
   if not fs.is_dir(full_dir) then return end
@@ -80,17 +106,21 @@ end
 
 local function add_project_lua_file(ctx, assets, root, rel_path, kind, metadata, seen)
   if not rel_path or rel_path == "" then return end
-  if rel_path:sub(1, 1) == "/" then return end
   if not rel_path:match("%.lua$") then return end
-  if seen[rel_path] then return end
-  local full = join(root, rel_path)
-  if not file_exists(full) then return end
-  seen[rel_path] = true
-  add_file_asset(ctx, assets, root, rel_path, rel_path, kind, metadata)
+  local full, virtual_path = resolve_project_file(root, rel_path)
+  if not full then return end
+  if seen[virtual_path] then return end
+  seen[virtual_path] = true
+  assets:add(ctx.graph:add_asset({
+    kind = kind or "file",
+    source_path = full,
+    virtual_path = virtual_path,
+    metadata = metadata or {},
+  }))
   local source = read_file(full)
   for _, module in ipairs(scan_requires(source)) do
     for _, candidate in ipairs(project_lua_candidates(module)) do
-      add_project_lua_file(ctx, assets, root, candidate, "meteorite_lua_module", { required_by = rel_path, module = module }, seen)
+      add_project_lua_file(ctx, assets, root, candidate, "meteorite_lua_module", { required_by = virtual_path, module = module }, seen)
     end
   end
 end
@@ -175,7 +205,9 @@ end
 
 function assets_mod.add_target_cmodule_assets(ctx, assets, root, output_dir, target)
   if not output_dir or output_dir == "" then return end
-  copy_tree_assets(ctx, assets, root or ".", path.join(output_dir, "lib/lua"), "lib", "lua_cmodule")
+  local output_root = output_dir
+  if not fs.is_dir(output_root) then output_root = join(root or ".", output_dir) end
+  copy_tree_assets(ctx, assets, output_root, "lib/lua", "lib", "lua_cmodule")
   for _, asset in ipairs(assets.assets or {}) do
     if asset.kind == "lua_cmodule" then
       asset.metadata = asset.metadata or {}

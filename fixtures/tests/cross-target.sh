@@ -24,6 +24,20 @@ if [ -z "$LUA_SOURCE" ]; then
     fi
   done
 fi
+if [ -z "$LUA_SOURCE" ] && [ -f "$ROOT/.moonstone/env/dependencies.toml" ]; then
+  runtime_path="$(awk '
+    $1 == "name" && $3 == "\"moonstone/lua\"" { in_lua = 1 }
+    in_lua && $1 == "path" {
+      path = $3
+      gsub(/^\"|\"$/, "", path)
+      print path
+      exit
+    }
+  ' "$ROOT/.moonstone/env/dependencies.toml")"
+  if [ -n "$runtime_path" ] && [ -f "$runtime_path/sources/source.tar.gz" ]; then
+    LUA_SOURCE="$runtime_path/sources/source.tar.gz"
+  fi
+fi
 if [ -z "$LUA_SOURCE" ] || [ ! -f "$LUA_SOURCE" ]; then
   echo "cross-target: no Lua source archive found." >&2
   echo "  Set METEORITE_LUA_SOURCE=/path/to/lua-5.4.7.tar.gz or ensure moonstone-tools is present." >&2
