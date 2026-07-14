@@ -124,10 +124,17 @@ Checks:
 help.invoke = [[Meteorite invoke
 
 Usage:
-  meteorite invoke [--json] [-H "Name: value"] [input] [method] [path] [body]
+  meteorite invoke [--json] [--headers] [-H "Name: value"] [input] [method] [path] [body]
+
+Flags:
+  --json       Print structured JSON with request and response details
+  --headers    Print response headers after the status/content-type/body line
+  -H, --header "Name: value"  Add a request header (repeatable)
+  --body <text>               Set the request body
 
 Example:
   meteorite invoke src/main.lua GET /health
+  meteorite invoke --headers src/main.lua GET /security/cors
   meteorite invoke --json -H "Origin: https://app.example" src/main.lua GET /security/cors]]
 
 help.ipc = [[Meteorite IPC

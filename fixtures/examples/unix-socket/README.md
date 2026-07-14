@@ -8,7 +8,7 @@ Build any example from the repository root by pointing the graph input at its `s
 zig build install-server \
   -Dmode=release-hybrid \
   -Dbackend=ipc_unixsocket \
-  -Dgraph-input=examples/unix-socket/hello/src/main.lua \
+  -Dgraph-input=fixtures/examples/unix-socket/hello/src/main.lua \
   -Dunix-socket-path=/tmp/meteorite-example.sock
 ```
 

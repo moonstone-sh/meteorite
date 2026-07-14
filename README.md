@@ -30,7 +30,7 @@ meteorite help                     # list commands and examples
 meteorite doctor                   # check local project/tool readiness
 ```
 
-App examples live in `EXAMPLES.md`; they are intentionally not init templates. Native Unix-socket IPC notes and examples live in `docs/ipc-unix-socket.md` and `examples/unix-socket/`.
+App examples live in `docs/examples.md`; they are intentionally not init templates. Native Unix-socket IPC notes live in `docs/ipc-unix-socket.md`; runnable Unix-socket examples live in `fixtures/examples/unix-socket/`.
 
 ```bash
 moon run generate-graph       # writes .meteorite/graph/current

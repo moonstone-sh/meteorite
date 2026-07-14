@@ -3,7 +3,7 @@ const std = @import("std");
 /// Shared Meteorite protocol types used by all backends.
 /// HTTP adapters use the HTTP-shaped aliases below; IPC adapters should use
 /// the transport-neutral request/response types as they come online.
-pub const Method = enum { GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS, OTHER };
+pub const Method = enum { GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS, OTHER, ALL };
 
 pub const Header = struct {
     name: []const u8,

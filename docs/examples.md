@@ -202,3 +202,69 @@ end)
 
 `ctx:query("tag")` returns the first value (`"pepe"`). `ctx:query_all("tag")`
 returns all values as a Lua array.
+
+## Route Priority and Matching Order
+
+Meteorite routes are matched in **registration order** — the first route that
+matches the request method and path wins. This is deterministic at compile time
+because the graph preserves declaration order.
+
+### Priority Rules
+
+1. **Method-specific routes take priority over `app:all()` routes.**
+   A `GET /users` route is checked before an `ALL /users` route for `GET` requests.
+   The `ALL` route only matches methods that have no specific route at the same path.
+
+2. **`GET` routes also serve `HEAD` requests** unless an explicit `HEAD` route
+   is declared at the same path.
+
+3. **Static (literal) segments match before param segments** within the same
+   route iteration. Routes are iterated in registration order, so a more
+   specific route declared first will always win.
+
+4. **Wildcard `*` matches the final segment and all remaining path segments.**
+   It must be the last segment in the path pattern (e.g. `/static/*`).
+
+5. **Catch-all params (`:name*`) also match remaining segments** but capture
+   the matched value into `ctx:param("name")`. Like wildcards, they must be
+   the final segment.
+
+6. **Duplicate routes (same method + path) are rejected** at graph build time
+   with a diagnostic message.
+
+### Example: Priority in Action
+
+```lua
+local m = require("meteorite")
+local app = m.app({ name = "priority-demo" })
+
+-- This specific GET route wins for GET /api/items
+app:get("/api/items", function(c)
+  return c:text("get-items")
+end)
+
+-- This ALL route is the fallback for other methods at /api/items
+app:all("/api/items", function(c)
+  return c:text("all-items:" .. c.request.method)
+end)
+
+-- Wildcard matches /files/css/app.css, /files/js/vendor/lib.js, etc.
+app:get("/files/*", function(c)
+  return c:text("file-served")
+end)
+
+-- Catch-all param captures the remaining path
+app:get("/download/:path*", function(c)
+  return c:text("downloading:" .. c:param("path"))
+end)
+```
+
+### Matching Summary
+
+| Pattern | Matches | Captures |
+|---------|---------|----------|
+| `/users` | exactly `/users` | — |
+| `/users/:id` | `/users/42`, `/users/abc` | `id` = `42` or `abc` |
+| `/static/*` | `/static/`, `/static/css/app.css` | — (wildcard, no capture) |
+| `/files/:path*` | `/files/x`, `/files/a/b/c` | `path` = `x` or `a/b/c` |
+| `app:all("/hook")` | any method at `/hook` | — |

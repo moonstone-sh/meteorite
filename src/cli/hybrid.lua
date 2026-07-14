@@ -237,9 +237,47 @@ local function validate_request_domains(route, request)
 end
 
 local function match_route(route, method, path)
-  if route.method ~= method then return nil, "method" end
+  if route.method ~= method and route.method ~= "ALL" then return nil, "method" end
   local parts = split_path(path)
   local segments = route.path.segments
+  local has_wildcard = false
+  for _, segment in ipairs(segments) do
+    if segment.kind == "wildcard" then has_wildcard = true end
+  end
+  if has_wildcard then
+    -- Wildcard * matches the final segment and all remaining path parts
+    -- Segments before the wildcard must match exactly; the wildcard consumes the rest
+    local wildcard_index = nil
+    for i, segment in ipairs(segments) do
+      if segment.kind == "wildcard" then wildcard_index = i; break end
+    end
+    -- All segments before the wildcard must match exactly
+    for i = 1, wildcard_index - 1 do
+      local segment = segments[i]
+      local value = parts[i]
+      if value == nil then return nil end
+      if segment.kind == "literal" then
+        if segment.value ~= value then return nil end
+      else
+        local schemas = {}
+        for _, schema in ipairs(route.params or {}) do schemas[schema.name] = schema end
+        local schema = schemas[segment.name] or { type = "string" }
+        if not validate_schema(schema, value) then return nil end
+      end
+    end
+    -- Wildcard consumes all remaining parts (zero or more)
+    local params = {}
+    local schemas = {}
+    for _, schema in ipairs(route.params or {}) do schemas[schema.name] = schema end
+    for i = 1, wildcard_index - 1 do
+      local segment = segments[i]
+      if segment.kind == "param" then
+        local schema = schemas[segment.name] or { type = "string" }
+        params[segment.name] = convert_schema(schema, parts[i])
+      end
+    end
+    return params
+  end
   if #parts ~= #segments then return nil end
   local params = {}
   local schemas = {}
@@ -289,11 +327,34 @@ function Context:json(status_or_value, value, opts)
   return with_response_headers(self.response, options)
 end
 
+function Context:pretty_json(status_or_value, value, opts)
+  local status, body = 200, status_or_value
+  local options = value
+  if type(status_or_value) == "number" then status, body, options = status_or_value, value, opts end
+  self.response = { status = status, content_type = "application/json; charset=utf-8", body = json.pretty_encode(body) }
+  return with_response_headers(self.response, options)
+end
+
 function Context:bytes(status, content_type, body, opts)
   local options = opts
   if body == nil then body, content_type, status = content_type, "application/octet-stream", 200 end
   self.response = { status = status, content_type = content_type, body = body or "" }
   return with_response_headers(self.response, options)
+end
+
+--- Run a function with a timeout. Returns a 504 response if the timeout is exceeded.
+--- In dev/invoke mode this is advisory (checks elapsed wall time after the function returns).
+--- @param ms number  Timeout in milliseconds
+--- @param fn function  Function to execute
+--- @return table  The function result or a 504 timeout response
+function Context:timeout(ms, fn)
+  local started = os.clock()
+  local result = fn()
+  local elapsed_ms = (os.clock() - started) * 1000
+  if elapsed_ms > ms then
+    return { status = 504, content_type = "text/plain; charset=utf-8", body = "gateway timeout", headers = { ["X-Meteorite-Timeout-Ms"] = tostring(math.floor(elapsed_ms)), ["X-Meteorite-Timeout-Limit"] = tostring(ms) } }
+  end
+  return result
 end
 
 function Context:body()
@@ -561,6 +622,56 @@ local function encode_log_json(value)
   local ok, json = pcall(require, "utils.json")
   if ok and json and json.encode then return json.encode(value) end
   return "{}"
+end
+
+--- Build compression-related headers for a response.
+--- In dev/invoke mode this is advisory (no actual compression); the Zig runtime
+--- handles gzip/deflate at the backend level. This helper sets the correct
+--- Vary header and advises the client of available encodings.
+--- @param opts? { encoding?: string, vary?: string[] }
+--- @return table<string, string>
+function Context:compression_headers(opts)
+  opts = opts or {}
+  local headers = {}
+  local encoding = opts.encoding or "gzip"
+  local vary_parts = {}
+  if type(opts.vary) == "table" then
+    for _, v in ipairs(opts.vary) do vary_parts[#vary_parts + 1] = v end
+  end
+  -- Always include Accept-Encoding in Vary for compressed responses
+  local has_accept_encoding = false
+  for _, v in ipairs(vary_parts) do
+    if v:lower() == "accept-encoding" then has_accept_encoding = true; break end
+  end
+  if not has_accept_encoding then vary_parts[#vary_parts + 1] = "Accept-Encoding" end
+  headers["Vary"] = table.concat(vary_parts, ", ")
+  headers["Content-Encoding"] = encoding
+  return headers
+end
+
+--- Escape HTML special characters to prevent XSS in inline HTML.
+--- @param value string  Raw string to escape
+--- @return string  Escaped string
+function Context:escape_html(value)
+  value = tostring(value or "")
+  return value:gsub("&", "&amp;")
+    :gsub("<", "&lt;")
+    :gsub(">", "&gt;")
+    :gsub('"', "&quot;")
+    :gsub("'", "&#39;")
+end
+
+--- Send an HTML response with proper content type and charset.
+--- @param status_or_body integer|string  Status code or HTML body
+--- @param body? string  HTML body (if status is first arg)
+--- @param opts? {headers?: table<string, string>}  Additional headers
+--- @return table  Response object
+function Context:html(status_or_body, body, opts)
+  local status, response_body = 200, status_or_body
+  local options = body
+  if type(status_or_body) == "number" then status, response_body, options = status_or_body, body, opts end
+  self.response = { status = status, content_type = "text/html; charset=utf-8", body = tostring(response_body or "") }
+  return with_response_headers(self.response, options)
 end
 
 function Context:log(level, message, fields, opts)
@@ -880,7 +991,12 @@ local function execute_scope_plugins(route, ctx, plugin_map)
   for _, plugin_ref in ipairs(route.scope.plugins or {}) do
     local plugin = type(plugin_ref) == "table" and plugin_ref.__meteorite_plugin and plugin_ref or plugin_map[plugin_ref]
     if plugin and type(plugin.execute) == "function" then
-      local result = plugin.execute(ctx)
+      local ok, result = pcall(plugin.execute, ctx)
+      if not ok then
+        local source = plugin.source or {}
+        local location = tostring(source.file or "?") .. ":" .. tostring(source.line or 0)
+        error("plugin '" .. tostring(plugin.id or "?") .. "' error at " .. location .. ": " .. tostring(result))
+      end
       if result then
         if type(result) == "string" then
           return { status = 200, content_type = "text/plain; charset=utf-8", body = result, http_requests = ctx.http_requests, state = ctx.state }
@@ -905,7 +1021,27 @@ function hybrid.invoke(app, request, opts)
   local plugin_map = build_plugin_map(graph.plugins)
   local method = request.method or "GET"
   local path, raw_query = split_target(request.path or "/")
+  -- Trailing slash policy
+  local trailing_slash = graph.trailing_slash or "default"
+  if trailing_slash == "redirect" and path ~= "/" and path:sub(-1) == "/" then
+    local stripped = path:gsub("/+$", "")
+    if stripped == "" then stripped = "/" end
+    local query_suffix = raw_query ~= "" and ("?" .. raw_query) or ""
+    return { status = 301, content_type = "text/plain; charset=utf-8", body = "redirect", headers = { Location = stripped .. query_suffix } }
+  elseif trailing_slash == "strip" and path ~= "/" and path:sub(-1) == "/" then
+    path = path:gsub("/+$", "")
+    if path == "" then path = "/" end
+  elseif trailing_slash == "reject" and path ~= "/" and path:sub(-1) == "/" then
+    return { status = 404, content_type = "text/plain; charset=utf-8", body = "not found" }
+  end
   local query_values, query_all = parse_query(raw_query)
+  -- Dev endpoint: serve generated OpenAPI spec
+  if method == "GET" and path == "/__meteorite/openapi.json" then
+    local openapi_mod = require("codegen.openapi")
+    local spec = openapi_mod.emit_json(graph, { title = graph.app and graph.app.name or "meteorite-app", version = "0.1.0" })
+    return { status = 200, content_type = "application/json", body = spec }
+  end
+
   local path_matched = false
   for _, route in ipairs(graph.routes) do
     local params = match_route(route, method, path)
@@ -918,7 +1054,12 @@ function hybrid.invoke(app, request, opts)
       local plugin_response = execute_scope_plugins(route, ctx, plugin_map)
       if plugin_response then return plugin_response end
       if route.handler.kind == "inline_lua" then
-        local result = route.handler.value(ctx) or ctx.response
+        local ok, result = pcall(route.handler.value, ctx)
+        if not ok then
+          local source = route.source or {}
+          error("handler error at " .. tostring(source.file or "?") .. ":" .. tostring(source.line or 0) .. ": " .. tostring(result))
+        end
+        result = result or ctx.response
         if type(result) == "string" then
           result = { status = 200, content_type = "text/plain; charset=utf-8", body = result }
         end
@@ -928,7 +1069,12 @@ function hybrid.invoke(app, request, opts)
         return response
       elseif route.handler.kind == "lua" then
         local handler = require(route.handler.module)
-        local result = handler(ctx) or ctx.response
+        local ok, result = pcall(handler, ctx)
+        if not ok then
+          local source = route.source or {}
+          error("handler error at " .. tostring(source.file or "?") .. ":" .. tostring(source.line or 0) .. " (" .. tostring(route.handler.module or route.handler.path or "?") .. "): " .. tostring(result))
+        end
+        result = result or ctx.response
         if type(result) == "string" then
           result = { status = 200, content_type = "text/plain; charset=utf-8", body = result }
         end

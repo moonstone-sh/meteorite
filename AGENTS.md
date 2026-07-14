@@ -72,9 +72,10 @@ src/main.lua ──load──▶ Meteorite app graph (Lua DSL)
 meteorite/
 ├── AGENTS.md              ← This file
 ├── README.md              ← User-facing overview
-├── EXAMPLES.md            ← Copyable app shapes (CRUD, etc.)
-├── PENDING.md             ← Release compiler contract and implementation status
-├── BENCHMARKS.md          ← Benchmark methodology and results
+├── docs/
+│   ├── examples.md        ← Copyable app shapes (CRUD, etc.)
+│   ├── release-compiler-contract.md ← Release compiler contract and implementation status
+│   └── benchmarks.md      ← Benchmark methodology and results
 ├── moonstone.toml         ← Package declaration + scripts
 ├── moonstone.lock         ← Pinned dependency versions
 ├── build.zig              ← Zig build driver (graph generation + server compilation)
@@ -418,7 +419,7 @@ LUA_PATH='src/?.lua;src/?/init.lua;../ballad/.moonstone/env/share/lua/5.1/?.lua;
 
 ## 8. Release Compiler Contract
 
-See `PENDING.md` for the full contract specification.
+See `docs/release-compiler-contract.md` for the full contract specification.
 
 ### Static Mode (`mode = "static"`)
 
@@ -555,7 +556,7 @@ moon run bench:lua-stability # Lua state stability under load
 
 Benchmark scripts live in `bench/` and use `fixtures/apps/bench-service/` for endpoints. Results are written to `bench/results/` (gitignored except `.gitkeep`).
 
-Tools used: `oha`, `wrk`, and custom Lua probes. See `BENCHMARKS.md` for methodology and historical results.
+Tools used: `oha`, `wrk`, and custom Lua probes. See `docs/benchmarks.md` for methodology and historical results.
 
 ---
 

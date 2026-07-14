@@ -6,6 +6,7 @@ local helpers = require("codegen.helpers")
 local report = require("codegen.report")
 local handler_sync = require("codegen.handler_sync")
 local graph_emit = require("codegen.graph_emit")
+local openapi = require("codegen.openapi")
 local fs = require("utils.fs")
 
 local emitter = {}
@@ -86,6 +87,8 @@ local function route_shape_descriptor(route)
   for _, segment in ipairs(route.path.segments or {}) do
     if segment.kind == "literal" then
       segments[#segments + 1] = { kind = "literal", value = segment.value }
+    elseif segment.kind == "wildcard" then
+      segments[#segments + 1] = { kind = "wildcard" }
     else
       segments[#segments + 1] = { kind = "param", name = segment.name }
     end
@@ -311,6 +314,8 @@ function emitter.emit(app, opts)
   helpers.write_file(output .. "/messages.zon", messages_text)
   helpers.write_file(output .. "/schemas.zon", schemas_text)
   helpers.write_file(output .. "/openapi-plan.zon", openapi_plan_text)
+  local openapi_json = openapi.emit_json(graph, { title = graph.app and graph.app.name or "meteorite-app", version = "0.1.0" })
+  helpers.write_file(output .. "/openapi.json", openapi_json)
   helpers.write_file(output .. "/manifest.zon", zon.encode({ format = "meteorite.graph.v0", meteorite_version = "0.1.0", graph_hash = graph_hash, mode = helpers.mode_enum(mode), partitions = { route_graph = partitions.route_graph_hash, message_graph = partitions.message_graph_hash, handlers = partitions.handler_hash, patterns = partitions.pattern_hash, lua_chunks = partitions.lua_chunk_hash, capabilities = partitions.capability_hash, runtime = partitions.runtime_hash } }))
   helpers.write_file(output .. "/partitions.zon", zon.encode(partitions))
   helpers.write_file(output .. "/partition-hashes.tsv", partition_diff.encode_tsv(partitions))

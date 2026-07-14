@@ -28,8 +28,10 @@ local function parse_path(path)
   local segments = {}
   for segment in path:gmatch("[^/]+") do
     assert(segment ~= "", "empty route segment in " .. path)
-    assert(segment ~= "*", "wildcard routes are not supported in Meteorite v0.1")
-    if segment:sub(1, 1) == ":" then
+    if segment == "*" then
+      assert(segment == path:match("[^/]+$"), "wildcard * must be the final route segment: " .. path)
+      segments[#segments + 1] = { kind = "wildcard" }
+    elseif segment:sub(1, 1) == ":" then
       local catch_all = false
       local name = segment:sub(2)
       if name:sub(-1) == "*" then
@@ -86,6 +88,10 @@ function route.declare(method, path, options, handler)
     json_body = options.json or options.json_body or (options.body and options.body.json) or {},
     form_body = options.form or options.form_body or (options.body and options.body.form) or {},
     responses = options.responses or {},
+    description = options.description or nil,
+    summary = options.summary or nil,
+    tags = options.tags or nil,
+    operation_id = options.operationId or options.operation_id or nil,
     memory = memory,
     capabilities = options.capabilities or {},
     message = options.message,
@@ -103,6 +109,16 @@ local function segment_params(segments)
   end
   return seen
 end
+
+--- Check if a route path contains a wildcard segment.
+local function has_wildcard(segments)
+  for _, segment in ipairs(segments or {}) do
+    if segment.kind == "wildcard" then return true end
+  end
+  return false
+end
+
+route.has_wildcard = has_wildcard
 
 local function clone_schema(schema)
   local out = {}
@@ -438,6 +454,10 @@ function route.normalize_app(app, opts)
       query = normalize_schema_map(declaration.query),
       validation = normalize_validation_contract(declaration),
       responses = declaration.responses or {},
+      description = declaration.description,
+      summary = declaration.summary,
+      tags = declaration.tags,
+      operation_id = declaration.operation_id,
       handler = handler,
       runtime = {
         requires_lua = handler.kind == "inline_lua" or handler.kind == "lua",
@@ -490,6 +510,7 @@ function route.normalize_app(app, opts)
     host = (app.options and app.options.host) or "127.0.0.1",
     port = (app.options and app.options.port) or 8080,
   }
+  local trailing_slash = (app.options and app.options.trailing_slash) or "default"
   local plugins = {}
   local plugin_seen = {}
   for _, route in ipairs(nodes) do
@@ -533,6 +554,40 @@ function route.normalize_app(app, opts)
     plugin_graph.plugin_profile_counters = plugin_result.profile_counters
   end
 
+  -- Detect undocumented routes (no summary/description and no response schemas)
+  local undocumented = {}
+  for _, route in ipairs(nodes) do
+    local has_responses = false
+    for _, _ in pairs(route.responses or {}) do hasResponses = true; break end
+    -- Use a simpler check
+    hasResponses = false
+    for status, _ in pairs(route.responses or {}) do hasResponses = true; break end
+    if not route.summary and not route.description and not hasResponses then
+      undocumented[#undocumented + 1] = {
+        method = route.method,
+        path = route.raw_path,
+        id = route.id,
+        source = route.source,
+      }
+    end
+  end
+  -- In release modes, warn about undocumented routes
+  if #undocumented > 0 and (mode == "release-static" or mode == "release-hybrid") then
+    local lines = { "undocumented routes detected in release build", "" }
+    for _, r in ipairs(undocumented) do
+      lines[#lines + 1] = "  " .. r.method .. " " .. r.path
+      lines[#lines + 1] = "    at " .. tostring(r.source.file) .. ":" .. tostring(r.source.line or 0)
+    end
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "hint: add summary, description, or responses to each route for release documentation"
+    local example_path = undocumented[1] and undocumented[1].path or "/example"
+    lines[#lines + 1] = '  app:get("' .. example_path .. '", {'
+    lines[#lines + 1] = '    summary = "Route summary",'
+    lines[#lines + 1] = '    responses = { [200] = { description = "OK" } },'
+    lines[#lines + 1] = '  }, handler)'
+    io.stderr:write(table.concat(lines, "\n") .. "\n")
+  end
+
   return {
     format = "meteorite.graph.v0",
     meteorite_version = "0.1.0",
@@ -540,6 +595,7 @@ function route.normalize_app(app, opts)
     profile = resolved_profile,
     mode = mode,
     listen = listen,
+    trailing_slash = trailing_slash,
     routes = routes,
     messages = messages,
     nodes = nodes,
@@ -547,6 +603,7 @@ function route.normalize_app(app, opts)
     plugins = plugins,
     capabilities = app.capabilities or {},
     middleware = app.middleware,
+    undocumented_routes = undocumented,
   }
 end
 

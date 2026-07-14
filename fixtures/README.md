@@ -5,6 +5,7 @@ Fixtures are small, purpose-built Meteorite apps used for demos, acceptance test
 ## Layout Standard
 
 - App fixtures live under `fixtures/apps/<name>/`.
+- Runnable example suites that are not black-box tests live under `fixtures/examples/<topic>/`.
 - App-specific partitures live beside the fixture as `partiture.lua`.
 - Test runners live under `fixtures/tests/`.
 - Every app fixture must have `src/main.lua` and usually `src/app.lua`.
@@ -23,6 +24,7 @@ Fixtures are small, purpose-built Meteorite apps used for demos, acceptance test
 - `apps/web-standards` exercises HTTP standards behavior such as response headers, CORS headers, redirect headers, and Lua response helper parity.
 - `apps/ipc-native-service` exercises native `ipc_unixsocket` message authoring with `app:message`, IPC metadata, JSON body validation, and native context APIs.
 - `apps/ipc-unixsocket-http-service` captures the planned `ipc_unixsocket_http` compatibility fixture using ordinary HTTP route authoring over a future Unix socket HTTP transport.
+- `fixtures/examples/unix-socket` contains runnable native Unix-socket IPC authoring examples; these are demos, while `apps/ipc-native-service` remains the focused test fixture.
 
 ## Publication Rule
 

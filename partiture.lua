@@ -19,7 +19,7 @@ return ballad.partiture(function(p)
 			"scripts/**",
 			"templates/**",
 			"src/codegen/templates/**",
-			"EXAMPLES.md",
+			"docs/**",
 			"README.md",
 		},
 		exclude = {
@@ -76,7 +76,7 @@ return ballad.partiture(function(p)
 					{ name = "meteorite/cli/http_client.lua", path = "src/cli/http_client.lua" },
 					{ name = "meteorite/utils/json.lua", path = "src/utils/json.lua" },
 					{ name = "meteorite/ballad.lua", path = "src/meteorite/ballad.lua" },
-					{ name = "EXAMPLES.md", path = "EXAMPLES.md" },
+					{ name = "docs/examples.md", path = "docs/examples.md" },
 					{ name = "build.zig", path = "build.zig" },
 					{ name = "zig/main.zig", path = "zig/main.zig" },
 					{ name = "zig/meteorite.zig", path = "zig/meteorite.zig" },

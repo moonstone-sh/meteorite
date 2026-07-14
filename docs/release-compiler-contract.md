@@ -1,4 +1,4 @@
-# Pending: Meteorite Release Compiler Contract
+# Meteorite Release Compiler Contract
 
 Meteorite release export should be treated as a compiler contract over one normalized application graph. Lua may construct the graph in every release mode; the mode only changes which runtime execution nodes the final graph is allowed to retain and what target artifacts must be materialized.
 
@@ -129,7 +129,7 @@ Meteorite should be organized by compiler/runtime responsibility, not by histori
   - [x] minimal Lua-first hybrid app;
   - [x] static Zig-handler app;
   - [x] hybrid Lua + Zig app;
-  - [x] CRUD moved to `EXAMPLES.md` instead of `meteorite init`.
+  - [x] CRUD moved to `docs/examples.md` instead of `meteorite init`.
 - [x] Remove the Meteorite template from Moonstone; Meteorite owns Meteorite project scaffolding.
 - [x] Add CLI discovery/readiness commands:
   - [x] `meteorite help` / `--help` and command-specific help;
