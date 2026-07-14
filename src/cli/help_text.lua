@@ -15,6 +15,7 @@ Commands:
   graph     Generate the Meteorite graph
   doctor    Check local project/tool readiness
   invoke    Invoke a route in-process for diagnostics
+  client    Generate client code from the route graph
   ipc       Send native IPC messages over UNIX sockets
 
 Examples:
@@ -25,6 +26,7 @@ Examples:
   meteorite build --mode hybrid
   meteorite build --mode release-static
   meteorite doctor
+  meteorite client lua src/main.lua .meteorite/client.lua
   meteorite ipc send --socket /tmp/meteorite.sock --message health.get
 
 Run `meteorite help <command>` for command-specific help.]]
@@ -136,6 +138,17 @@ Example:
   meteorite invoke src/main.lua GET /health
   meteorite invoke --headers src/main.lua GET /security/cors
   meteorite invoke --json -H "Origin: https://app.example" src/main.lua GET /security/cors]]
+
+help.client = [[Meteorite client
+
+Usage:
+  meteorite client lua [input] [output]
+
+Targets:
+  lua    Generate a transport-agnostic Lua client module
+
+Examples:
+  meteorite client lua src/main.lua .meteorite/client.lua]]
 
 help.ipc = [[Meteorite IPC
 

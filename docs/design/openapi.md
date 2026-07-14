@@ -44,6 +44,9 @@ meteorite graph src/main.lua .meteorite/graph/current hybrid
 # View the spec
 cat .meteorite/graph/current/openapi.json | python3 -m json.tool
 
+# Generate a transport-agnostic Lua client from the same route graph
+meteorite client lua src/main.lua .meteorite/client.lua
+
 # Serve it with Swagger UI (optional)
 # Copy openapi.json to a static directory and point Swagger UI at it
 ```
@@ -221,14 +224,15 @@ The `openapi-plan.zon` file is an intermediate representation that preserves
 Meteorite-specific metadata (route IDs, canonical IDs, message projections). The
 `openapi.json` file is the final, standards-compliant spec for external consumers.
 
-## Future Work
+## Implemented And Future Work
 
 - [x] Optional `/__meteorite/openapi.json` route for dev/hybrid mode
 - [x] Route-description DSL (`summary`, `description`, `tags`, `operationId`, `responses`)
 - [x] TypeScript client generation path via standard OpenAPI tools
 - [x] Detect undocumented routes and warn in release modes
+- [x] Generated Lua client for service-to-service calls (`meteorite client lua`)
+- [x] Compatibility tests for generated Lua client request construction
 - [ ] Swagger UI static template as optional release asset
-- [ ] Generated Lua client for service-to-service calls
 - [ ] Promote undocumented-route diagnostics from warning to fail-by-mode if v0.1 requires strict docs
 
 ## Client Generation Strategy

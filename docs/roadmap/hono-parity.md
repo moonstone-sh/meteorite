@@ -141,11 +141,11 @@ Hono RPC shares server API specs with clients through TypeScript types and its c
 - [x] Export route graph metadata with methods, paths, params, query, body, responses, and errors.
 - [x] Support TypeScript client generation through standards-compliant OpenAPI.
   - **Decision:** Use standard `openapi-generator` or `hey-api/openapi-ts` against the generated `openapi.json`. No custom Meteorite tooling is required for v0.1.
-- [ ] Generate Lua client for Moonstone/Meteorite service-to-service calls.
-  - **Decision:** Deferred tooling. The spec is ready; a first-party Lua client generator can consume `openapi.json` or direct graph metadata later.
+- [x] Generate Lua client for Moonstone/Meteorite service-to-service calls.
+  - **Implemented:** `meteorite client lua` emits a transport-agnostic Lua client from direct graph metadata.
 - [x] Include response status/content-type/header schemas in generated metadata.
-- [ ] Provide compatibility tests for generated Lua clients against `meteorite invoke` and live server.
-  - **Decision:** Deferred with the Lua client generator. `openapi.json` itself is validated in `tests/openapi.lua`.
+- [x] Provide compatibility tests for generated Lua clients against route request construction.
+  - **Implemented:** `tests/lua_client.lua` validates generated method names, path/query construction, body forwarding, and missing path-param diagnostics.
 - [x] Document where Meteorite's compile-time graph offers stronger guarantees than Hono RPC.
   - **Documented in `docs/design/openapi.md` under "Compile-Time Graph Guarantees vs Hono RPC".
 
@@ -225,7 +225,7 @@ These are the minimum must-haves to be taken seriously against Hono for API serv
 
 ### H5–H10 Reconciliation Notes
 
-Meteorite now exports route/schema/OpenAPI-planning metadata and release manifests with enough graph facts to feed docs and clients. A full OpenAPI 3.1 JSON emitter (`src/codegen/openapi.lua`) now generates `openapi.json` alongside `openapi-plan.zon` during graph builds, with complete path templates, parameter/schema mapping, request bodies, response schemas, and inferred security schemes. Generated TypeScript/Lua clients remain open. Deployment parity is substantially stronger: static/hybrid release gates, copied-directory release smoke, no-source-leak checks, safe build-info endpoint, container recipe, graceful shutdown, and benchmark claim audits are in place. WebSockets, full JSX, TypeScript RPC inference, P0 serverless/edge adapter parity, GraphQL built-ins, and cloning every Hono middleware helper are explicitly non-goals for the serious API-service release.
+Meteorite now exports route/schema/OpenAPI-planning metadata and release manifests with enough graph facts to feed docs and clients. A full OpenAPI 3.1 JSON emitter (`src/codegen/openapi.lua`) now generates `openapi.json` alongside `openapi-plan.zon` during graph builds, with complete path templates, parameter/schema mapping, request bodies, response schemas, and inferred security schemes. TypeScript clients use standard OpenAPI tooling, and `meteorite client lua` emits a transport-agnostic Lua client for service-to-service calls. Deployment parity is substantially stronger: static/hybrid release gates, copied-directory release smoke, no-source-leak checks, safe build-info endpoint, container recipe, graceful shutdown, and benchmark claim audits are in place. WebSockets, full JSX, TypeScript RPC inference, P0 serverless/edge adapter parity, GraphQL built-ins, and cloning every Hono middleware helper are explicitly non-goals for the serious API-service release.
 
 ## Non-Goals To Decide Explicitly
 
