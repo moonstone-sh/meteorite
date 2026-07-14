@@ -1,4 +1,4 @@
-# Docs Stabilization Plan
+# Docs Stabilization
 
 Meteorite's root documentation has been stabilized so the project root stays focused on orientation and `docs/` owns permanent product, design, roadmap, and archive material.
 
@@ -6,12 +6,14 @@ Meteorite's root documentation has been stabilized so the project root stays foc
 
 - `README.md` — public landing page and quick start.
 - `AGENTS.md` — repository-local development and agent instructions.
-- `DOCS_STABILIZATION_PLAN.md` — temporary migration record; remove or move to `docs/maintenance/docs-stabilization.md` after review.
+
+Root markdown is intentionally limited to durable project orientation and agent guidance.
 
 ## Current Docs Layout
 
 ```text
 docs/
+├── README.md
 ├── benchmarks.md
 ├── deployment.md
 ├── examples.md
@@ -25,6 +27,8 @@ docs/
 │   ├── hono-parity.md
 │   ├── ipc-unix-socket-http.md
 │   └── web-standards.md
+├── maintenance/
+│   └── docs-stabilization.md
 └── archive/
     ├── claim-safety-report.md
     ├── final-validation.md
@@ -35,6 +39,7 @@ docs/
 
 | Destination | Role |
 | --- | --- |
+| `docs/README.md` | Human-readable docs index. |
 | `docs/examples.md` | Copyable app examples and route-shape documentation. |
 | `docs/benchmarks.md` | Benchmark methodology, latest results, and benchmark inventory. |
 | `docs/deployment.md` | Release/deployment guidance. |
@@ -62,14 +67,13 @@ docs/
 
 ## Follow-Up Cleanup
 
-- Decide whether this migration record should remain at root, move under `docs/maintenance/`, or be deleted.
-- Optionally add `docs/README.md` as a human-readable docs index.
+- Decide whether this migration record should remain under `docs/maintenance/` or be deleted.
 - Review archived files and delete them if they do not carry useful historical evidence.
 - Rewrite appended migration sections into polished, non-historical prose when each roadmap item matures.
 
 ## Acceptance Criteria
 
-- Root Markdown files are limited to project orientation and this temporary migration record.
+- Root Markdown files are limited to project orientation and repository-local agent guidance.
 - Permanent docs live under `docs/` with stable, lowercase, hyphenated filenames.
 - Status-plan material is rewritten, merged, archived, or scoped under `docs/roadmap/`.
 - Internal references point to the stabilized docs tree.

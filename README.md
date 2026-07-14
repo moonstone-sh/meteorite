@@ -206,10 +206,10 @@ Meteorite separates state by lifetime:
 
 Cross-request mutable state belongs inside capabilities, not inside `c`.
 
-The prototype hybrid runner can invoke inline Lua routes without starting the Zig server:
+The hybrid runner can invoke inline Lua routes without starting the Zig server:
 
 ```bash
 luajit src/cli/main.lua invoke fixtures/apps/hybrid-demo/src/main.lua GET /devices/router_01
 ```
 
-This runner exercises request-local state, declared HTTP/auth capability stubs, declared Zig helper stubs, typed params, and pattern validation. The zig Zig runtime now has a bridge hook for inline/module Lua handlers; embedding a real Lua VM behind that hook is the next step.
+This runner exercises request-local state, declared HTTP/auth capability stubs, declared Zig helper stubs, typed params, and pattern validation. The Zig server embeds the Lua bridge for inline and module handlers in hybrid builds; `meteorite invoke` remains the fast in-process path for route-level checks.
