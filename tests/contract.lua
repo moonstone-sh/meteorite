@@ -2,6 +2,7 @@ package.path = "src/?.lua;src/?/init.lua;tests/?.lua;" .. package.path
 
 local contract = require("core.contract")
 local test = require("test")
+local m = require("meteorite")
 
 -- ============================================================
 -- 1.1 Contract parser tests
@@ -330,6 +331,24 @@ test "transform-only pipeline flagged" (function()
     end,
   })
   test.assert_true(rc._transform_only_pipeline, "should flag transform-only pipeline")
+end)
+
+test "strict docs fail release undocumented routes" (function()
+  local app = m.app({ name = "docs-strict" })
+  app:get("/undocumented", "handlers.ok")
+  test.assert_error(function()
+    app:normalize({ mode = "release-static", strict_docs = true })
+  end, "undocumented routes detected in release build", "strict docs diagnostic")
+end)
+
+test "strict docs accepts documented release routes" (function()
+  local app = m.app({ name = "docs-strict-ok" })
+  app:get("/documented", {
+    summary = "Documented route",
+    responses = { [200] = { description = "OK" } },
+  }, "handlers.ok")
+  local graph = app:normalize({ mode = "release-static", strict_docs = true })
+  test.assert_eq(#graph.routes, 1, "documented graph builds")
 end)
 
 test.run()

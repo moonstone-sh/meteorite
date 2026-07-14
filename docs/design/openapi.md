@@ -232,8 +232,8 @@ Meteorite-specific metadata (route IDs, canonical IDs, message projections). The
 - [x] Detect undocumented routes and warn in release modes
 - [x] Generated Lua client for service-to-service calls (`meteorite client lua`)
 - [x] Compatibility tests for generated Lua client request construction
+- [x] Promote undocumented-route diagnostics from warning to fail-by-mode with `strict_docs` / `METEORITE_STRICT_DOCS=1`
 - [ ] Swagger UI static template as optional release asset
-- [ ] Promote undocumented-route diagnostics from warning to fail-by-mode if v0.1 requires strict docs
 
 ## Client Generation Strategy
 

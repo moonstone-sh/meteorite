@@ -557,10 +557,7 @@ function route.normalize_app(app, opts)
   -- Detect undocumented routes (no summary/description and no response schemas)
   local undocumented = {}
   for _, route in ipairs(nodes) do
-    local has_responses = false
-    for _, _ in pairs(route.responses or {}) do hasResponses = true; break end
-    -- Use a simpler check
-    hasResponses = false
+    local hasResponses = false
     for status, _ in pairs(route.responses or {}) do hasResponses = true; break end
     if not route.summary and not route.description and not hasResponses then
       undocumented[#undocumented + 1] = {
@@ -571,7 +568,6 @@ function route.normalize_app(app, opts)
       }
     end
   end
-  -- In release modes, warn about undocumented routes
   if #undocumented > 0 and (mode == "release-static" or mode == "release-hybrid") then
     local lines = { "undocumented routes detected in release build", "" }
     for _, r in ipairs(undocumented) do
@@ -585,7 +581,10 @@ function route.normalize_app(app, opts)
     lines[#lines + 1] = '    summary = "Route summary",'
     lines[#lines + 1] = '    responses = { [200] = { description = "OK" } },'
     lines[#lines + 1] = '  }, handler)'
-    io.stderr:write(table.concat(lines, "\n") .. "\n")
+    local diagnostic = table.concat(lines, "\n")
+    local strictDocs = opts.strict_docs == true or _G.METEORITE_STRICT_DOCS == true or os.getenv("METEORITE_STRICT_DOCS") == "1"
+    if strictDocs then error(diagnostic, 0) end
+    io.stderr:write(diagnostic .. "\n")
   end
 
   return {
