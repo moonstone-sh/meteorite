@@ -2,7 +2,6 @@
 .moonstone/
 .ballad/
 .meteorite/
-.dist/
 
 # Zig
 zig-cache/
@@ -19,8 +18,8 @@ bench/competitors/*/nginx.conf
 bench/competitors/*/nginx.conf.compiled
 bench/competitors/moonstone-test-env/
 
-# Dev build outputs
-dist/server
+# Dev/release build outputs
+dist/
 
 # OS
 .DS_Store
