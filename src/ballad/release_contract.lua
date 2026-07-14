@@ -158,6 +158,22 @@ local function runtime_source_is_rebuildable(source, kind)
   return kind == "source" or kind == "upstream_archive" or kind == "lua_source" or kind == "puc_lua_source"
 end
 
+local function package_label(package)
+  return tostring(package.name or package.id or package.package or "<unknown>")
+end
+
+local function supported_cmodule_archive(source)
+  source = tostring(source or "")
+  return source:match("%.src%.rock$")
+    or source:match("%.zip$")
+    or source:match("%.tar%.gz$")
+    or source:match("%.tgz$")
+    or source:match("%.tar%.zst$")
+    or source:match("%.tzst$")
+    or source:match("%.tar%.xz$")
+    or source:match("%.tar%.bz2$")
+end
+
 function contract_mod.target_from_opts(opts)
   local runtime = opts.runtime or {}
   return opts.target or runtime.target or runtime.abi_target
@@ -244,13 +260,15 @@ function contract_mod.validate_target_lua(ctx, root, contract, opts)
 end
 
 function contract_mod.validate_packages(ctx, contract, opts)
+  local root = opts.root or "."
   local target = contract_mod.target_from_opts(opts)
   if contract.validation_mode ~= "hybrid" or not contract.requires_target_lua or not contract_mod.is_cross_target(target) then return end
   for _, package in ipairs(opts.packages or {}) do
     if release_assets.package_is_lua_cmodule(package) then
+      local label = package_label(package)
       if not package.source_payload_path or package.source_payload_path == "" then
         ctx.fail(table.concat({
-          "meteorite.release({ mode = 'hybrid', target = '" .. tostring(target) .. "' }) cannot rebuild Lua C module `" .. tostring(package.name) .. "`.",
+          "meteorite.release({ mode = 'hybrid', target = '" .. tostring(target) .. "' }) cannot rebuild Lua C module `" .. label .. "`.",
           "",
           "Missing:",
           "  package.source_payload_path",
@@ -260,13 +278,30 @@ function contract_mod.validate_packages(ctx, contract, opts)
       end
       if not package.rockspec_payload_path or package.rockspec_payload_path == "" then
         ctx.fail(table.concat({
-          "meteorite.release({ mode = 'hybrid', target = '" .. tostring(target) .. "' }) cannot rebuild Lua C module `" .. tostring(package.name) .. "`.",
+          "meteorite.release({ mode = 'hybrid', target = '" .. tostring(target) .. "' }) cannot rebuild Lua C module `" .. label .. "`.",
           "",
           "Missing:",
           "  package.rockspec_payload_path",
           "",
           "Remediation: provide the package rockspec provenance so Meteorite can rebuild the module for " .. tostring(target) .. ".",
         }, "\n"))
+      end
+      if not file_exists(join(root, package.source_payload_path)) then
+        ctx.fail("meteorite.release({ mode = 'hybrid' }) Lua C module source_payload_path does not exist for `" .. label .. "`: " .. tostring(package.source_payload_path))
+      end
+      if not supported_cmodule_archive(package.source_payload_path) then
+        ctx.fail(table.concat({
+          "meteorite.release({ mode = 'hybrid' }) cannot rebuild Lua C module `" .. label .. "` from unsupported source archive.",
+          "",
+          "Source payload:",
+          "  " .. tostring(package.source_payload_path),
+          "",
+          "Supported:",
+          "  .src.rock, .zip, .tar.gz, .tgz, .tar.zst, .tzst, .tar.xz, .tar.bz2",
+        }, "\n"))
+      end
+      if not file_exists(join(root, package.rockspec_payload_path)) then
+        ctx.fail("meteorite.release({ mode = 'hybrid' }) Lua C module rockspec_payload_path does not exist for `" .. label .. "`: " .. tostring(package.rockspec_payload_path))
       end
     end
   end

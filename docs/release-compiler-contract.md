@@ -99,7 +99,7 @@ Cross-target PUC Lua compilation is now verified:
 Known limitations:
 
 - LuaJIT cross-target hybrid releases fail explicitly today; support needs a separate target matrix and host `buildvm` stage.
-- Lua C-module rebuilds currently rely on package rockspecs and a local `luarocks` executable; packages without source/rockspec payloads fail with package-specific diagnostics.
+- Lua C-module rebuilds currently rely on package rockspecs and a local `luarocks` executable; packages without existing source/rockspec payloads, or with unsupported source archive formats, fail during contract validation with package-specific diagnostics.
 - Moonstone runtime/package descriptors should consistently publish source payloads for all production-supported hybrid targets.
 - `build.zig` preserves absolute `-Dgraph-input`, `-Dgraph-output`, and `-Dlua-root` paths when joining project-local build options.
 

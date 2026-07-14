@@ -11,6 +11,12 @@ local retained_lua_contract = {
   },
 }
 
+local function write_file(path, data)
+  local file = assert(io.open(path, "wb"))
+  file:write(data or "")
+  file:close()
+end
+
 local function ctx()
   return {
     fail = function(message) error(message, 0) end,
@@ -48,6 +54,49 @@ test "same-host LuaJIT hybrid does not require cross-target rebuild" (function()
     runtime = { kind = "luajit", version = "2.1" },
   })
   test.assert_eq(result.status, "host_env", "same-host status")
+end)
+
+test "cross-target C module source payload must exist" (function()
+  test.assert_error(function()
+    release_contract.validate_packages(ctx(), retained_lua_contract, {
+      root = ".",
+      target = "aarch64-linux-gnu",
+      packages = {
+        { name = "missingcmodule", kind = "lua_cmodule", source_payload_path = "does/not/exist.tar.gz", rockspec_payload_path = "does/not/exist.rockspec" },
+      },
+    })
+  end, "source_payload_path does not exist for `missingcmodule`", "missing source path")
+end)
+
+test "cross-target C module source archive extension is validated" (function()
+  local source = "/tmp/meteorite-cmodule-source.unsupported"
+  local rockspec = "/tmp/meteorite-cmodule.rockspec"
+  write_file(source, "source")
+  write_file(rockspec, "rockspec")
+  test.assert_error(function()
+    release_contract.validate_packages(ctx(), retained_lua_contract, {
+      target = "aarch64-linux-gnu",
+      packages = {
+        { name = "badarchive", kind = "lua_cmodule", source_payload_path = source, rockspec_payload_path = rockspec },
+      },
+    })
+  end, "unsupported source archive", "unsupported archive")
+  os.remove(source)
+  os.remove(rockspec)
+end)
+
+test "cross-target C module rockspec payload must exist" (function()
+  local source = "/tmp/meteorite-cmodule-source.tar.gz"
+  write_file(source, "source")
+  test.assert_error(function()
+    release_contract.validate_packages(ctx(), retained_lua_contract, {
+      target = "aarch64-linux-gnu",
+      packages = {
+        { name = "norockspec", kind = "lua_cmodule", source_payload_path = source, rockspec_payload_path = "/tmp/meteorite-missing.rockspec" },
+      },
+    })
+  end, "rockspec_payload_path does not exist for `norockspec`", "missing rockspec path")
+  os.remove(source)
 end)
 
 test.run()
