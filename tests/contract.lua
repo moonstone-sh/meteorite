@@ -351,4 +351,37 @@ test "strict docs accepts documented release routes" (function()
   test.assert_eq(#graph.routes, 1, "documented graph builds")
 end)
 
+test "ipc backend rejects annotated HTTP-only hook resources" (function()
+  local app = m.app({ name = "ipc-resource-fail" })
+  app:message({
+    name = "docs.fail",
+    pipeline = function(ctx)
+      ctx:handle({ id = "handle", strat = "zig", symbol = "handlers.ok" })
+      ctx:hook("post_handler", { id = "bad_http_resource", strat = "zig", symbol = "handlers.bad", writes = { "response.headers" } })
+    end,
+  })
+  test.assert_error(function()
+    app:normalize({ mode = "dev", backend = "ipc_unixsocket" })
+  end, "backend-incompatible pipeline resource", "ipc backend resource diagnostic")
+end)
+
+test "ipc backend accepts IPC resource annotations" (function()
+  local app = m.app({ name = "ipc-resource-ok" })
+  app:message({
+    name = "docs.ok",
+    pipeline = function(ctx)
+      ctx:handle({ id = "handle", strat = "zig", symbol = "handlers.ok" })
+      ctx:hook("post_handler", {
+        id = "ipc_resource",
+        strat = "zig",
+        symbol = "handlers.ipc",
+        reads = { "request.message", "request.metadata.id" },
+        writes = { "response.result", "response.metadata.trace" },
+      })
+    end,
+  })
+  local graph = app:normalize({ mode = "dev", backend = "ipc_unixsocket" })
+  test.assert_eq(#graph.messages, 1, "message graph builds")
+end)
+
 test.run()

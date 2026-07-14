@@ -10,9 +10,11 @@ local hooks = {}
 
 hooks.resources = {
   request = "request.method, request.path, request.query, request.headers",
+  ipc_request = "request.message, request.metadata, request.peer",
   route = "route.params, route.policy, route.scope",
   state = "state.*",
   response = "response.status, response.headers, response.body",
+  ipc_response = "response.result, response.metadata",
   body = "body",
   error = "error",
 }

@@ -369,6 +369,46 @@ local function validate_pattern_budget(patterns_list, memory)
   end
 end
 
+local function list_touches(entries, needles)
+  for _, entry in ipairs(entries or {}) do
+    if type(entry) == "string" then
+      for _, needle in ipairs(needles) do
+        if entry == needle or entry:find(needle .. ".", 1, true) == 1 then return entry end
+      end
+    end
+  end
+  return nil
+end
+
+local function validate_backend_resource_contracts(nodes, backend)
+  if backend ~= "ipc_unixsocket" and backend ~= "unix_socket" then return end
+  local http_only = {
+    "request.headers",
+    "response.headers",
+    "response.cookies",
+    "response.redirects",
+    "response.static",
+    "response.etag",
+  }
+  for _, route_node in ipairs(nodes or {}) do
+    for _, stage in ipairs(route_node.pipeline or {}) do
+      local resource = list_touches(stage.reads, http_only) or list_touches(stage.writes, http_only)
+      if resource then
+        error(table.concat({
+          "backend-incompatible pipeline resource",
+          "",
+          "backend: " .. tostring(backend),
+          "route: " .. tostring(route_node.method) .. " " .. tostring(route_node.raw_path),
+          "stage: " .. tostring(stage.id or stage.kind or "stage"),
+          "resource: " .. tostring(resource),
+          "",
+          "hint: native IPC stages should use request.message, request.metadata, response.result, or response.metadata; keep HTTP-only helpers behind an HTTP backend.",
+        }, "\n"), 0)
+      end
+    end
+  end
+end
+
 --- Normalize an app's routes into a graph.
 ---@param app table  Meteorite app
 ---@param opts table  Options (mode, etc.)
@@ -376,6 +416,7 @@ end
 function route.normalize_app(app, opts)
   opts = opts or {}
   local mode = opts.mode or "dev"
+  local backend = opts.backend or _G.METEORITE_BACKEND or "fast_http"
   local resolved_profile = profiles.resolve(app.profile or (app.options and app.options.profile))
   local routes = {}
   local messages = {}
@@ -553,6 +594,8 @@ function route.normalize_app(app, opts)
     plugin_graph.plugin_codegen_units = plugin_result.codegen_units
     plugin_graph.plugin_profile_counters = plugin_result.profile_counters
   end
+
+  validate_backend_resource_contracts(nodes, backend)
 
   -- Detect undocumented routes (no summary/description and no response schemas)
   local undocumented = {}

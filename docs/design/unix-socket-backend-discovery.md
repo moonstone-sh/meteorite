@@ -406,19 +406,19 @@ Annotation: IPC dispatch now prefers graph-owned native message identity (`users
 - [x] Add `ctx:metadata(name)` or equivalent IPC-safe metadata accessor.
 - [x] Keep `ctx:header` and `ctx:headers` HTTP-specific unless an explicit metadata bridge is requested.
 - [x] Make CORS, cookies, redirects, secure headers, static file helpers, ETag helpers, and conditional request helpers fail clearly under `unix_socket`.
-- [ ] Prefer compile-time diagnostics for statically detectable backend-incompatible helpers.
-- [ ] Use deterministic runtime errors for dynamic helper usage that cannot be proven at graph-build time.
+- [x] Prefer compile-time diagnostics for statically detectable backend-incompatible helpers.
+- [x] Use deterministic runtime errors for dynamic helper usage that cannot be proven at graph-build time.
 
 Annotation: the compatibility promise is “portable Meteorite routes run unchanged,” not “all HTTP features magically become IPC features.”
 
-Annotation: native IPC fixture coverage now exercises message/metadata accessors, JSON/body helpers, binary bytes responses, request IDs, scoped plugin state via `ctx:set`/`ctx:get`, logging, and HTTP helper separation. Dynamic HTTP-only helper use is still reported through deterministic backend capability errors at the route boundary.
+Annotation: native IPC fixture coverage now exercises message/metadata accessors, JSON/body helpers, binary bytes responses, request IDs, scoped plugin state via `ctx:set`/`ctx:get`, logging, and HTTP helper separation. Dynamic HTTP-only helper use is still reported through deterministic backend capability errors at the route boundary. Statically annotated hook resources now fail during graph normalization for `ipc_unixsocket` when they declare HTTP-only resources such as `request.headers` or `response.headers`.
 
 ## Phase U8 — Middleware, Hooks, Error Boundary, And Validation
 
 - [x] Run scoped middleware and hooks for IPC requests through the same pipeline contract as HTTP.
 - [x] Preserve before/after ordering, short-circuit behavior, post-handler mutation, and error boundaries.
-- [ ] Extend resource contracts with IPC resources: `request.message`, `request.metadata`, `request.peer`, `response.result`, and `response.metadata`.
-- [ ] Preserve existing HTTP resource contracts without weakening them.
+- [x] Extend resource contracts with IPC resources: `request.message`, `request.metadata`, `request.peer`, `response.result`, and `response.metadata`.
+- [x] Preserve existing HTTP resource contracts without weakening them.
 - [x] Reuse params, query, body, JSON body, and schema validation where applicable.
 - [x] Add metadata/envelope validation only where it is explicitly represented in graph metadata.
 - [x] Map validation failures to `validation_error` with structured response metadata.
@@ -468,7 +468,7 @@ Annotation: the CLI is the developer bridge for IPC. Users should not need custo
 - [x] Add copied-release smoke tests for `ipc_unixsocket` with source tree removed.
 - [x] Verify copied releases can bind a configured socket and serve native-message requests.
 - [x] Verify shutdown cleanup behavior matches `unlink_stale` and does not remove unsafe paths.
-- [ ] Add systemd, launchd, and supervisor notes for socket paths and permissions.
+- [x] Add systemd, launchd, and supervisor notes for socket paths and permissions.
 
 Annotation: releases should make IPC deployment auditable. Manifest metadata may include intentional socket config, but must not leak project roots, build directories, or host-only source paths.
 
@@ -506,13 +506,15 @@ Annotation: docs should teach users that changing backend is configuration, whil
 
 ## Suggested Test Matrix
 
-- [ ] `portable`: text response, JSON response, params, query, body read, JSON body validation, middleware state, short-circuit, error boundary, logging, request id.
-- [ ] `native_message`: explicit `users.get`, slash input `users/get`, mounted-scope normalization, collision diagnostics, route inspection, release metadata.
-- [ ] `http_compat`: `GET /users/:id` mapped to native message through graph metadata, query string compatibility, method mismatch behavior.
-- [ ] `http_only`: CORS, cookies, redirects, secure headers, raw headers, static files, conditional requests, `HEAD`, and `405 Allow`.
+- [x] `portable`: text response, JSON response, params, query, body read, JSON body validation, middleware state, short-circuit, error boundary, logging, request id.
+- [x] `native_message`: explicit `users.get`, slash input `users/get`, mounted-scope normalization, collision diagnostics, route inspection, release metadata.
+- [x] `http_compat`: `GET /users/:id` mapped to native message through graph metadata, query string compatibility, method mismatch behavior.
+- [x] `http_only`: CORS, cookies, redirects, secure headers, raw headers, static files, conditional requests, `HEAD`, and `405 Allow`.
 - [ ] `ipc_only`: frame parsing, malformed frame, oversized frame, protocol mismatch, socket permissions, stale socket unlink, request ID correlation, multiple frames, IPC metadata, peer credentials.
-- [ ] `benchmark`: accepted/completed, active/inflight, queue depth, budget rejections, backpressure, malformed frame count, bytes read/written, and inflight max.
-- [ ] `release`: static copied release, hybrid copied release, no source leaks, safe manifest socket metadata, socket cleanup behavior.
+- [x] `benchmark`: accepted/completed, active/inflight, queue depth, budget rejections, backpressure, malformed frame count, bytes read/written, and inflight max.
+- [x] `release`: static copied release, hybrid copied release, no source leaks, safe manifest socket metadata, socket cleanup behavior.
+
+Annotation: the remaining `ipc_only` matrix gap is peer credentials. All non-peer protocol, metadata, stale socket, request-correlation, multi-frame, and malformed-frame cases are covered by `fixtures/tests/ipc-backends.sh` and `fixtures/tests/ipc-release-smoke.sh`.
 
 ## Compatibility Statement
 
@@ -524,4 +526,4 @@ Portable Meteorite routes should run on `std_http`, `fast_http`, or `unix_socket
 - [x] Add backend enum/config stub for `unix_socket`.
 - [x] Add native message identity to graph metadata and route inspection.
 - [x] Define slash-to-dot normalization and collision diagnostics.
-- [ ] Add protocol parser/writer design tests before listener dispatch.
+- [x] Add protocol parser/writer design tests before listener dispatch.
