@@ -108,6 +108,19 @@ pub fn response_post_header_hook(ctx: anytype) !void {
     try ctx.responseHeader("X-Meteorite-Post-Handler", "mutated");
 }
 
+var pre_handler_hook_seen = false;
+
+pub fn response_pre_handler_hook(ctx: anytype) !void {
+    _ = ctx;
+    pre_handler_hook_seen = true;
+}
+
+pub fn response_pre_handler_base(ctx: anytype) !void {
+    const body = if (pre_handler_hook_seen) "pre-handler:hooked" else "pre-handler:missing";
+    pre_handler_hook_seen = false;
+    try ctx.text(200, body);
+}
+
 pub fn response_post_header_injection_hook(ctx: anytype) !void {
     try ctx.responseHeader("X-Meteorite-Post-Handler", "safe\r\nInjected: bad");
 }

@@ -912,6 +912,7 @@ expect_header /headers/zig-bytes X-Meteorite-Zig bytes
 expect_header /headers/zig-bytes content-type application/octet-stream
 expect_method_status 204 GET /headers/zig-empty
 expect_header /headers/zig-empty X-Meteorite-Zig empty
+expect_body pre-handler:hooked /middleware/pre-handler
 
 expect_invalid_response_header() {
   local path="$1"

@@ -108,7 +108,7 @@ pub fn Execution(comptime graph: anytype, comptime lua_runtime: anytype, comptim
                             if (stage.kind == .handle) {
                                 graph.bindings.callRoute(route.id, ctx) catch |err| return respondRouteStageError(stage, ctx, err);
                             }
-                            if (stage.kind == .hook and stage.phase == .post_handler) {
+                            if (stage.kind == .hook) {
                                 graph.bindings.callHandlerBySymbol(stage.symbol, ctx) catch |err| return respondRouteStageError(stage, ctx, err);
                             }
                         },

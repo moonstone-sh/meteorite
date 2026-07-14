@@ -288,6 +288,20 @@ app:get({
 	end,
 })
 
+app:get({
+	route = "/middleware/pre-handler",
+	pipeline = function(ctx)
+		ctx:hook("pre_handler", {
+			id = "pre_handler_state_hook",
+			strat = "zig",
+			symbol = "response_pre_handler_hook",
+			writes = { "state.pre_handler" },
+			may_short_circuit = false,
+		})
+		ctx:handle({ id = "pre_handler_handle", strat = "zig", symbol = "response_pre_handler_base" })
+	end,
+})
+
 app:get("/headers/invalid/reserved", function()
 	return {
 		status = 200,
