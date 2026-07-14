@@ -17,6 +17,10 @@ local function write_file(path, data)
   file:close()
 end
 
+local function mkdir_p(path)
+  assert(os.execute("mkdir -p " .. string.format("%q", path)))
+end
+
 local function ctx()
   return {
     fail = function(message) error(message, 0) end,
@@ -77,6 +81,39 @@ test "same-host LuaJIT hybrid does not require cross-target rebuild" (function()
     runtime = { kind = "luajit", version = "2.1" },
   })
   test.assert_eq(result.status, "host_env", "same-host status")
+end)
+
+test "project runtime source hydrates from Moonstone artifact manifest" (function()
+  local root = os.tmpname()
+  os.remove(root)
+  mkdir_p(root .. "/sources")
+  write_file(root .. "/sources/source.tar.gz", "lua source")
+  write_file(root .. "/manifest.toml", table.concat({
+    "[artifact]",
+    'source_hash = "b3:source"',
+    "",
+    "[origin]",
+    'source_kind = "puc_lua_source"',
+    'source_payload = "sources/source.tar.gz"',
+    "",
+  }, "\n"))
+
+  local opts = release_contract.normalize_opts({
+    project = {
+      root = ".",
+      runtime = {
+        name = "lua",
+        version = "5.4.7",
+        artifact_path = root,
+      },
+    },
+  })
+
+  test.assert_eq(opts.runtime.source_kind, "puc_lua_source", "source kind")
+  test.assert_eq(opts.runtime.source_payload, "sources/source.tar.gz", "source payload")
+  test.assert_eq(opts.runtime.source_payload_path, root .. "/sources/source.tar.gz", "source path")
+  test.assert_eq(opts.runtime.source_hash, "b3:source", "source hash")
+  test.assert_eq(opts.runtime.manifest_path, root .. "/manifest.toml", "manifest path")
 end)
 
 test "cross-target C module source payload must exist" (function()

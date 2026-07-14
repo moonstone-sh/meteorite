@@ -23,12 +23,12 @@ The audit found and fixed one fixture-local build drift:
 | `bash fixtures/tests/release-smoke.sh` | Pass | Static release layout, copied release execution, no-source-leak checks. |
 | `bash fixtures/tests/ipc-release-smoke.sh` | Pass | IPC release manifest/release smoke path. |
 | `zig build` | Pass | Root showcase-service build sanity check. |
-| `METEORITE_CROSS_TARGET_ALLOW_SKIP=1 bash fixtures/tests/cross-target.sh` | Pass | Discovered PUC Lua source from the Moonstone runtime store and produced an `aarch64-linux-gnu` hybrid release. |
+| `bash fixtures/tests/cross-target.sh` | Pass | Consumed Ballad/Moonstone project runtime facts, hydrated PUC Lua source from the Moonstone artifact manifest, and produced an `aarch64-linux-gnu` hybrid release. |
 
 ## Environment Notes
 
 - Zig build commands needed access to Zig's standard library and global cache outside the workspace sandbox.
-- Local cross-target Lua source archive was not present at `../moonstone-tools/scripts/runtime/src/lua-5.4.7.tar.gz`, but the Moonstone runtime store exposed `source_kind = "puc_lua_source"` with `sources/source.tar.gz`; `fixtures/tests/cross-target.sh` now discovers that store source automatically from `.moonstone/env/dependencies.toml`.
+- Local cross-target Lua source archive was not present at `../moonstone-tools/scripts/runtime/src/lua-5.4.7.tar.gz`, but the Ballad/Moonstone project runtime fact points at a Moonstone artifact whose `manifest.toml` exposes `source_kind = "puc_lua_source"` and `sources/source.tar.gz`; Meteorite now hydrates that manifest provenance during release option normalization.
 - Several fixture release builds intentionally print strict-doc diagnostics for undocumented fixture routes; those diagnostics are expected coverage, not audit failures.
 
 ## Current Supported Release Path
@@ -46,13 +46,7 @@ The audit found and fixed one fixture-local build drift:
 
 ## Next Audit Step
 
-Run the optional local cross-target audit to skip cleanly when the PUC Lua source archive is unavailable:
-
-```bash
-moon run test-cross-target:optional
-```
-
-Run the required cross-target audit when the PUC Lua source archive is available:
+Run the required cross-target audit:
 
 ```bash
 moon run test-cross-target

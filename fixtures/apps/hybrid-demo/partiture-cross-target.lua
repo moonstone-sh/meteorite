@@ -1,8 +1,8 @@
 local ballad = require("ballad")
+local moonstone = require("ballad.plugins.moonstone")
 local meteorite = require("meteorite.ballad")
 
 local target = os.getenv("METEORITE_CROSS_TARGET") or "aarch64-linux-gnu"
-local lua_source = os.getenv("METEORITE_LUA_SOURCE") or ""
 local cmodule_source = os.getenv("METEORITE_CMODULE_SOURCE") or ""
 local cmodule_rockspec = os.getenv("METEORITE_CMODULE_ROCKSPEC") or ""
 
@@ -20,7 +20,9 @@ end
 
 return ballad.partiture(function(p)
   local m = p:use(meteorite)
+  local project = moonstone.project_prepare({ root = ".", roles = { "runtime" } })
   local release = m.release({
+    project = project,
     root = "fixtures/apps/hybrid-demo",
     input = "src/main.lua",
     graph_output = ".meteorite/graph/release",
@@ -30,10 +32,6 @@ return ballad.partiture(function(p)
     bin = "bin/server",
     backend = "std_http",
     router_dispatch = "param_matchers",
-    runtime = {
-      source_payload_path = lua_source,
-      source_kind = "puc_lua_source",
-    },
     packages = packages,
   })
   p.sink.directory(release, { out = "fixtures/apps/hybrid-demo/dist/release", file_graph = true })

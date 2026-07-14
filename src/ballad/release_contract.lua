@@ -1,4 +1,5 @@
 local release_assets = require("ballad.release_assets")
+local toml = require("ballad.toml")
 
 local contract_mod = {}
 
@@ -14,6 +15,38 @@ local function file_exists(file_path)
   return false
 end
 
+local function read_file(file_path)
+  local f = io.open(file_path, "rb")
+  if not f then return nil end
+  local data = f:read("*a")
+  f:close()
+  return data
+end
+
+local function hydrate_runtime_source_from_manifest(runtime)
+  if type(runtime) ~= "table" then return runtime end
+  if runtime.source_payload_path and runtime.source_payload_path ~= "" then return runtime end
+  local artifact_path = runtime.artifact_path or runtime.path
+  if not artifact_path or artifact_path == "" then return runtime end
+  local manifest_path = runtime.manifest_path or join(artifact_path, "manifest.toml")
+  local content = read_file(manifest_path)
+  if not content then return runtime end
+  local decoded = toml.parse(content)
+  local origin = decoded and decoded.origin or {}
+  local source_payload = origin.source_payload
+  if source_payload and source_payload ~= "" then
+    local source_payload_path = join(artifact_path, source_payload)
+    if file_exists(source_payload_path) then
+      runtime.source_payload = runtime.source_payload or source_payload
+      runtime.source_payload_path = source_payload_path
+      runtime.source_kind = runtime.source_kind or origin.source_kind
+      runtime.source_hash = runtime.source_hash or ((decoded.artifact or {}).source_hash)
+      runtime.manifest_path = manifest_path
+    end
+  end
+  return runtime
+end
+
 function contract_mod.normalize_mode(mode)
   mode = mode or "hybrid"
   if mode == "hybrid" or mode == "release-hybrid" then return "release-hybrid", "hybrid" end
@@ -26,7 +59,7 @@ function contract_mod.normalize_opts(opts)
   local project = opts.project or opts.moonstone_project
   if project then
     opts.root = opts.root or project.root
-    opts.runtime = opts.runtime or project.runtime
+    opts.runtime = opts.runtime or hydrate_runtime_source_from_manifest(project.runtime)
     opts.packages = opts.packages or project.packages
     opts.target = opts.target or (project.runtime and project.runtime.target)
   end

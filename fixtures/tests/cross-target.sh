@@ -10,44 +10,6 @@ cd "$ROOT"
 source "$(dirname "${BASH_SOURCE[0]}")/cleanup.sh"
 export MOONSTONE_HOME="$ROOT/.moonstone-home"
 
-# Locate the Lua source archive for cross-compilation.
-# Priority: METEORITE_LUA_SOURCE env → moonstone-tools runtime src → local store source
-LUA_SOURCE="${METEORITE_LUA_SOURCE:-}"
-if [ -z "$LUA_SOURCE" ]; then
-  for candidate in \
-    "$ROOT/../moonstone-tools/scripts/runtime/src/lua-5.4.7.tar.gz" \
-    "$ROOT/../moonstone-tools/scripts/runtime/src/lua-5.1.5.tar.gz"
-  do
-    if [ -f "$candidate" ]; then
-      LUA_SOURCE="$candidate"
-      break
-    fi
-  done
-fi
-if [ -z "$LUA_SOURCE" ] && [ -f "$ROOT/.moonstone/env/dependencies.toml" ]; then
-  runtime_path="$(awk '
-    $1 == "name" && $3 == "\"moonstone/lua\"" { in_lua = 1 }
-    in_lua && $1 == "path" {
-      path = $3
-      gsub(/^\"|\"$/, "", path)
-      print path
-      exit
-    }
-  ' "$ROOT/.moonstone/env/dependencies.toml")"
-  if [ -n "$runtime_path" ] && [ -f "$runtime_path/sources/source.tar.gz" ]; then
-    LUA_SOURCE="$runtime_path/sources/source.tar.gz"
-  fi
-fi
-if [ -z "$LUA_SOURCE" ] || [ ! -f "$LUA_SOURCE" ]; then
-  echo "cross-target: no Lua source archive found." >&2
-  echo "  Set METEORITE_LUA_SOURCE=/path/to/lua-5.4.7.tar.gz or ensure moonstone-tools is present." >&2
-  if [ "${METEORITE_CROSS_TARGET_ALLOW_SKIP:-}" = "1" ]; then
-    echo "SKIP: Meteorite cross-target hybrid release ($TARGET) requires a Lua source archive." >&2
-    exit 0
-  fi
-  exit 1
-fi
-echo "cross-target: using Lua source: $LUA_SOURCE"
 echo "cross-target: target: $TARGET"
 
 CMODULE_FIXTURE_DIR="$(mktemp -d /tmp/meteorite-cross-cmodule.XXXXXX)"
@@ -118,7 +80,6 @@ rm -rf fixtures/apps/hybrid-demo/dist/release fixtures/apps/hybrid-demo/.meteori
 LUA_PATH="$LUA_PROJECT_PATH" \
 PATH="$CMODULE_FIXTURE_DIR/bin:$PATH" \
 METEORITE_CROSS_TARGET="$TARGET" \
-METEORITE_LUA_SOURCE="$LUA_SOURCE" \
 METEORITE_CMODULE_SOURCE="$CMODULE_FIXTURE_DIR/mockcmodule.tar.gz" \
 METEORITE_CMODULE_ROCKSPEC="$CMODULE_FIXTURE_DIR/mockcmodule-0.1-1.rockspec" \
 ZIG_GLOBAL_CACHE_DIR="$ZIG_CACHE_DIR" \
