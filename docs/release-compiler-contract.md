@@ -293,7 +293,7 @@ graph-readable contract. See `src/core/contract.lua` for the implementation.
 - [x] Graph JSON snapshot tests (`tests/routes_graph.lua`)
 - [x] Diagnostics: pipeline failure with route id, stage id, kind, strat, path, owner
 - [x] Dev endpoint `/__meteorite/graph` for runtime graph inspection
-- [ ] Runtime transform execution (v0.1 stubs transforms, need request-time execution)
+- [x] Runtime transform execution (Zig transform stages run in pipeline order)
 - [x] Runtime hook execution (Zig hooks run in phase-validated pipeline order)
 - [x] Plugin wiring into meteorite.lua app:use (graph plugins registered, run_passes in normalize_app)
 - [x] Documentation: canonical route contract, pipeline declaration, transform notation (`docs/design/route-contract.md`)

@@ -105,6 +105,9 @@ pub fn Execution(comptime graph: anytype, comptime lua_runtime: anytype, comptim
                             }
                         },
                         .zig => {
+                            if (stage.kind == .transform) {
+                                graph.bindings.callHandlerBySymbol(stage.symbol, ctx) catch |err| return respondRouteStageError(stage, ctx, err);
+                            }
                             if (stage.kind == .handle) {
                                 graph.bindings.callRoute(route.id, ctx) catch |err| return respondRouteStageError(stage, ctx, err);
                             }

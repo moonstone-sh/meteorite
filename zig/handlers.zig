@@ -121,6 +121,19 @@ pub fn response_pre_handler_base(ctx: anytype) !void {
     try ctx.text(200, body);
 }
 
+var transform_stage_seen = false;
+
+pub fn response_transform_stage(ctx: anytype) !void {
+    _ = ctx;
+    transform_stage_seen = true;
+}
+
+pub fn response_transform_base(ctx: anytype) !void {
+    const body = if (transform_stage_seen) "transform:ran" else "transform:missing";
+    transform_stage_seen = false;
+    try ctx.text(200, body);
+}
+
 pub fn response_post_header_injection_hook(ctx: anytype) !void {
     try ctx.responseHeader("X-Meteorite-Post-Handler", "safe\r\nInjected: bad");
 }

@@ -302,6 +302,19 @@ app:get({
 	end,
 })
 
+app:get({
+	route = "/middleware/transform",
+	pipeline = function(ctx)
+		ctx:transform({
+			id = "transform_state_stage",
+			strat = "zig",
+			symbol = "response_transform_stage",
+			writes = { "state.transform" },
+		})
+		ctx:handle({ id = "transform_handle", strat = "zig", symbol = "response_transform_base" })
+	end,
+})
+
 app:get("/headers/invalid/reserved", function()
 	return {
 		status = 200,
