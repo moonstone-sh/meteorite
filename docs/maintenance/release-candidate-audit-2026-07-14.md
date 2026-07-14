@@ -23,6 +23,7 @@ The audit found and fixed one fixture-local build drift:
 | `bash fixtures/tests/release-smoke.sh` | Pass | Static release layout, copied release execution, no-source-leak checks. |
 | `bash fixtures/tests/ipc-release-smoke.sh` | Pass | IPC release manifest/release smoke path. |
 | `zig build` | Pass | Root showcase-service build sanity check. |
+| `METEORITE_CROSS_TARGET_ALLOW_SKIP=1 bash fixtures/tests/cross-target.sh` | Skip | Local PUC Lua source archive was unavailable. |
 
 ## Environment Notes
 
@@ -45,7 +46,13 @@ The audit found and fixed one fixture-local build drift:
 
 ## Next Audit Step
 
-Run the cross-target audit when the PUC Lua source archive is available:
+Run the optional local cross-target audit to skip cleanly when the PUC Lua source archive is unavailable:
+
+```bash
+moon run test-cross-target:optional
+```
+
+Run the required cross-target audit when the PUC Lua source archive is available:
 
 ```bash
 moon run test-cross-target

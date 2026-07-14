@@ -27,6 +27,10 @@ fi
 if [ -z "$LUA_SOURCE" ] || [ ! -f "$LUA_SOURCE" ]; then
   echo "cross-target: no Lua source archive found." >&2
   echo "  Set METEORITE_LUA_SOURCE=/path/to/lua-5.4.7.tar.gz or ensure moonstone-tools is present." >&2
+  if [ "${METEORITE_CROSS_TARGET_ALLOW_SKIP:-}" = "1" ]; then
+    echo "SKIP: Meteorite cross-target hybrid release ($TARGET) requires a Lua source archive." >&2
+    exit 0
+  fi
   exit 1
 fi
 echo "cross-target: using Lua source: $LUA_SOURCE"
