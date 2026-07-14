@@ -33,6 +33,26 @@ function contract_mod.normalize_opts(opts)
   return opts
 end
 
+local function deployment_adapter(opts)
+  return opts.adapter or opts.deployment_adapter or opts.runtime_adapter or opts.platform or opts.deploy_target
+end
+
+function contract_mod.validate_deployment_adapter(ctx, opts)
+  local adapter = deployment_adapter(opts or {})
+  if not adapter or adapter == "" or adapter == "binary" or adapter == "native" or adapter == "server" then return end
+  local normalized = tostring(adapter):lower()
+  if normalized == "serverless" or normalized == "edge" or normalized == "cloudflare" or normalized == "lambda" or normalized == "wasm" then
+    ctx.fail(table.concat({
+      "meteorite.release does not support `" .. tostring(adapter) .. "` deployment adapters in the current service-layer release.",
+      "",
+      "Meteorite currently emits a compiled binary server release directory, not a serverless function, edge worker, or WASM adapter artifact.",
+      "",
+      "Remediation: deploy the binary behind a proxy/CDN for edge routing, or choose adapter = 'binary' / omit adapter until serverless/edge adapter contracts are designed.",
+    }, "\n"))
+  end
+  ctx.fail("meteorite.release: unsupported deployment adapter `" .. tostring(adapter) .. "`; expected binary/native/server")
+end
+
 local function source_at(item)
   local source = item and item.source or {}
   local file = source.file or source.short_src or "<unknown>"

@@ -114,6 +114,7 @@ return {
 
   release = function(ctx, inputs, opts)
     opts = release_contract.normalize_opts(opts)
+    release_contract.validate_deployment_adapter(ctx, opts)
     local root = opts.root or "."
     local input = join(root, opts.input or "src/main.lua")
     local graph_output = join(root, opts.graph_output or ".meteorite/graph/current")

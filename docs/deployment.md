@@ -218,5 +218,10 @@ Serverless/edge deployment is explicitly out of scope for the current release.
 Future adapter work could target WASM or edge-compute platforms, but the core
 Meteorite compiler focuses on self-contained binary deployments.
 
+`meteorite.release({ adapter = "serverless" })`, `adapter = "edge"`, and
+related deployment-adapter spellings fail during release contract validation.
+Use the default binary/native adapter and place Meteorite behind your platform's
+proxy, CDN, load balancer, or function edge layer when you need edge routing.
+
 If you need edge deployment today, run Meteorite behind an edge proxy or CDN
 that forwards to a Meteorite instance deployed via systemd, launchd, or container.

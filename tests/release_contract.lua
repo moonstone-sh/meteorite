@@ -23,6 +23,29 @@ local function ctx()
   }
 end
 
+test "binary deployment adapter is accepted" (function()
+  release_contract.validate_deployment_adapter(ctx(), { adapter = "binary" })
+  release_contract.validate_deployment_adapter(ctx(), { platform = "native" })
+end)
+
+test "serverless deployment adapter fails explicitly" (function()
+  test.assert_error(function()
+    release_contract.validate_deployment_adapter(ctx(), { adapter = "serverless" })
+  end, "does not support `serverless` deployment adapters", "serverless diagnostic")
+end)
+
+test "edge deployment adapter diagnostic explains binary release" (function()
+  test.assert_error(function()
+    release_contract.validate_deployment_adapter(ctx(), { deployment_adapter = "edge" })
+  end, "compiled binary server release directory", "edge diagnostic")
+end)
+
+test "unknown deployment adapter fails before release build" (function()
+  test.assert_error(function()
+    release_contract.validate_deployment_adapter(ctx(), { adapter = "workers" })
+  end, "unsupported deployment adapter `workers`", "unknown adapter diagnostic")
+end)
+
 test "cross-target LuaJIT fails with explicit diagnostic" (function()
   test.assert_error(function()
     release_contract.validate_target_lua(ctx(), ".", retained_lua_contract, {
