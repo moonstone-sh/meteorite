@@ -117,6 +117,7 @@ end
 ---@class MeteoriteModule
 ---@field patterns table
 ---@field profiles table
+---@field template table Small dependency-free `{{name}}` string template helper; not an HTML engine
 ---@field app fun(opts?: MeteoriteAppOptions): MeteoriteApp
 ---@field profile fun(name_or_table?: string|table, opts?: table): table
 ---@field string fun(opts?: {max?: integer, max_len?: integer, optional?: boolean, decode?: boolean, validate?: string|function|table, pattern?: MeteoritePattern}): MeteoriteSchemaValue

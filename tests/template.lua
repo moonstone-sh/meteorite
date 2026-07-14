@@ -1,11 +1,22 @@
 package.path = "src/?.lua;src/?/init.lua;tests/?.lua;" .. package.path
 
-local template = require("codegen.template")
+local template = require("core.template")
+local codegen_template = require("codegen.template")
+local m = require("meteorite")
 local test = require("test")
 
 test "template.render substitutes placeholders" (function()
   local result = template.render("Hello {{name}}!", {name = "world"})
   test.assert_eq(result, "Hello world!")
+end)
+
+test "meteorite exports public template helper" (function()
+  local result = m.template.render("Hello {{name}}!", { name = "Meteorite" })
+  test.assert_eq(result, "Hello Meteorite!")
+end)
+
+test "codegen.template remains compatibility shim" (function()
+  test.assert_eq(codegen_template.render("{{x}}", { x = "ok" }), "ok")
 end)
 
 test "template.render handles multiple placeholders" (function()

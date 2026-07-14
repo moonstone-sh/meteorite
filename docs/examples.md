@@ -3,6 +3,27 @@
 Examples are copyable app shapes, not `meteorite init` templates. Init stays focused
 on Meteorite execution modes: minimal hybrid, static Zig, and hybrid Lua+Zig.
 
+## Tiny String Templates
+
+Meteorite exposes `m.template.render()` as a dependency-free helper for simple
+`{{name}}` string substitution. It is intentionally not an HTML/template engine:
+escaping, loops, layouts, and partials belong to app-selected libraries such as
+`etlua`.
+
+```lua
+local m = require("meteorite")
+
+local app = m.app({ name = "template-example" })
+
+app:get("/hello/:name", function(c)
+  return c:text(m.template.render("Hello {{name}}!", {
+    name = c:param("name"),
+  }))
+end)
+
+return app
+```
+
 ## CRUD-Shaped Service
 
 Meteorite is database agnostic. The repository methods below are placeholders:
