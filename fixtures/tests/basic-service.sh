@@ -90,8 +90,8 @@ expect_status 404 http://127.0.0.1:8080/files/../../secret
 expect_status 404 http://127.0.0.1:8080/slugs/bad.slug
 expect_status 404 http://127.0.0.1:8080/uuids/not-a-uuid
 expect_status 404 http://127.0.0.1:8080/hex/abc
-expect_status 404 http://127.0.0.1:8080/search
-expect_status 404 'http://127.0.0.1:8080/search?q=lua&page=abc'
+expect_status 400 http://127.0.0.1:8080/search
+expect_status 400 'http://127.0.0.1:8080/search?q=lua&page=abc'
 too_many_pairs="$(python3 - <<'PY'
 print('&'.join('q%d=x' % i for i in range(70)), end='')
 PY
@@ -121,6 +121,13 @@ s = s.replace('"../../../src/cli/main.lua"', f'"{root}/src/cli/main.lua"')
 s = s.replace('b.path("../../../zig/pattern.zig")', f'.{{ .cwd_relative = "{root}/zig/pattern.zig" }}')
 s = s.replace('b.path("../../../zig/meteorite.zig")', f'.{{ .cwd_relative = "{root}/zig/meteorite.zig" }}')
 s = s.replace('b.path("../../../zig/bridge.zig")', f'.{{ .cwd_relative = "{root}/zig/bridge.zig" }}')
+s = s.replace('b.path("../../../zig/backends/protocol.zig")', f'.{{ .cwd_relative = "{root}/zig/backends/protocol.zig" }}')
+s = s.replace('b.path("../../../zig/server/http_date.zig")', f'.{{ .cwd_relative = "{root}/zig/server/http_date.zig" }}')
+s = s.replace('b.path("../../../zig/server/signals.zig")', f'.{{ .cwd_relative = "{root}/zig/server/signals.zig" }}')
+s = s.replace('b.path("../../../zig/bridge/lua_bench_stats.zig")', f'.{{ .cwd_relative = "{root}/zig/bridge/lua_bench_stats.zig" }}')
+s = s.replace('b.path("../../../zig/server/validators.zig")', f'.{{ .cwd_relative = "{root}/zig/server/validators.zig" }}')
+s = s.replace('b.path("../../../zig/server/static_files.zig")', f'.{{ .cwd_relative = "{root}/zig/server/static_files.zig" }}')
+s = s.replace('b.path("../../../zig/server/request_limits.zig")', f'.{{ .cwd_relative = "{root}/zig/server/request_limits.zig" }}')
 p.write_text(s)
 PY
 (cd "$tmp_missing" && ! zig build install-server >/tmp/meteorite-missing-build.log 2>&1)
@@ -319,6 +326,13 @@ s = s.replace('"../../../src/cli/main.lua"', f'"{root}/src/cli/main.lua"')
 s = s.replace('b.path("../../../zig/pattern.zig")', f'.{{ .cwd_relative = "{root}/zig/pattern.zig" }}')
 s = s.replace('b.path("../../../zig/meteorite.zig")', f'.{{ .cwd_relative = "{root}/zig/meteorite.zig" }}')
 s = s.replace('b.path("../../../zig/bridge.zig")', f'.{{ .cwd_relative = "{root}/zig/bridge.zig" }}')
+s = s.replace('b.path("../../../zig/backends/protocol.zig")', f'.{{ .cwd_relative = "{root}/zig/backends/protocol.zig" }}')
+s = s.replace('b.path("../../../zig/server/http_date.zig")', f'.{{ .cwd_relative = "{root}/zig/server/http_date.zig" }}')
+s = s.replace('b.path("../../../zig/server/signals.zig")', f'.{{ .cwd_relative = "{root}/zig/server/signals.zig" }}')
+s = s.replace('b.path("../../../zig/bridge/lua_bench_stats.zig")', f'.{{ .cwd_relative = "{root}/zig/bridge/lua_bench_stats.zig" }}')
+s = s.replace('b.path("../../../zig/server/validators.zig")', f'.{{ .cwd_relative = "{root}/zig/server/validators.zig" }}')
+s = s.replace('b.path("../../../zig/server/static_files.zig")', f'.{{ .cwd_relative = "{root}/zig/server/static_files.zig" }}')
+s = s.replace('b.path("../../../zig/server/request_limits.zig")', f'.{{ .cwd_relative = "{root}/zig/server/request_limits.zig" }}')
 p.write_text(s)
 PY
 (cd "$tmp_typed" && zig build install-server >/tmp/meteorite-typed-build.log 2>&1)

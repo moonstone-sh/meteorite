@@ -24,5 +24,6 @@ Meteorite's root `README.md` is the public landing page. This directory owns dur
 
 ## Maintenance And Archive
 
+- `maintenance/release-candidate-audit-2026-07-14.md` — latest v0.1 service-layer release audit result.
 - `maintenance/docs-stabilization.md` — docs tree stabilization record.
 - `archive/` — historical validation, claim-safety, and framework-guidance artifacts.
