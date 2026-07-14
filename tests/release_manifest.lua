@@ -22,6 +22,9 @@ local function build_ipc_manifest()
     unix_socket_path = "/tmp/meteorite-release-test.sock",
     unix_socket_mode = "0660",
     unix_socket_unlink_stale = true,
+    require_peer_credentials = true,
+    peer_allow_uid = "501",
+    peer_allow_gid = "20",
   })
 end
 
@@ -33,6 +36,7 @@ test "ipc release manifest records backend transport protocol and socket config"
   test.assert_true(encoded:find('"path":"/tmp/meteorite-release-test.sock"', 1, true) ~= nil, "socket path")
   test.assert_true(encoded:find('"mode":"0660"', 1, true) ~= nil, "socket mode")
   test.assert_true(encoded:find('"unlink_stale":true', 1, true) ~= nil, "socket stale unlink")
+  test.assert_true(encoded:find('"peer_credentials":{"allow_gid":"20","allow_uid":"501","required":true}', 1, true) ~= nil, "peer policy")
 end)
 
 test "ipc release manifest records native message metadata without handler source paths" (function()

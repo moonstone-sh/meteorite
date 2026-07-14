@@ -27,6 +27,10 @@ function tasks.build_args_for(mode, opts)
   if opts.unix_socket_mode or opts["unix-socket-mode"] then args[#args + 1] = "-Dunix-socket-mode=" .. (opts.unix_socket_mode or opts["unix-socket-mode"]) end
   if opts.unix_socket_unlink_stale ~= nil then args[#args + 1] = "-Dunix-socket-unlink-stale=" .. tostring(opts.unix_socket_unlink_stale) end
   if opts["unix-socket-unlink-stale"] ~= nil then args[#args + 1] = "-Dunix-socket-unlink-stale=" .. tostring(opts["unix-socket-unlink-stale"]) end
+  if opts.require_peer_credentials ~= nil then args[#args + 1] = "-Drequire-peer-credentials=" .. tostring(opts.require_peer_credentials) end
+  if opts["require-peer-credentials"] ~= nil then args[#args + 1] = "-Drequire-peer-credentials=" .. tostring(opts["require-peer-credentials"]) end
+  if opts.peer_allow_uid or opts["peer-allow-uid"] then args[#args + 1] = "-Dpeer-allow-uid=" .. tostring(opts.peer_allow_uid or opts["peer-allow-uid"]) end
+  if opts.peer_allow_gid or opts["peer-allow-gid"] then args[#args + 1] = "-Dpeer-allow-gid=" .. tostring(opts.peer_allow_gid or opts["peer-allow-gid"]) end
   args[#args + 1] = "-Dhybrid-profile=" .. (opts.hybrid_profile or opts["hybrid-profile"] or (mode == "release-hybrid" and "optimized" or "default"))
   args[#args + 1] = "-Drouter-dispatch=" .. (opts.router_dispatch or opts["router-dispatch"] or "param_matchers")
   if opts.project_root then args[#args + 1] = "-Dproject-root=" .. opts.project_root end

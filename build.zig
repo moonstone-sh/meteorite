@@ -74,6 +74,9 @@ pub fn build(b: *std.Build) void {
     const unix_socket_path = b.option([]const u8, "unix-socket-path", "unix_socket path") orelse "/tmp/meteorite.sock";
     const unix_socket_mode = b.option([]const u8, "unix-socket-mode", "unix_socket filesystem mode") orelse "0660";
     const unix_socket_unlink_stale = b.option(bool, "unix-socket-unlink-stale", "unlink stale unix_socket path when safe") orelse true;
+    const require_peer_credentials = b.option(bool, "require-peer-credentials", "require Unix peer credentials when backend supports them") orelse false;
+    const peer_allow_uid = b.option([]const u8, "peer-allow-uid", "allowed peer uid for Unix peer credential policy") orelse "";
+    const peer_allow_gid = b.option([]const u8, "peer-allow-gid", "allowed peer gid for Unix peer credential policy") orelse "";
     const router_dispatch = b.option([]const u8, "router-dispatch", "Router dispatch strategy: method_buckets, static_fast_path, param_matchers, or legacy_scan") orelse "method_buckets";
     if (!std.mem.eql(u8, backend, "ipc_unixsocket") and !std.mem.eql(u8, backend, "ipc_unixsocket_http") and !std.mem.eql(u8, backend, "std_http") and !std.mem.eql(u8, backend, "fast_http")) {
         std.debug.panic("unsupported -Dbackend={s}; expected ipc_unixsocket, ipc_unixsocket_http, std_http, or fast_http", .{backend});
@@ -113,6 +116,9 @@ pub fn build(b: *std.Build) void {
         \\pub const unix_socket_path = "{s}";
         \\pub const unix_socket_mode = "{s}";
         \\pub const unix_socket_unlink_stale = {};
+        \\pub const require_peer_credentials = {};
+        \\pub const peer_allow_uid = "{s}";
+        \\pub const peer_allow_gid = "{s}";
         \\pub const capability_http_headers = {};
         \\pub const capability_cookies = {};
         \\pub const capability_cors = {};
@@ -142,6 +148,9 @@ pub fn build(b: *std.Build) void {
         unix_socket_path,
         unix_socket_mode,
         unix_socket_unlink_stale,
+        require_peer_credentials,
+        peer_allow_uid,
+        peer_allow_gid,
         !is_native_ipc,
         !is_native_ipc,
         !is_native_ipc,

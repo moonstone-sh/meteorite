@@ -60,6 +60,8 @@ pub fn compile(comptime spec: anytype) type {
         }
 
         pub fn serve(io: Io, config: ListenConfig) !void {
+            if (build_info.require_peer_credentials and !build_info.capability_peer_credentials) return error.PeerCredentialsUnsupported;
+
             if (!global_cached_time_started.swap(true, .acquire)) {
                 global_cached_time.store(Io.Timestamp.now(io, .real).toSeconds(), .release);
                 const thread = std.Thread.spawn(.{}, timerWorker, .{io}) catch unreachable;

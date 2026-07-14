@@ -123,6 +123,11 @@ function manifest.build(result, release_mode, server_path, contract, target_lua,
         path = opts.unix_socket_path or opts["unix-socket-path"] or "/tmp/meteorite.sock",
         mode = opts.unix_socket_mode or opts["unix-socket-mode"] or "0660",
         unlink_stale = opts.unix_socket_unlink_stale ~= false and opts["unix-socket-unlink-stale"] ~= false,
+        peer_credentials = {
+          required = opts.require_peer_credentials == true or opts["require-peer-credentials"] == true,
+          allow_uid = opts.peer_allow_uid or opts["peer-allow-uid"],
+          allow_gid = opts.peer_allow_gid or opts["peer-allow-gid"],
+        },
       } or nil,
     },
     target = {

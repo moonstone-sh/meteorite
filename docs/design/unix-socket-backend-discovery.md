@@ -480,13 +480,13 @@ Annotation: `fixtures/tests/ipc-release-smoke.sh` now builds a hybrid native IPC
 
 - [ ] Read peer credentials where the platform supports them.
 - [ ] Expose safe peer facts through `ctx:peer()` and backend metadata.
-- [ ] Add config for `require_peer_credentials`, `allow_uid`, and `allow_gid`.
-- [ ] Fail startup when peer credentials are required but unsupported on the target platform.
+- [x] Add config for `require_peer_credentials`, `allow_uid`, and `allow_gid`.
+- [x] Fail startup when peer credentials are required but unsupported on the target platform.
 - [ ] Reject unauthorized peers with deterministic `unauthorized_peer` result code.
 - [ ] Count unauthorized peer attempts separately from malformed protocol errors.
 - [x] Document platform differences for Linux, macOS, and unsupported targets.
 
-Annotation: UNIX sockets have local security semantics that HTTP does not. Meteorite should expose them as IPC capabilities, not as fake headers.
+Annotation: UNIX sockets have local security semantics that HTTP does not. Meteorite should expose them as IPC capabilities, not as fake headers. The current implementation records peer policy in release metadata and fails closed when `require_peer_credentials` / `-Drequire-peer-credentials=true` is set, because actual peer credential reading and authorization are still pending.
 
 ## Phase U13 — Documentation And Examples
 
