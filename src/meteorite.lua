@@ -8,6 +8,9 @@ local utility_exports = require("core.utility_exports")
 ---@field profile? string|MeteoriteProfile
 ---@field host? string bind address (default "127.0.0.1")
 ---@field port? integer bind port (default 8080)
+---@field trusted_proxy? nil unsupported in the current release; proxy-derived IP headers remain untrusted
+---@field trust_proxy? nil unsupported alias
+---@field trusted_proxies? nil unsupported alias
 
 ---@class MeteoriteRouteOptions
 ---@field params? table<string, MeteoriteSchemaValue>

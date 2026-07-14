@@ -396,6 +396,14 @@ end
 
 function app_core.new(opts)
   opts = opts or {}
+  if opts.trusted_proxy ~= nil or opts.trust_proxy ~= nil or opts.trusted_proxies ~= nil then
+    error(table.concat({
+      "Meteorite does not support trusted proxy configuration in the current service-layer release.",
+      "",
+      "Reason: proxy-derived client IP headers require compile-time/startup trust boundaries, CIDR or hop validation, and distinct raw-vs-trusted request APIs before they can be used safely.",
+      "Hint: treat Forwarded, X-Forwarded-For, X-Real-IP, and CF-Connecting-IP as untrusted request headers, or enforce trusted proxy policy outside Meteorite for this release.",
+    }, "\n"))
+  end
   return setmetatable({
     name = opts.name or "meteorite-app",
     routes = {},
