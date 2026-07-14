@@ -97,6 +97,12 @@ case "$stats" in
   *) echo "unexpected release stats output: $stats" >&2; exit 1 ;;
 esac
 
+peer=$("$LUA_BIN" src/cli/main.lua ipc send --socket "$SOCK" --message peer.whoami --json)
+case "$peer" in
+  *'"result_name":"ok"'*'has_peer'*'true'*) ;;
+  *) echo "unexpected release peer output: $peer" >&2; exit 1 ;;
+esac
+
 kill "$server_pid" 2>/dev/null || true
 unregister_pid "$server_pid"
 wait "$server_pid" 2>/dev/null || true

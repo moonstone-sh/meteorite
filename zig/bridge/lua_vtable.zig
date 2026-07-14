@@ -17,6 +17,7 @@ pub const VTable = struct {
     param_at: *const fn (ctx: *anyopaque, index: usize) ?[]const u8,
     message: *const fn (ctx: *anyopaque) []const u8,
     metadata: *const fn (ctx: *anyopaque, name: []const u8) ?[]const u8,
+    peer: *const fn (ctx: *anyopaque) ?protocol.Peer,
     query: *const fn (ctx: *anyopaque, name: []const u8) ?[]const u8,
     query_all: *const fn (ctx: *anyopaque, name: []const u8) ?[][]const u8,
     header: *const fn (ctx: *anyopaque, name: []const u8) ?[]const u8,
@@ -95,6 +96,12 @@ pub fn makeVTable(comptime Ctx: type) VTable {
             fn f(ptr: *anyopaque, name: []const u8) ?[]const u8 {
                 const typed: *Ctx = @ptrCast(@alignCast(ptr));
                 return typed.metadata(name);
+            }
+        }.f,
+        .peer = struct {
+            fn f(ptr: *anyopaque) ?protocol.Peer {
+                const typed: *Ctx = @ptrCast(@alignCast(ptr));
+                return typed.peer();
             }
         }.f,
         .header = struct {

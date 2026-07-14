@@ -8,7 +8,7 @@ This fixture intentionally uses `app:message(...)` instead of HTTP routes. It co
 - Canonical table-form message authoring such as `app:message({ name = "system.ping", handler = ... })`.
 - IPC metadata validation via `metadata = { id = m.u64() }`.
 - JSON body validation using `content_type=application/json` IPC metadata.
-- Native context APIs: `ctx:message()`, `ctx:metadata()`, `ctx:request_id()`.
+- Native context APIs: `ctx:message()`, `ctx:metadata()`, `ctx:request_id()`, `ctx:peer()`.
 - HTTP separation: `ctx:header("id")` is expected to be nil under native IPC.
 
 Useful commands from the repository root:

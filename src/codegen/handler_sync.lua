@@ -81,6 +81,7 @@ function handler_sync.emit_ctx_zig(graph, output)
     "",
     "pub const Header = protocol.Header;",
     "pub const CookieOptions = protocol.CookieOptions;",
+    "pub const Peer = protocol.Peer;",
     "",
     "pub const Error = error{ MissingParam, InvalidParam } || std.fmt.ParseIntError;",
     "",
@@ -90,6 +91,7 @@ function handler_sync.emit_ctx_zig(graph, output)
     "    param: *const fn (*anyopaque, []const u8) ?[]const u8,",
     "    message: *const fn (*anyopaque) []const u8,",
     "    metadata: *const fn (*anyopaque, []const u8) ?[]const u8,",
+    "    peer: *const fn (*anyopaque) ?Peer,",
     "    query: *const fn (*anyopaque, []const u8) ?[]const u8,",
     "    header: *const fn (*anyopaque, []const u8) ?[]const u8,",
     "    request_id: *const fn (*anyopaque) anyerror![]const u8,",
@@ -114,6 +116,7 @@ function handler_sync.emit_ctx_zig(graph, output)
     "        fn param(ptr: *anyopaque, name: []const u8) ?[]const u8 { return cast(ptr).param(name); }",
     "        fn message(ptr: *anyopaque) []const u8 { return cast(ptr).message(); }",
     "        fn metadata(ptr: *anyopaque, name: []const u8) ?[]const u8 { return cast(ptr).metadata(name); }",
+    "        fn peer(ptr: *anyopaque) ?Peer { return cast(ptr).peer(); }",
     "        fn query(ptr: *anyopaque, name: []const u8) ?[]const u8 { return cast(ptr).query(name); }",
     "        fn header(ptr: *anyopaque, name: []const u8) ?[]const u8 { return cast(ptr).header(name); }",
     "        fn requestId(ptr: *anyopaque) anyerror![]const u8 { return cast(ptr).requestId(); }",
@@ -128,7 +131,7 @@ function handler_sync.emit_ctx_zig(graph, output)
     "        fn emptyWithHeaders(ptr: *anyopaque, status: u16, headers: []const Header) anyerror!void { return cast(ptr).emptyWithHeaders(status, headers); }",
     "        fn redirect(ptr: *anyopaque, status: u16, location: []const u8) anyerror!void { return cast(ptr).redirect(status, location); }",
     "        fn setCookie(ptr: *anyopaque, buffer: []u8, name: []const u8, cookie_value: []const u8, options: CookieOptions) anyerror!Header { return cast(ptr).setCookie(buffer, name, cookie_value, options); }",
-    "        pub const value = VTable{ .method = method, .path = path, .param = param, .message = message, .metadata = metadata, .query = query, .header = header, .request_id = requestId, .body = body, .text = text, .text_with_headers = textWithHeaders, .bytes = bytes, .bytes_with_headers = bytesWithHeaders, .json = json, .json_with_headers = jsonWithHeaders, .empty = empty, .empty_with_headers = emptyWithHeaders, .redirect = redirect, .set_cookie = setCookie };",
+    "        pub const value = VTable{ .method = method, .path = path, .param = param, .message = message, .metadata = metadata, .peer = peer, .query = query, .header = header, .request_id = requestId, .body = body, .text = text, .text_with_headers = textWithHeaders, .bytes = bytes, .bytes_with_headers = bytesWithHeaders, .json = json, .json_with_headers = jsonWithHeaders, .empty = empty, .empty_with_headers = emptyWithHeaders, .redirect = redirect, .set_cookie = setCookie };",
     "    };",
     "}",
     "",
@@ -181,6 +184,7 @@ function handler_sync.emit_ctx_zig(graph, output)
     lines[#lines + 1] = "        pub fn param(self: " .. id .. ", name: []const u8) ?[]const u8 { return self.vtable.param(self.raw, name); }"
     lines[#lines + 1] = "        pub fn message(self: " .. id .. ") []const u8 { return self.vtable.message(self.raw); }"
     lines[#lines + 1] = "        pub fn metadata(self: " .. id .. ", name: []const u8) ?[]const u8 { return self.vtable.metadata(self.raw, name); }"
+    lines[#lines + 1] = "        pub fn peer(self: " .. id .. ") ?Peer { return self.vtable.peer(self.raw); }"
     lines[#lines + 1] = "        pub fn queryValue(self: " .. id .. ", name: []const u8) ?[]const u8 { return self.vtable.query(self.raw, name); }"
     lines[#lines + 1] = "        pub fn header(self: " .. id .. ", name: []const u8) ?[]const u8 { return self.vtable.header(self.raw, name); }"
     lines[#lines + 1] = "        pub fn requestId(self: " .. id .. ") ![]const u8 { return self.vtable.request_id(self.raw); }"

@@ -91,6 +91,7 @@ pub const Counters = struct {
     malformed_frames: u64 = 0,
     oversized_frames: u64 = 0,
     protocol_errors: u64 = 0,
+    unauthorized_peers: u64 = 0,
     early_closes: u64 = 0,
     max_active_connections: u64 = 0,
     queue_depth: u64 = 0,
@@ -121,6 +122,7 @@ pub const AtomicCounters = struct {
     malformed_frames: AtomicCounter = AtomicCounter.init(0),
     oversized_frames: AtomicCounter = AtomicCounter.init(0),
     protocol_errors: AtomicCounter = AtomicCounter.init(0),
+    unauthorized_peers: AtomicCounter = AtomicCounter.init(0),
     early_closes: AtomicCounter = AtomicCounter.init(0),
     max_active_connections: AtomicCounter = AtomicCounter.init(0),
     queue_depth: AtomicCounter = AtomicCounter.init(0),
@@ -171,6 +173,7 @@ pub fn snapshotCounters(c: *const AtomicCounters) Counters {
         .malformed_frames = c.malformed_frames.load(.monotonic),
         .oversized_frames = c.oversized_frames.load(.monotonic),
         .protocol_errors = c.protocol_errors.load(.monotonic),
+        .unauthorized_peers = c.unauthorized_peers.load(.monotonic),
         .early_closes = c.early_closes.load(.monotonic),
         .max_active_connections = c.max_active_connections.load(.monotonic),
         .queue_depth = c.queue_depth.load(.monotonic),
@@ -218,6 +221,7 @@ pub fn resetAuditCounters(c: *AtomicCounters) void {
     c.malformed_frames.store(0, .monotonic);
     c.oversized_frames.store(0, .monotonic);
     c.protocol_errors.store(0, .monotonic);
+    c.unauthorized_peers.store(0, .monotonic);
     c.early_closes.store(0, .monotonic);
 }
 

@@ -11,6 +11,7 @@ pub const threaded_connections = false;
 pub const pooled_connections = false;
 pub const configured_workers: u16 = 0;
 pub const queue_limit: usize = 0;
+pub const supports_peer_credentials = builtin.os.tag == .linux or builtin.os.tag == .macos;
 
 pub const Method = proto.Method;
 pub const Header = proto.Header;
@@ -94,6 +95,7 @@ pub const Request = struct {
     request_id: u64 = 0,
     target_value: []const u8 = "",
     request_count: u64 = 0,
+    peer: ?proto.Peer = null,
 
     pub fn close(self: *Request, io: Io) void {
         if (self.frame_buffer.len > 0) {
@@ -159,8 +161,34 @@ pub fn listen(config: ListenConfig) !Server {
 pub fn accept(server: *Server, req: *Request) !void {
     req.* = Request{ .stream = try server.inner.accept(server.io) };
     proto.inc(&counters.total_connections);
+    req.peer = readPeerCredentials(req.stream) catch null;
     req.reader = req.stream.reader(server.io, &req.recv_buffer);
     req.writer = req.stream.writer(server.io, &req.send_buffer);
+}
+
+pub fn peer(req: *Request) ?proto.Peer {
+    return req.peer;
+}
+
+pub fn peerAuthorized(req: *Request, allow_uid: []const u8, allow_gid: []const u8) bool {
+    if (allow_uid.len == 0 and allow_gid.len == 0) return req.peer != null;
+    const identity = req.peer orelse return false;
+    if (allow_uid.len > 0) {
+        const allowed = std.fmt.parseInt(u32, allow_uid, 10) catch return false;
+        if (identity.uid != allowed) return false;
+    }
+    if (allow_gid.len > 0) {
+        const allowed = std.fmt.parseInt(u32, allow_gid, 10) catch return false;
+        if (identity.gid != allowed) return false;
+    }
+    return true;
+}
+
+pub fn unauthorizedPeer(req: *Request) void {
+    proto.inc(&counters.unauthorized_peers);
+    respondResult(req, .unauthorized_peer, "text/plain; charset=utf-8", "", "unauthorized peer") catch {
+        proto.inc(&counters.connection_errors);
+    };
 }
 
 pub fn rebind(req: *Request, io: Io) void {
@@ -289,6 +317,10 @@ pub fn respondBytesWithHeaders(req: *Request, status: u16, content_type: []const
 
     const result = ipcResultCodeForStatus(status, has_validation_metadata);
 
+    try respondResult(req, result, content_type, metadata, body);
+}
+
+fn respondResult(req: *Request, result: proto.ResultCode, content_type: []const u8, metadata: []const u8, body: []const u8) !void {
     const total_len = try ipc.responseFrameLen(content_type.len, metadata.len, body.len);
     const frame = try std.heap.smp_allocator.alloc(u8, total_len);
     defer std.heap.smp_allocator.free(frame);
@@ -303,6 +335,42 @@ pub fn respondBytesWithHeaders(req: *Request, status: u16, content_type: []const
     try req.writer.interface.flush();
     proto.inc(&counters.requests_served);
     proto.add(&counters.bytes_written, encoded.len);
+}
+
+fn readPeerCredentials(stream: Io.net.Stream) !?proto.Peer {
+    if (!supports_peer_credentials) return null;
+    if (!builtin.link_libc) return null;
+    const fd = stream.socket.handle;
+    return switch (builtin.os.tag) {
+        .linux => try readLinuxPeerCredentials(fd),
+        .macos => try readDarwinPeerCredentials(fd),
+        else => null,
+    };
+}
+
+fn readLinuxPeerCredentials(fd: std.posix.fd_t) !proto.Peer {
+    const UCred = extern struct {
+        pid: std.c.pid_t,
+        uid: std.c.uid_t,
+        gid: std.c.gid_t,
+    };
+    var credentials: UCred = undefined;
+    var len: std.c.socklen_t = @sizeOf(UCred);
+    if (std.c.getsockopt(fd, std.c.SOL.SOCKET, std.c.SO.PEERCRED, &credentials, &len) != 0) return error.PeerCredentialsUnavailable;
+    return .{
+        .uid = @intCast(credentials.uid),
+        .gid = @intCast(credentials.gid),
+        .pid = if (credentials.pid >= 0) @intCast(credentials.pid) else null,
+    };
+}
+
+extern "c" fn getpeereid(fd: std.c.fd_t, euid: *std.c.uid_t, egid: *std.c.gid_t) c_int;
+
+fn readDarwinPeerCredentials(fd: std.posix.fd_t) !proto.Peer {
+    var uid: std.c.uid_t = undefined;
+    var gid: std.c.gid_t = undefined;
+    if (getpeereid(fd, &uid, &gid) != 0) return error.PeerCredentialsUnavailable;
+    return .{ .uid = @intCast(uid), .gid = @intCast(gid), .pid = null };
 }
 
 fn ipcMetadataName(header_name: []const u8) []const u8 {

@@ -73,6 +73,16 @@ app:message("bench.stats.check", function(ctx)
   return ctx:text(ctx:request_id())
 end)
 
+app:message("peer.whoami", function(ctx)
+  local peer = ctx:peer()
+  return ctx:json({
+    has_peer = peer ~= nil,
+    uid = peer and peer.uid or nil,
+    gid = peer and peer.gid or nil,
+    pid = peer and peer.pid or nil,
+  })
+end)
+
 app:mount("/native-middleware", {
   id = "native_middleware",
   context = { middleware = "ipc" },

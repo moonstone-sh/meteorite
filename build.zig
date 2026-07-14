@@ -124,7 +124,7 @@ pub fn build(b: *std.Build) void {
         \\pub const capability_cors = {};
         \\pub const capability_redirects = {};
         \\pub const capability_ipc_metadata = {};
-        \\pub const capability_peer_credentials = {};
+        \\pub const capability_peer_credentials = {} and (builtin.os.tag == .linux or builtin.os.tag == .macos);
         \\pub const capability_static_files = {};
         \\pub const lua_runtime = {};
         \\pub const hybrid_profile = "{s}";
@@ -156,7 +156,7 @@ pub fn build(b: *std.Build) void {
         !is_native_ipc,
         !is_native_ipc,
         is_native_ipc,
-        false,
+        is_native_ipc,
         !is_native_ipc,
         lua_runtime,
         hybrid_profile,

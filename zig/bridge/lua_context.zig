@@ -16,6 +16,7 @@ const l_body = lua_bindings.l_body;
 const l_param = lua_bindings.l_param;
 const l_message = lua_bindings.l_message;
 const l_metadata = lua_bindings.l_metadata;
+const l_peer = lua_bindings.l_peer;
 const l_query = lua_bindings.l_query;
 const l_query_all = lua_bindings.l_query_all;
 const l_header = lua_bindings.l_header;
@@ -116,6 +117,7 @@ fn pushCoreContextMethods(L: *c.lua_State) void {
     pushMethod(L, "param", l_param);
     pushMethod(L, "message", l_message);
     pushMethod(L, "metadata", l_metadata);
+    pushMethod(L, "peer", l_peer);
     pushMethod(L, "query", l_query);
     pushMethod(L, "query_all", l_query_all);
     pushMethod(L, "header", l_header);
@@ -207,4 +209,3 @@ pub fn pushHandlerArgs(comptime handler: anytype, L: *c.lua_State, ctx: anytype,
         .request_table => pushFullRequestTable(handler, L, ctx, vtable),
     };
 }
-

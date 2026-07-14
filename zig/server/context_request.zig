@@ -28,7 +28,7 @@ pub fn RequestContext(comptime backend: anytype, comptime protocol: anytype, com
         }
 
         pub fn requestMetadataEntries(ctx: anytype) ![]const protocol.MetadataEntry {
-            var entries = try ctx.allocator.alloc(protocol.MetadataEntry, 2);
+            var entries = try ctx.allocator.alloc(protocol.MetadataEntry, 5);
             var count: usize = 0;
             if (header(ctx, "content-type")) |content_type| {
                 entries[count] = .{ .name = "content_type", .value = content_type };
@@ -36,6 +36,20 @@ pub fn RequestContext(comptime backend: anytype, comptime protocol: anytype, com
             }
             entries[count] = .{ .name = "transport", .value = build_info.transport };
             count += 1;
+            if (peer(ctx)) |identity| {
+                if (identity.uid) |uid| {
+                    entries[count] = .{ .name = "peer_uid", .value = try std.fmt.allocPrint(ctx.allocator, "{d}", .{uid}) };
+                    count += 1;
+                }
+                if (identity.gid) |gid| {
+                    entries[count] = .{ .name = "peer_gid", .value = try std.fmt.allocPrint(ctx.allocator, "{d}", .{gid}) };
+                    count += 1;
+                }
+                if (identity.pid) |pid| {
+                    entries[count] = .{ .name = "peer_pid", .value = try std.fmt.allocPrint(ctx.allocator, "{d}", .{pid}) };
+                    count += 1;
+                }
+            }
             return entries[0..count];
         }
 
@@ -51,7 +65,7 @@ pub fn RequestContext(comptime backend: anytype, comptime protocol: anytype, com
                 .body = ctx.cached_body orelse "",
                 .content_type = header(ctx, "content-type"),
                 .request_id = try requestId(ctx),
-                .peer = null,
+                .peer = peer(ctx),
             };
         }
 
@@ -90,6 +104,11 @@ pub fn RequestContext(comptime backend: anytype, comptime protocol: anytype, com
             if (comptime @hasField(@TypeOf(ctx.request.*), "metadata_value")) {
                 return backend.header(ctx.request, name);
             }
+            return null;
+        }
+
+        pub fn peer(ctx: anytype) ?protocol.Peer {
+            if (comptime @hasDecl(backend, "peer")) return backend.peer(ctx.request);
             return null;
         }
 

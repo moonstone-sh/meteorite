@@ -332,6 +332,27 @@ pub fn l_metadata(L: ?*c.lua_State) callconv(.c) c_int {
     return 1;
 }
 
+pub fn l_peer(L: ?*c.lua_State) callconv(.c) c_int {
+    if (lua_vtable.current_vtable.?.peer(lua_vtable.current_ctx.?)) |identity| {
+        c.lua_createtable(L, 0, 3);
+        if (identity.uid) |uid| {
+            c.lua_pushinteger(L, @intCast(uid));
+            c.lua_setfield(L, -2, "uid");
+        }
+        if (identity.gid) |gid| {
+            c.lua_pushinteger(L, @intCast(gid));
+            c.lua_setfield(L, -2, "gid");
+        }
+        if (identity.pid) |pid| {
+            c.lua_pushinteger(L, @intCast(pid));
+            c.lua_setfield(L, -2, "pid");
+        }
+    } else {
+        c.lua_pushnil(L);
+    }
+    return 1;
+}
+
 pub fn l_query_all(L: ?*c.lua_State) callconv(.c) c_int {
     const name = c.lua_tolstring(L, 2, null);
     if (lua_vtable.current_vtable.?.query_all(lua_vtable.current_ctx.?, std.mem.span(name))) |values| {

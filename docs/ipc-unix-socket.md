@@ -169,8 +169,10 @@ Peer credentials are platform-specific and remain a planned IPC capability, not 
 - macOS and BSD-family systems expose similar but not identical local peer facts through platform-specific socket APIs such as `LOCAL_PEERCRED`/`getpeereid`.
 - Unsupported targets must fail startup if peer credentials are required by config, rather than silently allowing all peers.
 - `-Drequire-peer-credentials=true` is already fail-closed: because peer credential reading is not implemented yet, startup returns `PeerCredentialsUnsupported` instead of serving unauthenticated peers.
-- Release manifests record planned peer policy fields (`require_peer_credentials`, `peer_allow_uid`, `peer_allow_gid`) under backend socket metadata for auditability.
-- Until Meteorite exposes `ctx:peer()` and enforces `allow_uid` / `allow_gid`, deploy with filesystem permissions and supervisor-owned runtime directories.
+- Release manifests record peer policy fields (`require_peer_credentials`, `peer_allow_uid`, `peer_allow_gid`) under backend socket metadata for auditability.
+- When peer credentials are required, supported targets read local peer identity and expose safe facts through `ctx:peer()` as `{ uid, gid, pid? }`.
+- Unauthorized peers are rejected with the deterministic IPC `unauthorized_peer` result code and counted separately as `unauthorized_peers`.
+- Continue to deploy with filesystem permissions and supervisor-owned runtime directories; peer authorization is an additional local check, not a replacement for socket permissions.
 
 
 ---

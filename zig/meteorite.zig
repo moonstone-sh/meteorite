@@ -228,6 +228,11 @@ pub fn compile(comptime spec: anytype) type {
                     }
                     break;
                 };
+                if (!authorizePeer(request)) {
+                    request.close_after_response = true;
+                    if (@hasDecl(backend, "unauthorizedPeer")) backend.unauthorizedPeer(request);
+                    break;
+                }
                 var arena_buffer: [graph.max_request_arena_bytes]u8 = undefined;
                 var arena_state = std.heap.FixedBufferAllocator.init(&arena_buffer);
                 const arena = arena_state.allocator();
@@ -265,6 +270,12 @@ pub fn compile(comptime spec: anytype) type {
                     else => {},
                 }
             }
+        }
+
+        fn authorizePeer(request: *backend.Request) bool {
+            if (!build_info.require_peer_credentials) return true;
+            if (!@hasDecl(backend, "peerAuthorized")) return false;
+            return backend.peerAuthorized(request, build_info.peer_allow_uid, build_info.peer_allow_gid);
         }
 
         const server_info = @import("server/server_info.zig").Info(backend, lua_runtime, build_info);
@@ -509,6 +520,10 @@ pub fn compile(comptime spec: anytype) type {
 
             pub fn metadata(self: *Context, name: []const u8) ?[]const u8 {
                 return context_request.metadata(self, name);
+            }
+
+            pub fn peer(self: *Context) ?protocol.Peer {
+                return context_request.peer(self);
             }
 
             pub fn header(self: *Context, name: []const u8) ?[]const u8 {

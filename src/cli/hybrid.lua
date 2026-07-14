@@ -728,6 +728,10 @@ function Context:request_id()
   return self._request_id
 end
 
+function Context:peer()
+  return self.request.peer
+end
+
 local function cookie_value(header, name)
   if type(header) ~= "string" then return nil end
   local found = nil

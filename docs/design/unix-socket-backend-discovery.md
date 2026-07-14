@@ -478,21 +478,21 @@ Annotation: `fixtures/tests/ipc-release-smoke.sh` now builds a hybrid native IPC
 
 ## Phase U12 — Peer Credentials And Local Authorization
 
-- [ ] Read peer credentials where the platform supports them.
-- [ ] Expose safe peer facts through `ctx:peer()` and backend metadata.
+- [x] Read peer credentials where the platform supports them.
+- [x] Expose safe peer facts through `ctx:peer()` and backend metadata.
 - [x] Add config for `require_peer_credentials`, `allow_uid`, and `allow_gid`.
 - [x] Fail startup when peer credentials are required but unsupported on the target platform.
-- [ ] Reject unauthorized peers with deterministic `unauthorized_peer` result code.
-- [ ] Count unauthorized peer attempts separately from malformed protocol errors.
+- [x] Reject unauthorized peers with deterministic `unauthorized_peer` result code.
+- [x] Count unauthorized peer attempts separately from malformed protocol errors.
 - [x] Document platform differences for Linux, macOS, and unsupported targets.
 
-Annotation: UNIX sockets have local security semantics that HTTP does not. Meteorite should expose them as IPC capabilities, not as fake headers. The current implementation records peer policy in release metadata and fails closed when `require_peer_credentials` / `-Drequire-peer-credentials=true` is set, because actual peer credential reading and authorization are still pending.
+Annotation: UNIX sockets have local security semantics that HTTP does not. Meteorite exposes them as IPC capabilities, not fake headers: supported platforms read peer credentials, `ctx:peer()` returns safe peer facts, required peer credentials fail closed on unsupported targets, and UID/GID allow-list failures return deterministic `unauthorized_peer` frames with a separate `unauthorized_peers` counter.
 
 ## Phase U13 — Documentation And Examples
 
 - [x] Add an IPC hello example using `users.get`-style native messages.
 - [x] Add JSON API, middleware, and worker RPC examples.
-- [ ] Add peer-auth example after peer credential support lands.
+- [x] Add peer-auth example after peer credential support lands.
 - [x] Document backend selection by CLI and project manifest.
 - [x] Document native message naming, including slash-to-dot normalization and collision rules.
 - [x] Document IPC frame basics and compatibility boundaries.
@@ -500,7 +500,7 @@ Annotation: UNIX sockets have local security semantics that HTTP does not. Meteo
 - [x] Document benchmark methodology for IPC and required counters.
 - [x] Document deployment with socket permissions and process supervisors.
 
-Annotation: IPC docs now live in `docs/ipc-unix-socket.md`; native examples live under `fixtures/examples/unix-socket/`. Peer-auth remains intentionally pending until the backend exposes peer credentials and authorization policy.
+Annotation: IPC docs now live in `docs/ipc-unix-socket.md`; native examples live under `fixtures/examples/unix-socket/`. The `fixtures/apps/ipc-native-service` fixture includes `peer.whoami` to exercise `ctx:peer()` and release smoke coverage.
 
 Annotation: docs should teach users that changing backend is configuration, while changing from HTTP concepts to native IPC messages is an intentional graph-level capability.
 
@@ -510,11 +510,11 @@ Annotation: docs should teach users that changing backend is configuration, whil
 - [x] `native_message`: explicit `users.get`, slash input `users/get`, mounted-scope normalization, collision diagnostics, route inspection, release metadata.
 - [x] `http_compat`: `GET /users/:id` mapped to native message through graph metadata, query string compatibility, method mismatch behavior.
 - [x] `http_only`: CORS, cookies, redirects, secure headers, raw headers, static files, conditional requests, `HEAD`, and `405 Allow`.
-- [ ] `ipc_only`: frame parsing, malformed frame, oversized frame, protocol mismatch, socket permissions, stale socket unlink, request ID correlation, multiple frames, IPC metadata, peer credentials.
+- [x] `ipc_only`: frame parsing, malformed frame, oversized frame, protocol mismatch, socket permissions, stale socket unlink, request ID correlation, multiple frames, IPC metadata, peer credentials.
 - [x] `benchmark`: accepted/completed, active/inflight, queue depth, budget rejections, backpressure, malformed frame count, bytes read/written, and inflight max.
 - [x] `release`: static copied release, hybrid copied release, no source leaks, safe manifest socket metadata, socket cleanup behavior.
 
-Annotation: the remaining `ipc_only` matrix gap is peer credentials. All non-peer protocol, metadata, stale socket, request-correlation, multi-frame, and malformed-frame cases are covered by `fixtures/tests/ipc-backends.sh` and `fixtures/tests/ipc-release-smoke.sh`.
+Annotation: IPC-only protocol, metadata, stale socket, request-correlation, multi-frame, malformed-frame, and peer credential cases are covered by `fixtures/tests/ipc-backends.sh`, `fixtures/tests/ipc-release-smoke.sh`, and targeted peer-auth runtime checks.
 
 ## Compatibility Statement
 
