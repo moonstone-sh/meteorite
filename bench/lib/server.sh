@@ -83,6 +83,7 @@ start_meteorite() {
     -Dgraph-output=".meteorite/graph/bench" \
     -Dmode="$BENCH_METEORITE_BUILD_MODE" \
     -Dhybrid-profile=optimized \
+    -Dbenchmark-instrumentation=true \
     -Dfast-http-strategy=pool \
     -Dfast-http-workers="$workers" \
     -- dist/server >"$build_log" 2>&1; then

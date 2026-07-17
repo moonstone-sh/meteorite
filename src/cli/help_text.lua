@@ -13,6 +13,7 @@ Commands:
   dev       Run graph-aware live reload
   build     Build the server with Meteorite's packaged Zig driver
   graph     Generate the Meteorite graph
+  sync      Explicitly write generated handler stubs and LuaLS aids
   doctor    Check local project/tool readiness
   invoke    Invoke a route in-process for diagnostics
   client    Generate client code from the route graph
@@ -108,6 +109,21 @@ Defaults:
 Examples:
   meteorite graph src/main.lua .meteorite/graph/current hybrid
   meteorite graph src/main.lua .meteorite/graph/release release-static]]
+
+help.sync = [[Meteorite sync
+
+Usage:
+  meteorite sync [input] [output] [mode] [backend]
+
+Generates the graph, then explicitly updates Meteorite-managed handler stubs
+and `.luarc.json` in the host project. `meteorite graph` and `meteorite build`
+do not modify host source files.
+
+Defaults:
+  input   src/main.lua
+  output  .meteorite/graph/current
+  mode    dev
+  backend fast_http]]
 
 help.doctor = [[Meteorite doctor
 

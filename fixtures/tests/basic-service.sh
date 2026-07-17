@@ -30,7 +30,6 @@ grep -q 'field patch fun(self: MeteoriteApp' fixtures/apps/basic-service/.meteor
 grep -q 'field delete fun(self: MeteoriteApp' fixtures/apps/basic-service/.meteorite/aids/lua/meteorite.meta.lua
 test -f fixtures/apps/basic-service/.meteorite/aids/lua/meteorite.lua
 grep -q 'return meteorite' fixtures/apps/basic-service/.meteorite/aids/lua/meteorite.lua
-grep -q 'autoRequire' fixtures/apps/basic-service/.luarc.json
 grep -q 'memory profile: default' fixtures/apps/basic-service/.meteorite/graph/current/build-report.txt
 grep -q 'peak route memory:' fixtures/apps/basic-service/.meteorite/graph/current/build-report.txt
 grep -q 'max URI: 8kb' fixtures/apps/basic-service/.meteorite/graph/current/build-report.txt
@@ -250,10 +249,14 @@ app:get("/users/:id", { params = { id = m.u64() } }, "handlers.get_user")
 return app
 LUA
 luajit src/cli/main.lua graph "$tmp_stubs/src/main.lua" "$tmp_stubs/.meteorite/graph/current" dev >/tmp/meteorite-stubs.log
+test ! -e "$tmp_stubs/zig/handlers.zig"
+test ! -e "$tmp_stubs/.luarc.json"
+grep -q 'pub fn get_user(c: mt.ctx.get_user)' "$tmp_stubs/.meteorite/aids/handlers.stub.zig"
+luajit src/cli/main.lua sync "$tmp_stubs/src/main.lua" "$tmp_stubs/.meteorite/graph/current" dev >/tmp/meteorite-sync.log
 test -f "$tmp_stubs/zig/handlers.zig"
+test -f "$tmp_stubs/.luarc.json"
 grep -q '<meteorite:generated-stub>' "$tmp_stubs/zig/handlers.zig"
 grep -q 'created .*zig/handlers.zig' "$tmp_stubs/.meteorite/aids/handler-sync.warnings.txt"
-grep -q 'pub fn get_user(c: mt.ctx.get_user)' "$tmp_stubs/.meteorite/aids/handlers.stub.zig"
 grep -q 'pub fn get_user(c: mt.ctx.get_user)' "$tmp_stubs/zig/handlers.zig"
 ! luajit src/cli/main.lua graph "$tmp_stubs/src/main.lua" "$tmp_stubs/.meteorite/graph/current" release-static >/tmp/meteorite-stubs-release.log 2>&1
 grep -q 'release build contains generated handler stub `get_user`' /tmp/meteorite-stubs-release.log

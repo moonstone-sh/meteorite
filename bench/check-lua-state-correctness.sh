@@ -197,7 +197,7 @@ build_server() {
   echo "Building Meteorite server ($MODE, backend=$BACKEND, fast-http-strategy=$FAST_HTTP_STRATEGY, router-dispatch=$ROUTER_DISPATCH, hybrid-profile=$HYBRID_PROFILE)..."
   local exit_code=0
   if command -v zig >/dev/null 2>&1; then
-    zig build install-server -Dgraph-input="fixtures/apps/bench-service/src/main.lua" -Dmode="$MODE" -Dbackend="$BACKEND" -Dfast-http-strategy="$FAST_HTTP_STRATEGY" -Dfast-http-workers="$FAST_HTTP_WORKERS" -Dfast-http-queue="$FAST_HTTP_QUEUE" -Drouter-dispatch="$ROUTER_DISPATCH" -Dhybrid-profile="$HYBRID_PROFILE" 2>&1 | tee "$OUT/build.txt"
+    zig build install-server -Dgraph-input="fixtures/apps/bench-service/src/main.lua" -Dmode="$MODE" -Dbackend="$BACKEND" -Dfast-http-strategy="$FAST_HTTP_STRATEGY" -Dfast-http-workers="$FAST_HTTP_WORKERS" -Dfast-http-queue="$FAST_HTTP_QUEUE" -Drouter-dispatch="$ROUTER_DISPATCH" -Dhybrid-profile="$HYBRID_PROFILE" -Dbenchmark-instrumentation=true 2>&1 | tee "$OUT/build.txt"
     exit_code=${PIPESTATUS[0]}
   else
     echo "error: zig is required to build the server" >&2

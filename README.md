@@ -28,6 +28,7 @@ meteorite init my-app --static     # pure Zig handlers; no Lua runtime in output
 meteorite init my-app --hybrid     # mixed Lua + Zig handlers
 meteorite help                     # list commands and examples
 meteorite doctor                   # check local project/tool readiness
+meteorite sync                     # explicitly update managed stubs and LuaLS config
 ```
 
 App examples live in `docs/examples.md`; they are intentionally not init templates. Native Unix-socket IPC notes live in `docs/ipc-unix-socket.md`; runnable Unix-socket examples live in `fixtures/examples/unix-socket/`.

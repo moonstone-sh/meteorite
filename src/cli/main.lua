@@ -46,7 +46,7 @@ local function doctor_project()
   return require("cli.doctor").run(cli_deps.doctor())
 end
 
-if (command == "graph" or command == "invoke" or command == "doctor" or command == "dev" or command == "client" or command == "openapi") and (arg[2] == "--help" or arg[2] == "-h") then
+if (command == "graph" or command == "sync" or command == "invoke" or command == "doctor" or command == "dev" or command == "client" or command == "openapi") and (arg[2] == "--help" or arg[2] == "-h") then
   print_help(command)
   return
 end
@@ -59,6 +59,7 @@ if command == "openapi" then require("cli.openapi").run(arg); return end
 if command == "ipc" then require("cli.ipc").run(arg); return end
 if command == "routes" then require("cli.routes").run(arg); return end
 if command == "graph" then require("cli.graph").run(arg, cli_deps.graph()); return end
+if command == "sync" then require("cli.sync").run(arg, cli_deps.graph()); return end
 if command == "invoke" then require("cli.invoke_command").run(arg); return end
 
 error("unknown meteorite command: " .. tostring(command) .. "\n\nRun:\n  meteorite help")

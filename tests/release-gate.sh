@@ -38,7 +38,7 @@ run_gate basic-service bash fixtures/tests/basic-service.sh
 run_gate release-smoke bash fixtures/tests/release-smoke.sh
 run_gate release-reproducibility bash tests/release-reproducibility.sh
 run_gate ipc-release-smoke bash fixtures/tests/ipc-release-smoke.sh
-run_gate zig-build zig build
+run_gate zig-build zig build -Dgraph-input=fixtures/apps/showcase-service/src/main.lua -Dgraph-output=.meteorite/graph/current
 
 for target in $TARGETS; do
   run_gate "cross-target-$target" env METEORITE_CROSS_TARGET="$target" \

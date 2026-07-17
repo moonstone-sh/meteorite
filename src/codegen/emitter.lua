@@ -330,8 +330,7 @@ function emitter.emit(app, opts)
   report.emit_luals_aids(graph, output)
   handler_sync.emit_ctx_zig(graph, output)
   handler_sync.emit_zig_aids(graph, output)
-  handler_sync.sync_handler_files(graph, output, mode)
-  handler_sync.sync_luarc(output)
+  if mode == "release-static" then handler_sync.assert_release_static_handlers(graph, output) end
   graph_emit.emit_bindings(graph, output)
   graph_emit.emit_graph_zig(graph, output)
   return { graph = graph, graph_hash = graph_hash, partitions = partitions, partition_changes = partition_changes, output = output }

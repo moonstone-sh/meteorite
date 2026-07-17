@@ -304,18 +304,12 @@ function handler_sync.handler_warnings_path(output)
   return output .. "/../../aids/handler-sync.warnings.txt"
 end
 
---- Sync handler stub files for missing Zig handlers.
----@param graph table  Normalized route graph
----@param output string  Output directory
----@param mode string  Build mode
-function handler_sync.sync_handler_files(graph, output, mode)
+function handler_sync.assert_release_static_handlers(graph, output)
   local root = project_root_from_output(output)
-  local warnings = {}
   local handler_routes = handler_sync.grouped_zig_routes(graph)
   local handlers_path = helpers.path_join(root, "zig/handlers.zig")
   local handler_content = helpers.read_file(handlers_path)
-
-  if mode == "release-static" and handler_content and handler_content:find("<meteorite:generated-stub>", 1, true) then
+  if handler_content and handler_content:find("<meteorite:generated-stub>", 1, true) then
     local first = handler_routes[1]
     local lines = {
       "release build contains generated handler stub" .. (first and (" `" .. first.id .. "`") or ""),
@@ -330,6 +324,19 @@ function handler_sync.sync_handler_files(graph, output, mode)
     lines[#lines + 1] = "  implement zig/handlers.zig before release-static builds."
     error(table.concat(lines, "\n"))
   end
+end
+
+--- Sync handler stub files for missing Zig handlers.
+---@param graph table  Normalized route graph
+---@param output string  Output directory
+---@param mode string  Build mode
+function handler_sync.sync_handler_files(graph, output, mode)
+  local root = project_root_from_output(output)
+  local warnings = {}
+  local handler_routes = handler_sync.grouped_zig_routes(graph)
+  local handlers_path = helpers.path_join(root, "zig/handlers.zig")
+  local handler_content = helpers.read_file(handlers_path)
+  if mode == "release-static" then handler_sync.assert_release_static_handlers(graph, output) end
 
   if #handler_routes > 0 and mode ~= "release-static" then
     if not handler_content then
