@@ -1,1 +1,0 @@
-/Users/extrordinaire/Workbench/user/meteorite/bench/competitors/rust-actix/target/release/meteorite-bench-rust-actix: /Users/extrordinaire/Workbench/user/meteorite/bench/competitors/rust-actix/src/main.rs

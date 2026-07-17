@@ -1,2 +1,0 @@
-{"type":"task_started","kind":"native","timestamp":"2026-06-18T14:21:50Z","id":"native_1","tool":"zig"}
-{"timestamp":"2026-06-18T14:21:50Z","type":"task_finished","kind":"native","exit_code":0,"id":"native_1"}

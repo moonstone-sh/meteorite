@@ -17,6 +17,9 @@ bench/competitors/*/sync*.log
 bench/competitors/*/nginx.conf
 bench/competitors/*/nginx.conf.compiled
 bench/competitors/moonstone-test-env/
+bench/competitors/**/node_modules/
+bench/competitors/**/target/
+bench/competitors/**/logs/
 
 # Dev/release build outputs
 dist/

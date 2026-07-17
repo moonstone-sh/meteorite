@@ -4,7 +4,8 @@ Purpose: record the current v0.1 service-layer release audit, the exact checks r
 
 ## Result
 
-Status: **pass for static and same-host hybrid service-layer release paths**.
+Status: **pass for the audited static, same-host hybrid, and `aarch64-linux-gnu`
+cross-target service-layer paths; not yet a v0.1 GA certification**.
 
 The audit found and fixed one fixture-local build drift:
 
@@ -37,8 +38,12 @@ The audit found and fixed one fixture-local build drift:
 - Same-host hybrid releases are supported for graphs that retain Lua handlers/plugins and package local Lua/module trees.
 - HTTP TCP, native Unix-socket IPC, and HTTP-over-Unix-socket backend fixtures pass their current smoke/acceptance coverage.
 
-## Still Not Release-Unlocked
+The later v0.1 GA plan adds `x86_64-linux-gnu` to the required cross-target
+matrix. This audit predates that certification requirement.
 
+## Still Not GA-Certified
+
+- `x86_64-linux-gnu` cross-target hybrid has not been recorded in this audit.
 - Cross-target hybrid remains conditional on Moonstone runtime/package source provenance. The local Moonstone store currently provides the upstream PUC Lua source archive for `moonstone/lua` 5.4.7.
 - LuaJIT cross-target hybrid remains explicitly unsupported until a target matrix and host `buildvm` stage exist.
 - Lua C-module cross-target rebuilds require source payloads, rockspec payloads, supported archive formats, and a host `luarocks` executable.
@@ -46,10 +51,11 @@ The audit found and fixed one fixture-local build drift:
 
 ## Next Audit Step
 
-Run the required cross-target audit:
+Run the v0.1 aggregate gate, including both required Linux targets:
 
 ```bash
-moon run test-cross-target
+moon run test-release-gate
 ```
 
-If that passes, record the target triple, source archive, and produced binary/runtime facts here or in a follow-up dated audit note.
+If that passes, create a new dated audit note that records both target triples,
+source provenance, produced binary/runtime facts, and the final tag commit.

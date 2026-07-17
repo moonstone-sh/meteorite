@@ -1,2 +1,0 @@
-{"kind":"native","tool":"zig","type":"task_started","timestamp":"2026-06-17T19:37:48Z","id":"native_1"}
-{"exit_code":512,"kind":"native","timestamp":"2026-06-17T19:37:48Z","type":"task_failed","stderr":"error: sub-compilation of compiler_rt failed\n    note: failed to check cache: manifest_create PermissionDenied\n/opt/homebrew/Cellar/zig/0.16.0_1/lib/zig/std/std.zig:1:1: error: unable to load 'std.zig': PermissionDenied\n/opt/homebrew/Cellar/zig/0.16.0_1/lib/zig/ubsan_rt.zig:1:1: error: unable to load 'ubsan_rt.zig': PermissionDenied\n","id":"native_1"}

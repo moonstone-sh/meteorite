@@ -138,7 +138,7 @@ Run it with `moon run release`; deploy or copy only `dist/release/`, then start 
 
 Static and hybrid are release compiler validation modes over the same normalized graph. Lua may build the graph in either mode; static fails if the graph retains Lua runtime execution nodes. Hybrid may retain Lua handlers/plugins, records the retained-node contract in `meteorite-release.json`, and materializes target Lua plus target Lua modules for cross-target releases when Moonstone provides runtime/package source payloads. Same-host hybrid exports include the server binary, lifted inline chunks, external Lua handlers, and deploy-local `lua/<abi>` plus `lib/<abi>` package trees so `require(...)` works from inline isolates in the exported layout.
 
-For v0.1, same-host hybrid and static releases are the supported deploy path. Cross-target hybrid is intentionally treated as not fully unlocked until Moonstone consistently exposes upstream Lua runtime and Lua package source provenance.
+The v0.1 GA target is static releases natively and for `x86_64-linux-gnu` and `aarch64-linux-gnu`, plus hybrid PUC Lua 5.4 releases on those Linux targets when Moonstone provides rebuildable runtime source provenance. Retained Lua C modules additionally require source and rockspec provenance for target rebuilding. LuaJIT cross-target releases and unsupported web-platform features remain explicit non-goals. See `docs/roadmap/v0.1-ga.md` for the complete support matrix and tag gate.
 
 Static sites are declared with handler factories and graph-visible route macros, not app-level fallback methods:
 

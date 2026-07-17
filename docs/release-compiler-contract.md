@@ -88,9 +88,11 @@ Implemented now:
 - Cross-target hybrid release invokes `scripts/build-target-lua.sh` to build PUC Lua from `runtime.source_payload_path` with `zig cc` and passes the result to Zig via `-Dlua-root`.
 - Cross-target hybrid release schedules per-package Lua C-module rebuilds through `scripts/build-lua-cmodule.sh` when C-module packages expose `source_payload_path` and `rockspec_payload_path`.
 
-Cross-target PUC Lua compilation is now verified:
+Cross-target PUC Lua compilation is verified for the v0.1 Linux matrix:
 
 - `scripts/build-target-lua.sh` successfully cross-compiles PUC Lua 5.4.7 for `aarch64-linux-gnu` using `zig cc` from the upstream source archive.
+- `scripts/build-target-lua.sh` also successfully cross-compiles PUC Lua 5.4.7
+  for `x86_64-linux-gnu`; both targets pass `tests/release-gate.sh`.
 - Static release cross-compilation (e.g. `zig build install-server -Dmode=release-static -Dtarget=aarch64-linux-gnu`) produces a statically linked ELF binary.
 - Hybrid release cross-compilation with a target-built `liblua.a` produces a binary with the target Lua runtime linked in.
 - The full chain works: Moonstone store source provenance (`source_kind = "puc_lua_source"`, `source_payload_path`) → Ballad `hydrate_runtime()` → Meteorite `release_contract.validate_target_lua()` → `build-target-lua.sh` → `zig build -Dlua-root=...`.

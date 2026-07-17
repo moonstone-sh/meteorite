@@ -1,4 +1,0 @@
-{"timestamp":"2026-06-17T19:28:40Z","tool":"moon","kind":"native","type":"task_started","id":"native_1"}
-{"timestamp":"2026-06-17T19:28:40Z","id":"native_1","kind":"native","type":"task_finished","exit_code":0}
-{"timestamp":"2026-06-17T19:28:40Z","tool":"zig","kind":"native","type":"task_started","id":"native_2"}
-{"timestamp":"2026-06-17T19:28:40Z","id":"native_2","kind":"native","type":"task_finished","exit_code":0}

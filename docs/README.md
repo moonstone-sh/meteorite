@@ -18,12 +18,14 @@ Meteorite's root `README.md` is the public landing page. This directory owns dur
 
 ## Roadmaps
 
+- `roadmap/v0.1-ga.md` — v0.1 support matrix, release gates, CI runner contract, and deferred scope.
 - `roadmap/web-standards.md` — HTTP/web standards coverage and future work.
 - `roadmap/hono-parity.md` — Hono comparison and parity roadmap.
 - `roadmap/ipc-unix-socket-http.md` — HTTP-over-Unix-socket roadmap.
 
 ## Maintenance And Archive
 
+- `maintenance/release-candidate-audit-2026-07-17.md` — current v0.1 GA gate audit.
 - `maintenance/release-candidate-audit-2026-07-14.md` — latest v0.1 service-layer release audit result.
 - `maintenance/docs-stabilization.md` — docs tree stabilization record.
 - `archive/` — historical validation, claim-safety, and framework-guidance artifacts.

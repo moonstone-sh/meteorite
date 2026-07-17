@@ -91,11 +91,20 @@ test -x fixtures/apps/hybrid-demo/dist/release/bin/server
 test -f fixtures/apps/hybrid-demo/dist/release/meteorite-release.json
 
 BINARY_ARCH=$(file -b fixtures/apps/hybrid-demo/dist/release/bin/server)
-case "$BINARY_ARCH" in
-  *"ELF"*"ARM aarch64"*)
-    echo "cross-target: binary architecture OK (aarch64 ELF)"
+case "$TARGET" in
+  aarch64-*)
+    expected_arch="ARM aarch64"
     ;;
-  *"ELF"*"$TARGET"*)
+  x86_64-*)
+    expected_arch="x86-64"
+    ;;
+  *)
+    expected_arch="$TARGET"
+    ;;
+esac
+
+case "$BINARY_ARCH" in
+  *"ELF"*"$expected_arch"*)
     echo "cross-target: binary architecture OK ($TARGET)"
     ;;
   *)
