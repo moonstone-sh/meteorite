@@ -9,6 +9,8 @@ Meteorite's root `README.md` is the public landing page. This directory owns dur
 - `benchmarks.md` — benchmark methodology, scripts, and result interpretation.
 - `ipc-unix-socket.md` — Unix-socket IPC status and usage notes.
 - `release-compiler-contract.md` — release compiler contract, validation gates, and implementation checklist.
+- `release-process.md` — tag preparation, source-package verification, checksum, and publishing sequence.
+- `release-notes/` — versioned user-facing release notes.
 
 ## Design Notes
 

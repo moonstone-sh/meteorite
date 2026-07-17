@@ -8,8 +8,8 @@ cross-target matrix certification.
 Status: **pass for the declared v0.1 release gate; ready to tag once release
 notes and artifact checksums are prepared**.
 
-The audit ran from the Meteorite checkout at `cb26a04` plus the uncommitted v0.1
-GA hardening changes recorded by this audit. Zig version: `0.16.0`.
+The audit ran from the Meteorite checkout at `fde0649` (`Harden v0.1 GA release
+gate`). Zig version: `0.16.0`.
 
 ## Checks Run
 
