@@ -2,14 +2,15 @@ local ballad = require("ballad")
 
 return ballad.partiture(function(p)
 	local moonstone = p:use(ballad.plugins.moonstone)
-	local registry = p:use(ballad.plugins.registry)
 
 	local project = moonstone.project({ root = "." })
-	local source_artifact = registry.source_package(project, {
+	local source_artifact = moonstone.registry.source_package(project, {
 		name = project.registry_name or "moonstone/meteorite",
 		version = project.version,
 		kind = "bin",
+		readme = "README.md",
 		include = {
+			"HMR_partiture.lua",
 			"moonstone.toml",
 			"moonstone.lock",
 			"build.zig",
@@ -44,11 +45,11 @@ return ballad.partiture(function(p)
 				lua_modules = {
 					{ name = "meteorite.lua", path = "src/meteorite.lua" },
 					{ name = "meteorite/core/route.lua", path = "src/core/route.lua" },
-				{ name = "meteorite/core/contract.lua", path = "src/core/contract.lua" },
-				{ name = "meteorite/core/plugin_contract.lua", path = "src/core/plugin_contract.lua" },
-				{ name = "meteorite/core/hooks.lua", path = "src/core/hooks.lua" },
-				{ name = "meteorite/core/plugins/cache.lua", path = "src/core/plugins/cache.lua" },
-				{ name = "meteorite/core/plugins/idempotency.lua", path = "src/core/plugins/idempotency.lua" },
+					{ name = "meteorite/core/contract.lua", path = "src/core/contract.lua" },
+					{ name = "meteorite/core/plugin_contract.lua", path = "src/core/plugin_contract.lua" },
+					{ name = "meteorite/core/hooks.lua", path = "src/core/hooks.lua" },
+					{ name = "meteorite/core/plugins/cache.lua", path = "src/core/plugins/cache.lua" },
+					{ name = "meteorite/core/plugins/idempotency.lua", path = "src/core/plugins/idempotency.lua" },
 					{ name = "meteorite/core/schema.lua", path = "src/core/schema.lua" },
 					{ name = "meteorite/core/profile.lua", path = "src/core/profile.lua" },
 					{ name = "meteorite/core/patterns.lua", path = "src/core/patterns.lua" },
@@ -67,9 +68,18 @@ return ballad.partiture(function(p)
 					{ name = "meteorite/cli/help_text.lua", path = "src/cli/help_text.lua" },
 					{ name = "meteorite/cli/templates.lua", path = "src/cli/templates.lua" },
 					{ name = "meteorite/codegen/template.lua", path = "src/codegen/template.lua" },
-					{ name = "meteorite/codegen/templates/route.zig.tpl", path = "src/codegen/templates/route.zig.tpl" },
-					{ name = "meteorite/codegen/templates/pattern.zig.tpl", path = "src/codegen/templates/pattern.zig.tpl" },
-					{ name = "meteorite/codegen/templates/build_report.txt.tpl", path = "src/codegen/templates/build_report.txt.tpl" },
+					{
+						name = "meteorite/codegen/templates/route.zig.tpl",
+						path = "src/codegen/templates/route.zig.tpl",
+					},
+					{
+						name = "meteorite/codegen/templates/pattern.zig.tpl",
+						path = "src/codegen/templates/pattern.zig.tpl",
+					},
+					{
+						name = "meteorite/codegen/templates/build_report.txt.tpl",
+						path = "src/codegen/templates/build_report.txt.tpl",
+					},
 					{ name = "meteorite/cli/main.lua", path = "src/cli/main.lua" },
 					{ name = "meteorite/cli/dev.lua", path = "src/cli/dev.lua" },
 					{ name = "meteorite/cli/hybrid.lua", path = "src/cli/hybrid.lua" },

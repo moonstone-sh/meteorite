@@ -1,4 +1,4 @@
-package.path = "src/?.lua;src/?/init.lua;" .. package.path
+package.path = "src/?.lua;src/?/init.lua;tests/?.lua;" .. package.path
 
 local json = require("utils.json")
 local test = require("test")

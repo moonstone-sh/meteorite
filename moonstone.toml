@@ -1,6 +1,6 @@
 [package]
 name = "moonstone/meteorite"
-version = "0.1.0"
+version = "0.1.2"
 kind = "bin"
 description = "Moonstone-zig service compiler prototype"
 
@@ -9,44 +9,28 @@ name = "lua"
 version = "5.4"
 abi = "5.4"
 
-[[dependencies]]
-name = "lua-cjson"
-constraint = "rocks:lua-cjson@^2.1.0.10-1"
-role = "runtime"
-
-[[dependencies]]
-name = "etlua"
-constraint = "rocks:etlua@^1.3.0-1"
-role = "runtime"
-
-[[dependencies]]
-name = "luasql-sqlite3"
-constraint = "^2.8.0-1"
-resolver = "rocks"
-role = "runtime"
-
 [scripts]
-"graph" = "lua src/cli/main.lua graph fixtures/apps/showcase-service/src/main.lua .meteorite/graph/current release-static"
-"dev" = "sh -c 'METEORITE_GUARD_EXCLUDE_PID=$$ scripts/guard.sh handoff; trap \"scripts/guard.sh cleanup >/dev/null 2>&1 || true\" EXIT; trap \"scripts/guard.sh cleanup >/dev/null 2>&1 || true; scripts/guard.sh cleanup-sessions >/dev/null 2>&1 || true; exit 130\" INT TERM HUP; lua src/cli/dev.lua fixtures/apps/showcase-service/src/main.lua .meteorite/graph/current hybrid_dev'"
-"build" = "zig build install-server -Dgraph-input=fixtures/apps/showcase-service/src/main.lua -Dgraph-output=.meteorite/graph/current"
-"run" = "zig build -Dgraph-input=fixtures/apps/showcase-service/src/main.lua -Dgraph-output=.meteorite/graph/current run"
-"test-fixture" = "LUA_PATH='src/?.lua;src/?/init.lua;../ballad/.moonstone/env/share/lua/5.1/?.lua;../ballad/.moonstone/env/share/lua/5.1/?/init.lua;../ballad/src/?.lua;../ballad/src/?/init.lua;;' luajit ../ballad/src/main.lua play fixtures/apps/basic-service/partiture.lua"
-"test-acceptance" = "bash fixtures/tests/basic-service.sh"
-"test-web-standards" = "bash fixtures/tests/web-standards.sh"
-"test-ipc-backends" = "bash fixtures/tests/ipc-backends.sh"
-"test-release-smoke" = "bash fixtures/tests/release-smoke.sh"
-"test-all" = "bash tests/run-all.sh && bash fixtures/tests/ipc-backends.sh"
-"test-cross-target" = "bash fixtures/tests/cross-target.sh"
-"test-hygiene" = "bash tests/repository-hygiene.sh"
-"test-registry-export" = "bash tests/registry-export.sh"
-"test-release-reproducibility" = "bash tests/release-reproducibility.sh"
-"test-release-gate" = "bash tests/release-gate.sh"
-"bench:smoke" = "bash bench/run.sh --mode=smoke \"$@\""
-"bench:public" = "bash bench/run.sh --mode=public \"$@\""
-"bench:work" = "bash bench/run.sh --mode=work \"$@\""
-"bench:meteorite-app" = "bash bench/run.sh --mode=meteorite-app \"$@\""
 "bench:lua-bridge" = "bash bench/run.sh --mode=lua-bridge \"$@\""
+"run" = "zig build -Dgraph-input=fixtures/apps/showcase-service/src/main.lua -Dgraph-output=.meteorite/graph/current run"
+"test-hygiene" = "bash tests/repository-hygiene.sh"
+"bench:public" = "bash bench/run.sh --mode=public \"$@\""
+"bench:smoke" = "bash bench/run.sh --mode=smoke \"$@\""
+"test-release-gate" = "bash tests/release-gate.sh"
+"test-all" = "bash tests/run-all.sh && bash fixtures/tests/ipc-backends.sh"
+"test-fixture" = "LUA_PATH='src/?.lua;src/?/init.lua;../ballad/.moonstone/env/share/lua/5.1/?.lua;../ballad/.moonstone/env/share/lua/5.1/?/init.lua;../ballad/src/?.lua;../ballad/src/?/init.lua;;' luajit ../ballad/src/main.lua play fixtures/apps/basic-service/partiture.lua"
+"test-web-standards" = "bash fixtures/tests/web-standards.sh"
+"test-registry-export" = "bash tests/registry-export.sh"
 "bench:lua-bridge-smoke" = "bash bench/run.sh --mode=lua-bridge-smoke \"$@\""
+"test-cross-target" = "bash fixtures/tests/cross-target.sh"
+"build" = "zig build install-server -Dgraph-input=fixtures/apps/showcase-service/src/main.lua -Dgraph-output=.meteorite/graph/current"
+"test-release-smoke" = "bash fixtures/tests/release-smoke.sh"
+"test-ipc-backends" = "bash fixtures/tests/ipc-backends.sh"
+"bench:meteorite-app" = "bash bench/run.sh --mode=meteorite-app \"$@\""
+"test-acceptance" = "bash fixtures/tests/basic-service.sh"
+"graph" = "lua src/cli/main.lua graph fixtures/apps/showcase-service/src/main.lua .meteorite/graph/current release-static"
+"test-release-reproducibility" = "bash tests/release-reproducibility.sh"
+"bench:work" = "bash bench/run.sh --mode=work \"$@\""
+"dev" = "moon exec ballad play HMR_partiture.lua"
 
 [[orbits.member]]
 name = "lapis-cqueues"
@@ -67,3 +51,24 @@ path = "bench/competitors/lapis-openresty"
 [[orbits.member]]
 name = "pegasus"
 path = "bench/competitors/pegasus"
+
+[[dependencies]]
+name = "lua-cjson"
+constraint = "rocks:lua-cjson@^2.1.0.10-1"
+role = "runtime"
+
+[[dependencies]]
+name = "etlua"
+constraint = "rocks:etlua@^1.3.0-1"
+role = "runtime"
+
+[[dependencies]]
+name = "luasql-sqlite3"
+constraint = "^2.8.0-1"
+resolver = "rocks"
+role = "runtime"
+
+[[dependencies]]
+name = "moonstone/ballad"
+constraint = "^0.2.24"
+role = "tool"

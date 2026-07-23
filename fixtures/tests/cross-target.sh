@@ -14,6 +14,12 @@ echo "cross-target: target: $TARGET"
 
 CMODULE_FIXTURE_DIR="$(mktemp -d /tmp/meteorite-cross-cmodule.XXXXXX)"
 mkdir -p "$CMODULE_FIXTURE_DIR/src/mockcmodule" "$CMODULE_FIXTURE_DIR/bin"
+LUA_SOURCE_ARCHIVE="$CMODULE_FIXTURE_DIR/lua-5.4.7.tar.gz"
+LUA_SOURCE_SHA256="9fbf5e28ef86c69858f6d3d34eccc32e911c1a28b4120ff3e84aaa70cfbf1e30"
+curl --fail --location --retry 3 --silent --show-error \
+  --output "$LUA_SOURCE_ARCHIVE" \
+  "https://www.lua.org/ftp/lua-5.4.7.tar.gz"
+printf '%s  %s\n' "$LUA_SOURCE_SHA256" "$LUA_SOURCE_ARCHIVE" | shasum -a 256 -c -
 cat > "$CMODULE_FIXTURE_DIR/src/mockcmodule/mock.c" <<'C'
 int luaopen_mockcmodule(void) { return 0; }
 C
@@ -82,6 +88,8 @@ PATH="$CMODULE_FIXTURE_DIR/bin:$PATH" \
 METEORITE_CROSS_TARGET="$TARGET" \
 METEORITE_CMODULE_SOURCE="$CMODULE_FIXTURE_DIR/mockcmodule.tar.gz" \
 METEORITE_CMODULE_ROCKSPEC="$CMODULE_FIXTURE_DIR/mockcmodule-0.1-1.rockspec" \
+METEORITE_LUA_SOURCE="$LUA_SOURCE_ARCHIVE" \
+METEORITE_LUA_SOURCE_KIND="puc_lua_source" \
 ZIG_GLOBAL_CACHE_DIR="$ZIG_CACHE_DIR" \
   luajit ../ballad/src/main.lua play fixtures/apps/hybrid-demo/partiture-cross-target.lua \
   >/tmp/meteorite-cross-target-ballad.log 2>&1

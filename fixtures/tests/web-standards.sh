@@ -468,7 +468,7 @@ grep -q 'json = {' "$template_root/json-api/src/app.lua"
 
 manifest_static_json="/tmp/meteorite-web-standards-manifest-static.json"
 manifest_hybrid_json="/tmp/meteorite-web-standards-manifest-hybrid.json"
-LUA_PATH='src/?.lua;src/?/init.lua;;' ./.moonstone/env/bin/lua <<'LUA' > "$manifest_static_json"
+./.moonstone/env/bin/lua -e 'package.path = "src/?.lua;src/?/init.lua;" .. package.path' - <<'LUA' > "$manifest_static_json"
 local manifest = require("ballad.release_manifest")
 io.write(manifest.build({
   graph_hash = "b3:test-static",
@@ -484,7 +484,7 @@ io.write(manifest.build({
   requires_target_lua = false,
 }, nil, { target = "native" }))
 LUA
-LUA_PATH='src/?.lua;src/?/init.lua;;' ./.moonstone/env/bin/lua <<'LUA' > "$manifest_hybrid_json"
+./.moonstone/env/bin/lua -e 'package.path = "src/?.lua;src/?/init.lua;" .. package.path' - <<'LUA' > "$manifest_hybrid_json"
 local manifest = require("ballad.release_manifest")
 io.write(manifest.build({
   graph_hash = "b3:test-hybrid",

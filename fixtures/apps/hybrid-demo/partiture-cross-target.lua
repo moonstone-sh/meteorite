@@ -5,6 +5,8 @@ local meteorite = require("meteorite.ballad")
 local target = os.getenv("METEORITE_CROSS_TARGET") or "aarch64-linux-gnu"
 local cmodule_source = os.getenv("METEORITE_CMODULE_SOURCE") or ""
 local cmodule_rockspec = os.getenv("METEORITE_CMODULE_ROCKSPEC") or ""
+local runtime_source = os.getenv("METEORITE_LUA_SOURCE") or ""
+local runtime_source_kind = os.getenv("METEORITE_LUA_SOURCE_KIND") or ""
 
 local packages = nil
 if cmodule_source ~= "" or cmodule_rockspec ~= "" then
@@ -33,6 +35,8 @@ return ballad.partiture(function(p)
     backend = "std_http",
     router_dispatch = "param_matchers",
     packages = packages,
+    runtime_source = runtime_source,
+    runtime_source_kind = runtime_source_kind,
   })
   p.sink.directory(release, { out = "fixtures/apps/hybrid-demo/dist/release", file_graph = true })
 end)

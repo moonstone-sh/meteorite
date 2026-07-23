@@ -47,7 +47,7 @@ moon run dev
 
 `moon run dev` regenerates the graph on source changes, rebuilds/restarts for route/zig/build changes, and reloads inline Lua handler chunks in-process when only `lua_chunk` partitions changed. The dev loop uses `hybrid_dev`, `std_http`, and the optimized cached Lua runtime so Lua handler edits update without a Zig rebuild or server restart.
 
-The dev command runs through `scripts/guard.sh`, which cleans stale `moon run dev` supervisors and `dist/server` listeners before handoff. If a session is interrupted or port `8080` looks stuck, run `scripts/guard.sh status` or `scripts/guard.sh handoff` from the repo root.
+The dev command runs `HMR_partiture.lua` through Ballad's watcher plugin. Ballad owns polling, debounce, terminal traps, and cleanup; Meteorite's single refresh cycle decides whether a graph change can reload Lua handlers in-process or needs a rebuild. If a session is interrupted or port `8080` looks stuck, run `scripts/guard.sh status` or `scripts/guard.sh handoff` from the repo root.
 
 For deployable output, use the app's Ballad partiture instead of `dist/server`:
 

@@ -75,9 +75,7 @@ pub fn main(init: std.process.Init) !void {
     try enterReleaseRoot(init);
 
     const listen_zon = listen_config.listen_zon;
-    const listen_zon_nt = try std.mem.concatWithSentinel(init.gpa, u8, &.{listen_zon}, 0);
-    defer init.gpa.free(listen_zon_nt);
-    const parsed = try std.zon.parse.fromSliceAlloc(ListenConfig, init.gpa, listen_zon_nt, null, .{});
+    const parsed = try std.zon.parse.fromSliceAlloc(ListenConfig, init.gpa, listen_zon, null, .{});
     defer std.zon.parse.free(init.gpa, parsed);
     try App.serve(init.io, parsed);
 }

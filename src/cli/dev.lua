@@ -10,6 +10,7 @@ local guard_script = os.getenv("METEORITE_GUARD_SCRIPT") or "scripts/guard.sh"
 local dev_port = os.getenv("METEORITE_DEV_PORT") or "8080"
 local meteorite_cli = os.getenv("METEORITE_CLI") or "src/cli/main.lua"
 local build_command_override = os.getenv("METEORITE_BUILD_COMMAND")
+local once = os.getenv("METEORITE_DEV_ONCE") == "1"
 
 local function path_exists(path)
   local file = io.open(path, "rb")
@@ -222,7 +223,11 @@ local function handle_signal()
   os.exit(0)
 end
 
-io.stderr:write("Meteorite dev: watching src/, zig/, build.zig, moonstone.toml\n")
+if once then
+  io.stderr:write("Meteorite dev: running one graph-aware refresh cycle\n")
+else
+  io.stderr:write("Meteorite dev: watching src/, zig/, build.zig, moonstone.toml\n")
+end
 io.stderr:write("Meteorite dev: mode=" .. mode .. " build_args=" .. build_args .. "\n")
 io.stderr:write("Press Ctrl-C to stop.\n")
 
@@ -256,7 +261,8 @@ while running do
       io.stderr:write("Meteorite dev: graph failed; keeping previous server state.\n")
     end
   end
+  if once then break end
   os.execute("sleep 1")
 end
 
-handle_signal()
+if not once then handle_signal() end

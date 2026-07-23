@@ -77,9 +77,21 @@ descendant_pids() {
   done
 }
 
+is_ancestor_pid() {
+  ancestor="$1"
+  descendant="$2"
+  while [ -n "$descendant" ] && [ "$descendant" -gt 1 ] 2>/dev/null; do
+    [ "$descendant" = "$ancestor" ] && return 0
+    parent="$(ps -p "$descendant" -o ppid= 2>/dev/null | tr -d '[:space:]')"
+    [ -n "$parent" ] && [ "$parent" != "$descendant" ] || break
+    descendant="$parent"
+  done
+  return 1
+}
+
 dev_session_pids() {
   exclude="${METEORITE_GUARD_EXCLUDE_PID:-}"
-  ps -axo pid=,ppid=,command= 2>/dev/null | awk \
+  candidates="$(ps -axo pid=,ppid=,command= 2>/dev/null | awk \
     -v self="$$" \
     -v parent="${PPID:-}" \
     -v exclude="$exclude" '
@@ -92,7 +104,13 @@ dev_session_pids() {
         if (ppid == self || ppid == parent || ppid == exclude) next
         print pid
       }
-    ' | sort -u || true
+    ' || true)"
+  for pid in $candidates; do
+    if [ -n "$exclude" ] && is_ancestor_pid "$pid" "$exclude"; then
+      continue
+    fi
+    echo "$pid"
+  done | sort -u
 }
 
 candidate_pids() {
