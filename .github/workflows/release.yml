@@ -1,4 +1,4 @@
-name: Validate and publish Meteorite
+name: Meteorite CI
 
 on:
   pull_request:
@@ -10,7 +10,8 @@ permissions:
   contents: read
 
 jobs:
-  release:
+  validate:
+    name: Validate Meteorite
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,27 +19,94 @@ jobs:
         with:
           repository: moonstone-sh/moonstone
           path: .ci/moonstone
+      - uses: actions/checkout@v4
+        with:
+          repository: moonstone-sh/ballad
+          path: .ci/ballad
+          fetch-depth: 0
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.16.0
+      - name: Install release tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y b3sum file lsof luajit zstd
       - name: Build Moonstone CLI
         working-directory: .ci/moonstone
         run: |
           zig build
           echo "$GITHUB_WORKSPACE/.ci/moonstone/zig-out/bin" >> "$GITHUB_PATH"
-      - name: Synchronize project
-        run: moon sync
+      - name: Synchronize project lockfile
+        run: moon sync --locked
+      - name: Prepare locked Ballad integration checkout
+        run: |
+          ballad_version="$(awk '
+            /^\[\[package\]\]$/ { in_ballad = 0; next }
+            $0 == "name = \"moonstone/ballad\"" { in_ballad = 1; next }
+            in_ballad && /^version = / { value = $0; sub(/^version = \"/, "", value); sub(/\"$/, "", value); print value; exit }
+          ' moonstone.lock)"
+          test -n "$ballad_version"
+          git -C .ci/ballad checkout --detach "v$ballad_version"
+          ln -s "$GITHUB_WORKSPACE/.ci/ballad" "$GITHUB_WORKSPACE/../ballad"
+          cd .ci/ballad
+          moon sync --locked
       - name: Validate and export with Ballad
         run: |
           moon run test-release-gate
           moon exec ballad play partiture.lua
+
+  publish:
+    name: Publish Meteorite registry artifact
+    needs: validate
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: moonstone-sh/moonstone
+          path: .ci/moonstone
+      - uses: actions/checkout@v4
+        with:
+          repository: moonstone-sh/ballad
+          path: .ci/ballad
+          fetch-depth: 0
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - name: Install release tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y b3sum file lsof luajit zstd
+      - name: Build Moonstone CLI
+        working-directory: .ci/moonstone
+        run: |
+          zig build
+          echo "$GITHUB_WORKSPACE/.ci/moonstone/zig-out/bin" >> "$GITHUB_PATH"
+      - name: Synchronize project lockfile
+        run: moon sync --locked
+      - name: Prepare locked Ballad integration checkout
+        run: |
+          ballad_version="$(awk '
+            /^\[\[package\]\]$/ { in_ballad = 0; next }
+            $0 == "name = \"moonstone/ballad\"" { in_ballad = 1; next }
+            in_ballad && /^version = / { value = $0; sub(/^version = \"/, "", value); sub(/\"$/, "", value); print value; exit }
+          ' moonstone.lock)"
+          test -n "$ballad_version"
+          git -C .ci/ballad checkout --detach "v$ballad_version"
+          ln -s "$GITHUB_WORKSPACE/.ci/ballad" "$GITHUB_WORKSPACE/../ballad"
+          cd .ci/ballad
+          moon sync --locked
+      - name: Export tagged project
+        run: |
+          moon exec ballad play partiture.lua
       - name: Verify tag version
-        if: startsWith(github.ref, 'refs/tags/')
         run: test "${GITHUB_REF_NAME#v}" = "$(sed -n 's/^version = "\(.*\)"$/\1/p' moonstone.toml | head -1)"
       - name: Publish registry artifact
-        if: startsWith(github.ref, 'refs/tags/')
         env:
           MOONSTONE_TOKEN: ${{ secrets.MOONSTONE_TOKEN }}
         run: |
           test -n "$MOONSTONE_TOKEN"
           dist/registry/meteorite/publish.sh
+      - name: Verify published package is resolvable
+        run: .ci/ballad/scripts/wait-for-publication.sh dist/registry/meteorite/package.toml
