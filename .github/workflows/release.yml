@@ -43,7 +43,7 @@ jobs:
           ballad_version="$(awk '
             /^\[\[package\]\]$/ { in_ballad = 0; next }
             $0 == "name = \"moonstone/ballad\"" { in_ballad = 1; next }
-            in_ballad && /^version = / { value = $0; sub(/^version = \"/, "", value); sub(/\"$/, "", value); print value; exit }
+            in_ballad && /^version = / { value = $0; sub(/^version = "/, "", value); sub(/"$/, "", value); print value; exit }
           ' moonstone.lock)"
           test -n "$ballad_version"
           git -C .ci/ballad checkout --detach "v$ballad_version"
@@ -92,7 +92,7 @@ jobs:
           ballad_version="$(awk '
             /^\[\[package\]\]$/ { in_ballad = 0; next }
             $0 == "name = \"moonstone/ballad\"" { in_ballad = 1; next }
-            in_ballad && /^version = / { value = $0; sub(/^version = \"/, "", value); sub(/\"$/, "", value); print value; exit }
+            in_ballad && /^version = / { value = $0; sub(/^version = "/, "", value); sub(/"$/, "", value); print value; exit }
           ' moonstone.lock)"
           test -n "$ballad_version"
           git -C .ci/ballad checkout --detach "v$ballad_version"
