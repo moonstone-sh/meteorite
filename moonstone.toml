@@ -1,6 +1,6 @@
 [package]
 name = "moonstone/meteorite"
-version = "0.1.4"
+version = "0.1.5"
 kind = "bin"
 description = "Moonstone-zig service compiler prototype"
 

@@ -14,25 +14,23 @@ fn cwdPath(path: []const u8) std.Build.LazyPath {
 }
 
 fn cwdFileExists(b: *std.Build, path: []const u8) bool {
-    const z = b.allocator.dupeZ(u8, path) catch @panic("OOM");
-    defer b.allocator.free(z);
-    return std.c.access(z.ptr, 0) == 0;
+    std.Io.Dir.cwd().access(b.graph.io, path, .{}) catch return false;
+    return true;
 }
 
 fn readSmallFile(b: *std.Build, path: []const u8) ?[]const u8 {
-    const z = b.allocator.dupeZ(u8, path) catch @panic("OOM");
-    defer b.allocator.free(z);
-    const fd = std.c.open(z.ptr, .{ .ACCMODE = .RDONLY });
-    if (fd < 0) return null;
-    const buffer = b.allocator.alloc(u8, 1024 * 1024) catch @panic("OOM");
-    const read = std.c.read(fd, buffer.ptr, buffer.len);
-    if (read < 0) return null;
-    return buffer[0..@intCast(read)];
+    return std.Io.Dir.cwd().readFileAlloc(
+        b.graph.io,
+        path,
+        b.allocator,
+        .limited(1024 * 1024),
+    ) catch null;
 }
 
 fn addZigFileImports(b: *std.Build, graph_module: *std.Build.Module, graph_output: []const u8, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
     const manifest_path = join(b, &.{ graph_output, "zig-files.tsv" });
     const manifest = readSmallFile(b, manifest_path) orelse return;
+    defer b.allocator.free(manifest);
     var lines = std.mem.splitScalar(u8, manifest, '\n');
     while (lines.next()) |line| {
         if (line.len == 0) continue;
