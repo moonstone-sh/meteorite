@@ -111,7 +111,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
-          asset="$(find dist/registry/meteorite -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
+          asset="$(find dist/registry/meteorite -maxdepth 1 -type f -name '*.tar.zst' -print -quit)"
           test -n "$asset"
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "Meteorite $GITHUB_REF_NAME" --generate-notes
           gh release upload "$GITHUB_REF_NAME" "$asset" --clobber
