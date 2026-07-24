@@ -40,7 +40,7 @@ for required_pattern in \
   fi
 done
 
-if rg -n '"(?:hono|@hono/node-server)"\s*:\s*"(?:latest|\^|~|\*)' \
+if grep -En '"(hono|@hono/node-server)"[[:space:]]*:[[:space:]]*"(latest|\^|~|\*)' \
   bench/competitors/hono/package.json >/dev/null; then
   echo "repository hygiene: Hono benchmark dependencies must use exact versions" >&2
   exit 1
