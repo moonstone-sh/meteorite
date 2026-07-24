@@ -1,4 +1,5 @@
 local ballad = require("ballad")
+local common = require("partiture_common")
 
 return ballad.partiture(function(p)
 	local moonstone = p:use(ballad.plugins.moonstone)
@@ -11,6 +12,7 @@ return ballad.partiture(function(p)
 		readme = "README.md",
 		include = {
 			"HMR_partiture.lua",
+			"partiture_common.lua",
 			"moonstone.toml",
 			"moonstone.lock",
 			"build.zig",
@@ -36,7 +38,7 @@ return ballad.partiture(function(p)
 		},
 		materialize = {
 			type = "command",
-			command = "zig build install-server -- dist/server",
+			command = "zig build install-server -- " .. common.server_output,
 			collect = {
 				bins = {
 					{ name = "meteorite", path = "bin/meteorite" },
