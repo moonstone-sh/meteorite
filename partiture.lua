@@ -9,7 +9,6 @@ return ballad.partiture(function(p)
 		name = project.registry_name or "moonstone/meteorite",
 		version = project.version,
 		kind = "bin",
-		readme = "README.md",
 		include = {
 			"HMR_partiture.lua",
 			"partiture_common.lua",
@@ -24,6 +23,7 @@ return ballad.partiture(function(p)
 			"src/codegen/templates/**",
 			"docs/**",
 			"README.md",
+			"REGISTRY_README.md",
 		},
 		exclude = {
 			".meteorite/**",
