@@ -1,6 +1,7 @@
 {
   "workspace": {
     "library": [
+      "../ballad/src",
       ".meteorite/aids/lua",
       ".moonstone/env/share/lua/5.4",
       ".moonstone/env/lib/lua/5.4",
