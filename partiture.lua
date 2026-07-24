@@ -41,7 +41,7 @@ return ballad.partiture(function(p)
 			command = "true",
 			collect = {
 				bins = {
-					{ name = "meteorite", path = "bin/meteorite" },
+					{ name = "bin/meteorite", path = "bin/meteorite" },
 				},
 				headers = {},
 				lua_modules = {
