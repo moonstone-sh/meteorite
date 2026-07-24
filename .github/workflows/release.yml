@@ -51,10 +51,10 @@ jobs:
           ln -s "$GITHUB_WORKSPACE/.ci/ballad" "$GITHUB_WORKSPACE/../ballad"
           cd .ci/ballad
           moon sync --locked
-      - name: Validate and export with Ballad
-        run: |
-          moon run test-release-gate
-          moon exec ballad play partiture.lua
+      - name: Validate release gate
+        run: moon run test-release-gate
+      - name: Export with locked Ballad tool
+        run: moon exec ballad play partiture.lua
 
   publish:
     name: Publish Meteorite registry artifact
