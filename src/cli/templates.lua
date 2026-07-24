@@ -402,7 +402,7 @@ function handler_sync.sync_luarc(output)
   }, "\n"))
 end
 
-function handler_sync.moonstone_manifest(name, build_mode, dev_script)
+function handler_sync.moonstone_manifest(name, build_mode)
   local release_mode = build_mode == "release-static" and "static" or "hybrid"
   return table.concat({
     "[package]",
@@ -420,39 +420,121 @@ function handler_sync.moonstone_manifest(name, build_mode, dev_script)
     "\"moonstone/ballad\" = \"^0.2.0\"",
     "",
     "[scripts]",
-    "graph = \"meteorite graph src/main.lua .meteorite/graph/current " .. tostring(build_mode or "hybrid") .. "\"",
-    "dev = \"" .. tostring(dev_script or "meteorite dev") .. "\"",
-    "build = \"meteorite build --mode " .. tostring(build_mode or "hybrid") .. "\"",
-    "run = \"meteorite build --mode " .. tostring(build_mode or "hybrid") .. " && ./dist/server\"",
-    "release = \"ballad play partiture.lua\"",
+    "graph = \"meteorite graph src/main.lua .meteorite/graph/current " .. tostring(build_mode or "hybrid") .. " fast_http\"",
+    "dev = \"moon exec ballad play HMR_partiture.lua -- --mode hybrid_dev --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers\"",
+    "build = \"moon exec ballad play Dev_partiture.lua -- --mode hybrid_dev --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers\"",
+    "run = \"moon run build && ./dist/server\"",
+    "release = \"moon exec ballad play partiture.lua -- --mode " .. release_mode .. " --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers\"",
+    "check:release = \"moon exec ballad play Check_partiture.lua -- --mode " .. release_mode .. " --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers\"",
+    "check:static = \"moon exec ballad play Check_partiture.lua -- --mode static --backend fast_http --router-dispatch param_matchers\"",
     "doctor = \"meteorite doctor\"",
     "invoke:health = \"meteorite invoke --json src/main.lua GET /health\"",
-    "",
-    "[meteorite]",
-    "mode = \"" .. release_mode .. "\"",
     "",
   }, "\n")
 end
 
-function handler_sync.release_partiture(mode)
-  local release_mode = mode == "static" and "static" or "hybrid"
+function handler_sync.partiture_common()
+  return table.concat({
+    "local request = require(\"meteorite.build_request\")",
+    "",
+    "local common = {}",
+    "",
+    "function common.request(p)",
+    "  local value = request.parse(p.invocation.args)",
+    "  return request.require_behavior(value, \"Meteorite partiture\")",
+    "end",
+    "",
+    "function common.options(value)",
+    "  return request.to_options(value)",
+    "end",
+    "",
+    "return common",
+    "",
+  }, "\n")
+end
+
+function handler_sync.release_partiture()
   return table.concat({
     "local ballad = require(\"ballad\")",
     "local moonstone = require(\"ballad.plugins.moonstone\")",
+    "local common = require(\"partiture_common\")",
     "",
     "return ballad.partiture(function(p)",
     "  local meteorite = p:use(\"meteorite.ballad\")",
+    "  local request = common.request(p)",
     "  local project = moonstone.project_prepare({ root = \".\", roles = { \"runtime\" } })",
     "  local release = meteorite.release({",
     "    project = project,",
     "    input = \"src/main.lua\",",
     "    graph_output = \".meteorite/graph/release\",",
-    "    mode = \"" .. release_mode .. "\",",
+    "    mode = request.mode,",
     "    bin = \"bin/server\",",
-    "    backend = \"std_http\",",
-    "    router_dispatch = \"param_matchers\",",
+    "    backend = request.backend,",
+    "    hybrid_profile = request.hybrid_profile,",
+    "    router_dispatch = request.router_dispatch,",
+    "    target = request.target,",
     "  })",
     "  p.sink.directory(release, { out = \"dist/release\", file_graph = true })",
+    "end)",
+    "",
+  }, "\n")
+end
+
+function handler_sync.dev_partiture()
+  return table.concat({
+    "local ballad = require(\"ballad\")",
+    "local common = require(\"partiture_common\")",
+    "",
+    "return ballad.partiture(function(p)",
+    "  local request = common.request(p)",
+    "  local build = p.task.native({",
+    "    id = \"meteorite.build-server.v1\", tool = \"meteorite\",",
+    "    args = request.to_cli_args(request),",
+    "    inputs = { \"src/**/*.lua\", \"moonstone.toml\", \"moonstone.lock\", \"build.zig\", \"zig/**\" },",
+    "    outputs = { \".meteorite/graph/current\", \"dist/server\" },",
+    "    description = \"build Meteorite development server\",",
+    "  })",
+    "  p.sink.none(p.task.run(build))",
+    "end)",
+    "",
+  }, "\n")
+end
+
+function handler_sync.hmr_partiture()
+  return table.concat({
+    "local ballad = require(\"ballad\")",
+    "local common = require(\"partiture_common\")",
+    "",
+    "return ballad.partiture(function(p)",
+    "  local watcher = p:use(ballad.plugins.watcher)",
+    "  local request = common.request(p)",
+    "  local app = p.source.files({ \"**/*.lua\" }, { root = \"src\" })",
+    "  local build = p.task.native({",
+    "    id = \"meteorite.hmr.build.v1\", tool = \"meteorite\",",
+    "    args = request.to_cli_args(request),",
+    "    inputs = { \"src/**/*.lua\", \"moonstone.toml\", \"moonstone.lock\", \"build.zig\", \"zig/**\" },",
+    "    outputs = { \".meteorite/graph/current\", \"dist/server\" },",
+    "    description = \"build Meteorite development server\",",
+    "  })",
+    "  p.sink.none(watcher.watch({",
+    "    initial = { run = build, effect = \"./dist/server\" },",
+    "    reactions = { { watch = { app }, run = build, effect = \"./dist/server\" } },",
+    "  }))",
+    "end)",
+    "",
+  }, "\n")
+end
+
+function handler_sync.check_partiture()
+  return table.concat({
+    "local ballad = require(\"ballad\")",
+    "local common = require(\"partiture_common\")",
+    "",
+    "return ballad.partiture(function(p)",
+    "  local meteorite = p:use(\"meteorite.ballad\")",
+    "  local request = common.request(p)",
+    "  local report = meteorite.check({ input = \"src/main.lua\", output = \".meteorite/check/report\", mode = request.mode, backend = request.backend, target = request.target })",
+    "  p.sink.none(report)",
     "end)",
     "",
   }, "\n")

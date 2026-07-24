@@ -11,6 +11,7 @@ local function join(root, value)
 end
 
 function tasks.build_args_for(mode, opts)
+  assert(opts.backend and opts.backend ~= "", "Meteorite release build requires an explicit backend")
   local args = {
     "build",
   }
@@ -22,7 +23,7 @@ function tasks.build_args_for(mode, opts)
   args[#args + 1] = "-Dmode=" .. mode
   args[#args + 1] = "-Dgraph-input=" .. (opts.graph_input or "src/main.lua")
   args[#args + 1] = "-Dgraph-output=" .. (opts.graph_output or ".meteorite/graph/current")
-  args[#args + 1] = "-Dbackend=" .. (opts.backend or "std_http")
+  args[#args + 1] = "-Dbackend=" .. opts.backend
   if opts.unix_socket_path or opts["unix-socket-path"] then args[#args + 1] = "-Dunix-socket-path=" .. (opts.unix_socket_path or opts["unix-socket-path"]) end
   if opts.unix_socket_mode or opts["unix-socket-mode"] then args[#args + 1] = "-Dunix-socket-mode=" .. (opts.unix_socket_mode or opts["unix-socket-mode"]) end
   if opts.unix_socket_unlink_stale ~= nil then args[#args + 1] = "-Dunix-socket-unlink-stale=" .. tostring(opts.unix_socket_unlink_stale) end

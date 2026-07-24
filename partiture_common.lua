@@ -19,36 +19,54 @@ local common = {
   },
 }
 
+local ok, build_request = pcall(require, "meteorite.build_request")
+if not ok then
+  local chunk, err = loadfile("src/meteorite/build_request.lua")
+  assert(chunk, err)
+  build_request = chunk()
+end
+
+local function shell_quote(value)
+  return "'" .. tostring(value):gsub("'", "'\\\"'\\\"'") .. "'"
+end
+
+---@param p PipelineContext
+---@return table request Explicit Meteorite behavior transported by Ballad.
+function common.request(p)
+  local request = build_request.parse(p.invocation.args)
+  return build_request.require_behavior(request, "Meteorite Ballad partiture")
+end
+
 ---@return string command Deterministic Zig compilation command for the development server.
-function common.dev_build_command()
+function common.dev_build_command(request)
   return table.concat({
     "zig build",
     "-Dgraph-input=" .. common.dev.input,
     "-Dgraph-output=" .. common.dev.graph_output,
-    "-Dmode=hybrid_dev",
-    "-Dbackend=std_http",
-    "-Dhybrid-profile=optimized",
-    "-Drouter-dispatch=param_matchers",
+    table.concat(build_request.to_build_flags(request), " "),
     "install-server -- " .. common.server_output,
   }, " ")
 end
 
 ---@return string command Deterministic Meteorite graph generation command.
-function common.dev_graph_command()
+function common.dev_graph_command(request)
   return "./.moonstone/env/bin/lua src/cli/main.lua graph "
     .. common.dev.input
     .. " "
     .. common.dev.graph_output
-    .. " hybrid_dev"
+    .. " " .. request.mode
+    .. " " .. request.backend
 end
 
 ---@return string command Start or restart the development server after Ballad materializes its build products.
-function common.dev_server_command()
+function common.dev_server_command(request)
+  local build_args = table.concat(build_request.to_build_flags(request), " ")
   return "METEORITE_DEV_PREBUILT=1 METEORITE_DEV_ONCE=1 ./.moonstone/env/bin/lua src/cli/dev.lua "
     .. common.dev.input
     .. " "
     .. common.dev.graph_output
-    .. " hybrid_dev"
+    .. " " .. request.mode
+    .. " " .. shell_quote(build_args)
 end
 
 ---Declare the deterministic Meteorite build shared by finite and watch partitures.
@@ -56,11 +74,11 @@ end
 ---a separate post-build effect and intentionally never participates in this cache.
 ---@param p PipelineContext
 ---@return NativeAction action
-function common.dev_build_action(p)
+function common.dev_build_action(p, request)
   return p.task.native({
-    id = "meteorite.build-server.v1",
+    id = "meteorite.build-server.v2",
     tool = "sh",
-    args = { "-c", common.dev_graph_command() .. " && " .. common.dev_build_command() },
+    args = { "-c", common.dev_graph_command(request) .. " && " .. common.dev_build_command(request) },
     inputs = {
       "fixtures/apps/showcase-service/src/**/*.lua",
       "src/**/*.lua",
@@ -71,7 +89,7 @@ function common.dev_build_action(p)
     },
     outputs = { common.dev.graph_output, common.server_output },
     toolchain = { command = "zig version" },
-    description = "build Meteorite development server",
+    description = "build Meteorite development server (" .. request.mode .. ", " .. request.backend .. ")",
   })
 end
 

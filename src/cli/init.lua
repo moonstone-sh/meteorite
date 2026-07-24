@@ -87,14 +87,11 @@ end
 
 local function moonstone_manifest(name)
   local build_mode = _G.METEORITE_INIT_BUILD_MODE or "hybrid"
-  local dev_script = build_mode == "release-static" and "meteorite build --mode release-static && ./dist/server" or "meteorite dev"
-  return cli_templates.moonstone_manifest(name, build_mode, dev_script)
+  return cli_templates.moonstone_manifest(name, build_mode)
 end
 
 local function release_partiture()
-  local build_mode = _G.METEORITE_INIT_BUILD_MODE or "hybrid"
-  local release_mode = build_mode == "release-static" and "static" or "hybrid"
-  return cli_templates.release_partiture(release_mode)
+  return cli_templates.release_partiture()
 end
 
 local function ensure_tool_dependencies(path)
@@ -158,6 +155,16 @@ function init.run(argv, config)
   local partiture_path = path_join(target, "partiture.lua")
   if not read_file(partiture_path) then
     write_file(partiture_path, release_partiture(), opts.force)
+  end
+  local generated_partitures = {
+    ["partiture_common.lua"] = cli_templates.partiture_common(),
+    ["Dev_partiture.lua"] = cli_templates.dev_partiture(),
+    ["HMR_partiture.lua"] = cli_templates.hmr_partiture(),
+    ["Check_partiture.lua"] = cli_templates.check_partiture(),
+  }
+  for relative_path, content in pairs(generated_partitures) do
+    local path = path_join(target, relative_path)
+    if not read_file(path) then write_file(path, content, opts.force) end
   end
   if not opts.no_sync then os.execute("cd " .. shell_quote(target) .. " && moon sync") end
   print("Meteorite project initialized: " .. target .. " (template: " .. template_name .. ")" .. (opts.with_zig and " (with Zig scaffolding)" or ""))

@@ -77,6 +77,7 @@ return {
   version = "0.1.0",
   methods = {
     graph = { inputs = {}, outputs = { "asset_set" }, cacheable = false, parallel_safe = false },
+    check = { inputs = {}, outputs = { "asset_set" }, cacheable = false, parallel_safe = false },
     zig = { inputs = {}, outputs = { "asset_set" }, cacheable = false, parallel_safe = false },
     release = { inputs = {}, outputs = { "asset_set" }, cacheable = false, parallel_safe = false },
   },
@@ -86,12 +87,33 @@ return {
     local root = opts.root or "."
     local input = join(root, opts.input or "src/main.lua")
     local output = join(root, opts.output or ".meteorite/graph/current")
-    local mode = opts.mode or "dev"
+    local mode = opts.mode
+    if not mode or not opts.backend then ctx.fail("meteorite.graph requires explicit mode and backend") end
     local app = load_app(root, input, mode)
     if type(app) ~= "table" or not app.__meteorite_app then ctx.fail(input .. " must return a Meteorite app") end
-    local result = emitter.emit(app, { output = output, mode = mode, backend = opts.backend or "std_http" })
+    local result = emitter.emit(app, { output = output, mode = mode, backend = opts.backend })
     local assets = graph_mod.AssetSet.new()
     assets:add(ctx.graph:add_asset({ kind = "meteorite_graph", output_path = result.output, virtual_path = result.output, metadata = { graph_hash = result.graph_hash, routes = #result.graph.routes } }))
+    return assets
+  end,
+
+  check = function(ctx, inputs, opts)
+    opts = release_contract.normalize_opts(opts)
+    if not opts.mode or not opts.backend then ctx.fail("meteorite.check requires explicit mode and backend") end
+    local root = opts.root or "."
+    local input = join(root, opts.input or "src/main.lua")
+    local mode, release_mode = release_contract.normalize_mode(opts.mode)
+    local app = load_app(root, input, mode)
+    if type(app) ~= "table" or not app.__meteorite_app then ctx.fail(input .. " must return a Meteorite app") end
+    local contract = release_contract.for_graph(app:normalize({ mode = "dev" }), release_mode)
+    if release_mode == "static" then release_contract.fail_static_lua(ctx, contract.retained_lua_nodes) end
+    release_contract.validate_target_lua(ctx, root, contract, opts)
+    release_contract.validate_packages(ctx, contract, opts)
+    local output = join(root, opts.output or ".meteorite/check/report")
+    local result = emitter.emit(app, { output = output, mode = mode, backend = opts.backend })
+    if release_mode == "static" then release_contract.assert_static_graph(ctx, result.graph) end
+    local assets = graph_mod.AssetSet.new()
+    assets:add(ctx.graph:add_asset({ kind = "meteorite_check", output_path = result.output, virtual_path = result.output, metadata = { mode = mode, backend = opts.backend, graph_hash = result.graph_hash } }))
     return assets
   end,
 
@@ -114,6 +136,7 @@ return {
 
   release = function(ctx, inputs, opts)
     opts = release_contract.normalize_opts(opts)
+    if not opts.mode or not opts.backend then ctx.fail("meteorite.release requires explicit mode and backend") end
     release_contract.validate_deployment_adapter(ctx, opts)
     local root = opts.root or "."
     local input = join(root, opts.input or "src/main.lua")
@@ -133,7 +156,7 @@ return {
     lua_root = lua_root or opts.lua_root
     local cmodule_task_sets = release_tasks.rebuild_lua_cmodules(ctx, root, opts, target_lua, lua_root, plugin_root())
 
-    local result = emitter.emit(app, { output = graph_output, mode = mode, backend = opts.backend or "std_http" })
+    local result = emitter.emit(app, { output = graph_output, mode = mode, backend = opts.backend })
     if release_mode == "static" then release_contract.assert_static_graph(ctx, result.graph) end
     local task_assets = ctx:native_task({
       tool = opts.tool or "zig",

@@ -39,7 +39,7 @@ local function build_project()
 end
 
 local function dev_project()
-  return require("cli.dev_command").run(cli_deps.dev())
+  return require("cli.dev_command").run(arg, cli_deps.dev())
 end
 
 local function doctor_project()
@@ -52,6 +52,7 @@ if (command == "graph" or command == "sync" or command == "invoke" or command ==
 end
 if command == "init" then init_project(); return end
 if command == "build" then build_project(); return end
+if command == "check" then require("cli.check").run(arg, cli_deps.check(print_help)); return end
 if command == "dev" then dev_project(); return end
 if command == "doctor" then doctor_project(); return end
 if command == "client" then require("cli.client").run(arg); return end

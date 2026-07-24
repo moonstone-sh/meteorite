@@ -106,7 +106,8 @@ function manifest.build(result, release_mode, server_path, contract, target_lua,
   local messages = message_entries(result.graph)
   local runtime_source_path = runtime_source_artifact_path(target_lua)
   local abi = target_abi(opts, target_lua)
-  local backend = opts.backend or "std_http"
+  assert(opts.backend and opts.backend ~= "", "Meteorite release manifest requires an explicit backend")
+  local backend = opts.backend
   local manifest_obj = {
     format = "meteorite.release.v0",
     mode = release_mode,

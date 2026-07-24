@@ -9,8 +9,6 @@ function doctor.run(deps)
   local package_cli_file = assert(deps.package_cli_file, "package_cli_file required")
   local capture_command = assert(deps.capture_command, "capture_command required")
   local candidate_file = assert(deps.candidate_file, "candidate_file required")
-  local parse_server_config = assert(deps.parse_server_config, "parse_server_config required")
-  local valid_backends = assert(deps.valid_backends, "valid_backends required")
   local roots = deps.roots or {}
   local module_root = roots.module_root or "src/"
   local install_root = roots.install_root or ""
@@ -95,19 +93,7 @@ function doctor.run(deps)
     add("warn", "release readiness", tostring(app_err))
   end
   add(exists("partiture.lua") and "ok" or "warn", "release partiture", exists("partiture.lua") and "partiture.lua" or "add partiture.lua for Ballad release exports")
-  local server_config = parse_server_config(current_dir())
-  local backend_ok = valid_backends[server_config.backend or "std_http"] == true
-  local backend = backend_ok and (server_config.backend or "std_http") or tostring(server_config.backend)
-  add(backend_ok and "ok" or "fail", "server backend", backend_ok and backend or (backend .. " (expected ipc_unixsocket, ipc_unixsocket_http, std_http, or fast_http)"))
-  if backend == "ipc_unixsocket" or backend == "ipc_unixsocket_http" then
-    local socket_path = server_config.unix_socket.path or "/tmp/meteorite.sock"
-    local socket_mode = server_config.unix_socket.mode or "0660"
-    local path_ok = socket_path ~= "" and socket_path:sub(1, 1) == "/"
-    local mode_ok = tostring(socket_mode):match("^0?[0-7][0-7][0-7]$") ~= nil
-    add(path_ok and "ok" or "fail", "unix socket path", path_ok and socket_path or "must be a non-empty absolute path")
-    add(mode_ok and "ok" or "fail", "unix socket mode", mode_ok and socket_mode or "expected octal mode such as 0660")
-    add("ok", "unix socket stale unlink", tostring(server_config.unix_socket.unlink_stale ~= false))
-  end
+  add("ok", "build behavior", "provided explicitly by Moonstone scripts or command arguments")
   local port = os.getenv("METEORITE_DEV_PORT") or "8080"
   local listener = capture_command("lsof -tiTCP:" .. port .. " -sTCP:LISTEN 2>/dev/null | head -n 1")
   add(listener ~= "" and "warn" or "ok", "dev port " .. port, listener ~= "" and ("listener pid " .. listener:gsub("%s+$", "")) or "free")

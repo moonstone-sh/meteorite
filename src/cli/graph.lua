@@ -48,11 +48,14 @@ end
 
 function graph.run(args, deps)
   deps = deps or {}
-  local assert_backend = assert(deps.assert_backend, "assert_backend required")
+  local assert_backend = assert(deps.build_request, "build_request required").assert_backend
   local input = args[2] or "src/main.lua"
   local output = args[3] or ".meteorite/graph/current"
-  local mode = args[4] or "release-static"
-  local backend = assert_backend(args[5] or "fast_http")
+  local mode = args[4]
+  local backend = args[5] and assert_backend(args[5]) or nil
+  if not mode or not backend then
+    error("meteorite graph requires explicit <mode> <backend>; use a Moonstone script or pass both values")
+  end
   local app = require("cli.app_loader").load(input, mode)
   local result = require("codegen.emitter").emit(app, { output = output, mode = mode, backend = backend })
   print_result(result, mode, backend)

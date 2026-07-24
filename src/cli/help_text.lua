@@ -12,6 +12,7 @@ Commands:
   init      Create or adapt a Meteorite app
   dev       Run graph-aware live reload
   build     Build the server with Meteorite's packaged Zig driver
+  check     Validate a target without producing a release
   graph     Generate the Meteorite graph
   sync      Explicitly write generated handler stubs and LuaLS aids
   doctor    Check local project/tool readiness
@@ -24,9 +25,9 @@ Examples:
   meteorite init my-app
   meteorite init my-app --static
   meteorite init my-app --hybrid
-  meteorite dev
-  meteorite build --mode hybrid
-  meteorite build --mode release-static
+  meteorite dev --mode hybrid_dev --backend fast_http
+  meteorite build --mode hybrid --backend fast_http
+  meteorite build --mode release-static --backend fast_http
   meteorite doctor
   meteorite client lua src/main.lua .meteorite/client.lua
   meteorite openapi swagger-ui public/docs.html ./openapi.json
@@ -57,7 +58,7 @@ Examples:
 help.build = [[Meteorite build
 
 Usage:
-  meteorite build [--mode <mode>] [--backend <backend>] [zig build args...]
+  meteorite build --mode <mode> --backend <backend> [zig build args...]
 
 Modes:
   hybrid          Include Lua runtime for inline/module Lua handlers
@@ -76,16 +77,15 @@ Unix socket flags:
   --no-unix-socket-unlink-stale
 
 Examples:
-  meteorite build
-  meteorite build --mode hybrid
-  meteorite build --backend ipc_unixsocket
-  meteorite build --mode release-static
-  meteorite build --mode hybrid -Dtarget=aarch64-linux-gnu]]
+  meteorite build --mode hybrid --backend fast_http
+  meteorite build --mode hybrid --backend ipc_unixsocket
+  meteorite build --mode release-static --backend fast_http
+  meteorite build --mode hybrid --backend fast_http -Dtarget=aarch64-linux-gnu]]
 
 help.dev = [[Meteorite dev
 
 Usage:
-  meteorite dev
+  meteorite dev --mode <mode> --backend <backend>
 
 Runs the graph-aware live reload loop:
   - regenerates graph on source changes
@@ -93,22 +93,32 @@ Runs the graph-aware live reload loop:
   - rebuilds for route shape, Zig, or build-affecting changes
   - keeps the previous server alive on graph/build failure
 
+Use generated Moonstone scripts for explicit defaults. Repeated behavior flags
+are resolved left-to-right; the last value wins.
+
 Environment:
   METEORITE_DEV_PORT  Port for the dev server, default 8080]]
+
+help.check = [[Meteorite check
+
+Usage:
+  meteorite check --mode <mode> --backend <backend>
+
+Validates the emitted graph and static/hybrid compatibility without producing a
+deployable release. Generated Moonstone scripts provide explicit defaults.
+
+Examples:
+  meteorite check --mode hybrid --backend fast_http
+  meteorite check --mode release-static --backend fast_http]]
 
 help.graph = [[Meteorite graph
 
 Usage:
-  meteorite graph [input] [output] [mode]
-
-Defaults:
-  input   src/main.lua
-  output  .meteorite/graph/current
-  mode    release-static
+  meteorite graph <input> <output> <mode> <backend>
 
 Examples:
-  meteorite graph src/main.lua .meteorite/graph/current hybrid
-  meteorite graph src/main.lua .meteorite/graph/release release-static]]
+  meteorite graph src/main.lua .meteorite/graph/current hybrid fast_http
+  meteorite graph src/main.lua .meteorite/graph/release release-static fast_http]]
 
 help.sync = [[Meteorite sync
 

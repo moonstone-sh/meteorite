@@ -1,6 +1,6 @@
 [package]
 name = "moonstone/meteorite"
-version = "0.1.10"
+version = "0.1.11"
 kind = "bin"
 description = "Moonstone-zig service compiler prototype"
 
@@ -23,15 +23,15 @@ abi = "5.4"
 "bench:lua-bridge-smoke" = "bash bench/run.sh --mode=lua-bridge-smoke \"$@\""
 "test-cross-target" = "bash fixtures/tests/cross-target.sh"
 "build" = "zig build install-server -Dgraph-input=fixtures/apps/showcase-service/src/main.lua -Dgraph-output=.meteorite/graph/current"
-"build:dev" = "moon exec ballad play Dev_partiture.lua"
+"build:dev" = "moon exec ballad play Dev_partiture.lua -- --mode hybrid_dev --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers"
 "test-release-smoke" = "bash fixtures/tests/release-smoke.sh"
 "test-ipc-backends" = "bash fixtures/tests/ipc-backends.sh"
 "bench:meteorite-app" = "bash bench/run.sh --mode=meteorite-app \"$@\""
 "test-acceptance" = "bash fixtures/tests/basic-service.sh"
-"graph" = "lua src/cli/main.lua graph fixtures/apps/showcase-service/src/main.lua .meteorite/graph/current release-static"
+"graph" = "lua src/cli/main.lua graph fixtures/apps/showcase-service/src/main.lua .meteorite/graph/current release-static fast_http"
 "test-release-reproducibility" = "bash tests/release-reproducibility.sh"
 "bench:work" = "bash bench/run.sh --mode=work \"$@\""
-"dev" = "moon exec ballad play HMR_partiture.lua"
+"dev" = "moon exec ballad play HMR_partiture.lua -- --mode hybrid_dev --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers"
 
 [[orbits.member]]
 name = "lapis-cqueues"
@@ -71,5 +71,5 @@ role = "runtime"
 
 [[dependencies]]
 name = "moonstone/ballad"
-constraint = "^0.2.29"
+constraint = "^0.2.30"
 role = "tool"
