@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: moonstone-sh/moonstone
-          ref: v0.3.43
+          ref: v0.3.44
           path: .ci/moonstone
       - uses: actions/checkout@v4
         with:
@@ -68,7 +68,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: moonstone-sh/moonstone
-          ref: v0.3.43
+          ref: v0.3.44
           path: .ci/moonstone
       - uses: actions/checkout@v4
         with:
