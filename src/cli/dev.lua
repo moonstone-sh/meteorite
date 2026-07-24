@@ -11,6 +11,7 @@ local dev_port = os.getenv("METEORITE_DEV_PORT") or "8080"
 local meteorite_cli = os.getenv("METEORITE_CLI") or "src/cli/main.lua"
 local build_command_override = os.getenv("METEORITE_BUILD_COMMAND")
 local once = os.getenv("METEORITE_DEV_ONCE") == "1"
+local prebuilt = os.getenv("METEORITE_DEV_PREBUILT") == "1"
 
 local function path_exists(path)
   local file = io.open(path, "rb")
@@ -223,13 +224,21 @@ local function handle_signal()
   os.exit(0)
 end
 
-if once then
+if prebuilt then
+  io.stderr:write("Meteorite dev: supervising a Ballad-materialized server\n")
+elseif once then
   io.stderr:write("Meteorite dev: running one graph-aware refresh cycle\n")
 else
   io.stderr:write("Meteorite dev: watching src/, zig/, build.zig, moonstone.toml\n")
 end
 io.stderr:write("Meteorite dev: mode=" .. mode .. " build_args=" .. build_args .. "\n")
 io.stderr:write("Press Ctrl-C to stop.\n")
+
+if prebuilt then
+  stop_server()
+  start_server()
+  if once then return end
+end
 
 local last = nil
 while running do
