@@ -8,5 +8,5 @@ const App = meteorite.compile(.{
 });
 
 pub fn main(init: std.process.Init) !void {
-    try App.run(init.io);
+    try App.serve(init.io, .{ .port = 8080 });
 }

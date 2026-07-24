@@ -98,12 +98,29 @@ local function ensure_tool_dependencies(path)
   local content = read_file(path)
   if not content then return false end
   local deps = {}
-  if not content:find('"moonstone/meteorite"', 1, true) then deps[#deps + 1] = '"moonstone/meteorite" = "^0.1.0"' end
-  if not content:find('"moonstone/ballad"', 1, true) then deps[#deps + 1] = '"moonstone/ballad" = "^0.2.0"' end
+  if not content:find('"moonstone/meteorite"', 1, true) then
+    deps[#deps + 1] = {
+      name = "moonstone/meteorite",
+      constraint = "^0.1.13",
+    }
+  end
+  if not content:find('"moonstone/ballad"', 1, true) then
+    deps[#deps + 1] = {
+      name = "moonstone/ballad",
+      constraint = "^0.2.32",
+    }
+  end
   if #deps == 0 then return false end
-  local block = table.concat(deps, "\n") .. "\n"
-  local updated, count = content:gsub("(\n%[dependencies%.tool%]\n)", "%1" .. block, 1)
-  if count == 0 then updated = content:gsub("%s*$", "\n\n[dependencies.tool]\n" .. block) end
+  local blocks = {}
+  for _, dep in ipairs(deps) do
+    blocks[#blocks + 1] = table.concat({
+      "[[dependencies]]",
+      'name = "' .. dep.name .. '"',
+      'constraint = "' .. dep.constraint .. '"',
+      'role = "tool"',
+    }, "\n")
+  end
+  local updated = content:gsub("%s*$", "\n\n" .. table.concat(blocks, "\n\n") .. "\n")
   return write_file(path, updated, true)
 end
 

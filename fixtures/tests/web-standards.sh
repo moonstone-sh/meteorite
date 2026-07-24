@@ -457,7 +457,7 @@ for template in minimal static hybrid middleware cors json-api static-site; do
   if [ "$template" = "static" ]; then mode="release-static"; fi
   (
     cd "$template_root/$template"
-    LUA_PATH="$ROOT/src/?.lua;$ROOT/src/?/init.lua;src/?.lua;src/?/init.lua;;" "$ROOT/.moonstone/env/bin/lua" "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current "$mode" >/tmp/meteorite-web-standards-template-graph-$template.log
+    LUA_PATH="$ROOT/src/?.lua;$ROOT/src/?/init.lua;src/?.lua;src/?/init.lua;;" "$ROOT/.moonstone/env/bin/lua" "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current "$mode" fast_http >/tmp/meteorite-web-standards-template-graph-$template.log
   )
 done
 test -f "$template_root/static-site/site/dist/index.html"
@@ -482,7 +482,7 @@ io.write(manifest.build({
   validation_mode = "static",
   retained_lua_nodes = {},
   requires_target_lua = false,
-}, nil, { target = "native" }))
+}, nil, { target = "native", backend = "fast_http" }))
 LUA
 ./.moonstone/env/bin/lua -e 'package.path = "src/?.lua;src/?/init.lua;" .. package.path' - <<'LUA' > "$manifest_hybrid_json"
 local manifest = require("ballad.release_manifest")
@@ -493,7 +493,7 @@ io.write(manifest.build({
   validation_mode = "hybrid",
   retained_lua_nodes = { { kind = "inline route handler", label = "GET /lua", source = "src/main.lua:3:1", hint = "build hybrid" } },
   requires_target_lua = true,
-}, { status = "target_build_required", target = "aarch64-linux-gnu", source_payload_path = "/store/lua-5.4.7.tar.gz", source_kind = "puc_lua_source" }, { target = "aarch64-linux-gnu" }))
+}, { status = "target_build_required", target = "aarch64-linux-gnu", source_payload_path = "/store/lua-5.4.7.tar.gz", source_kind = "puc_lua_source" }, { target = "aarch64-linux-gnu", backend = "fast_http" }))
 LUA
 python3 - "$manifest_static_json" "$manifest_hybrid_json" <<'PY'
 import json
@@ -701,7 +701,7 @@ LUA
 set +e
 (
   cd "$diag_root/static"
-  LUA_PATH="$ROOT/src/?.lua;$ROOT/src/?/init.lua;src/?.lua;src/?/init.lua;;" "$ROOT/.moonstone/env/bin/lua" "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current release-static > /tmp/meteorite-web-standards-static-diag.log 2>&1
+  LUA_PATH="$ROOT/src/?.lua;$ROOT/src/?/init.lua;src/?.lua;src/?/init.lua;;" "$ROOT/.moonstone/env/bin/lua" "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current release-static fast_http > /tmp/meteorite-web-standards-static-diag.log 2>&1
 )
 static_diag_status=$?
 set -e
@@ -728,7 +728,7 @@ LUA
 set +e
 (
   cd "$diag_root/upvalue"
-  LUA_PATH="$ROOT/src/?.lua;$ROOT/src/?/init.lua;src/?.lua;src/?/init.lua;;" "$ROOT/.moonstone/env/bin/lua" "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current hybrid > /tmp/meteorite-web-standards-upvalue-diag.log 2>&1
+  LUA_PATH="$ROOT/src/?.lua;$ROOT/src/?/init.lua;src/?.lua;src/?/init.lua;;" "$ROOT/.moonstone/env/bin/lua" "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current hybrid fast_http > /tmp/meteorite-web-standards-upvalue-diag.log 2>&1
 )
 upvalue_diag_status=$?
 set -e
@@ -756,9 +756,9 @@ return app
 LUA
 (
   cd "$dev_reload_root/lua"
-  LUA_PATH="$ROOT/src/?.lua;$ROOT/src/?/init.lua;src/?.lua;src/?/init.lua;;" "$ROOT/.moonstone/env/bin/lua" "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current hybrid >/tmp/meteorite-web-standards-dev-lua-1.log
+  LUA_PATH="$ROOT/src/?.lua;$ROOT/src/?/init.lua;src/?.lua;src/?/init.lua;;" "$ROOT/.moonstone/env/bin/lua" "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current hybrid fast_http >/tmp/meteorite-web-standards-dev-lua-1.log
   perl -0pi -e 's/one/two/' src/main.lua
-  LUA_PATH="$ROOT/src/?.lua;$ROOT/src/?/init.lua;src/?.lua;src/?/init.lua;;" "$ROOT/.moonstone/env/bin/lua" "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current hybrid >/tmp/meteorite-web-standards-dev-lua-2.log
+  LUA_PATH="$ROOT/src/?.lua;$ROOT/src/?/init.lua;src/?.lua;src/?/init.lua;;" "$ROOT/.moonstone/env/bin/lua" "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current hybrid fast_http >/tmp/meteorite-web-standards-dev-lua-2.log
 )
 lua_classification="$($ROOT/.moonstone/env/bin/lua "$ROOT/src/cli/dev.lua" --classify-partitions "$dev_reload_root/lua/.meteorite/graph/current")"
 if [[ "$lua_classification" != $'reload	Lua-only handler chunks changed' ]]; then
@@ -768,7 +768,7 @@ fi
 (
   cd "$dev_reload_root/lua"
   perl -0pi -e 's/two/three/' src/main.lua
-  LUA_PATH="$ROOT/src/?.lua;$ROOT/src/?/init.lua;src/?.lua;src/?/init.lua;;" "$ROOT/.moonstone/env/bin/lua" "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current hybrid >/tmp/meteorite-web-standards-dev-lua-3.log
+  LUA_PATH="$ROOT/src/?.lua;$ROOT/src/?/init.lua;src/?.lua;src/?/init.lua;;" "$ROOT/.moonstone/env/bin/lua" "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current hybrid fast_http >/tmp/meteorite-web-standards-dev-lua-3.log
 )
 lua_second_classification="$($ROOT/.moonstone/env/bin/lua "$ROOT/src/cli/dev.lua" --classify-partitions "$dev_reload_root/lua/.meteorite/graph/current")"
 if [[ "$lua_second_classification" != $'reload	Lua-only handler chunks changed' ]]; then
@@ -785,9 +785,9 @@ return app
 LUA
 (
   cd "$dev_reload_root/asset"
-  LUA_PATH="$ROOT/src/?.lua;$ROOT/src/?/init.lua;src/?.lua;src/?/init.lua;;" "$ROOT/.moonstone/env/bin/lua" "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current hybrid >/tmp/meteorite-web-standards-dev-asset-1.log
+  LUA_PATH="$ROOT/src/?.lua;$ROOT/src/?/init.lua;src/?.lua;src/?/init.lua;;" "$ROOT/.moonstone/env/bin/lua" "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current hybrid fast_http >/tmp/meteorite-web-standards-dev-asset-1.log
   printf 'two\n' > public/hello.txt
-  LUA_PATH="$ROOT/src/?.lua;$ROOT/src/?/init.lua;src/?.lua;src/?/init.lua;;" "$ROOT/.moonstone/env/bin/lua" "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current hybrid >/tmp/meteorite-web-standards-dev-asset-2.log
+  LUA_PATH="$ROOT/src/?.lua;$ROOT/src/?/init.lua;src/?.lua;src/?/init.lua;;" "$ROOT/.moonstone/env/bin/lua" "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current hybrid fast_http >/tmp/meteorite-web-standards-dev-asset-2.log
 )
 asset_classification="$($ROOT/.moonstone/env/bin/lua "$ROOT/src/cli/dev.lua" --classify-partitions "$dev_reload_root/asset/.meteorite/graph/current")"
 if [[ "$asset_classification" != $'rebuild	static asset partitions changed' ]]; then
@@ -805,9 +805,9 @@ return app
 LUA
 (
   cd "$dev_reload_root/shape"
-  LUA_PATH="$ROOT/src/?.lua;$ROOT/src/?/init.lua;src/?.lua;src/?/init.lua;;" "$ROOT/.moonstone/env/bin/lua" "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current hybrid >/tmp/meteorite-web-standards-dev-shape-1.log
+  LUA_PATH="$ROOT/src/?.lua;$ROOT/src/?/init.lua;src/?.lua;src/?/init.lua;;" "$ROOT/.moonstone/env/bin/lua" "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current hybrid fast_http >/tmp/meteorite-web-standards-dev-shape-1.log
   perl -0pi -e 's#/one#/two#' src/main.lua
-  LUA_PATH="$ROOT/src/?.lua;$ROOT/src/?/init.lua;src/?.lua;src/?/init.lua;;" "$ROOT/.moonstone/env/bin/lua" "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current hybrid >/tmp/meteorite-web-standards-dev-shape-2.log
+  LUA_PATH="$ROOT/src/?.lua;$ROOT/src/?/init.lua;src/?.lua;src/?/init.lua;;" "$ROOT/.moonstone/env/bin/lua" "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current hybrid fast_http >/tmp/meteorite-web-standards-dev-shape-2.log
 )
 shape_classification="$($ROOT/.moonstone/env/bin/lua "$ROOT/src/cli/dev.lua" --classify-partitions "$dev_reload_root/shape/.meteorite/graph/current")"
 if [[ "$shape_classification" != $'rebuild	graph-shape partitions changed' ]]; then
@@ -873,7 +873,7 @@ local app = m.app({ name = "web-standards-symlink", host = "127.0.0.1", port = 8
 app:get("/assets/:path*", m.dir("$symlink_fixture/public", { param = "path" }))
 return app
 LUA
-if ./.moonstone/env/bin/lua src/cli/main.lua graph "$symlink_fixture/main.lua" "$symlink_fixture/graph" release-hybrid >/tmp/meteorite-web-standards-symlink.log 2>&1; then
+if ./.moonstone/env/bin/lua src/cli/main.lua graph "$symlink_fixture/main.lua" "$symlink_fixture/graph" release-hybrid fast_http >/tmp/meteorite-web-standards-symlink.log 2>&1; then
   echo "expected static symlink fixture graph generation to fail" >&2
   exit 1
 fi

@@ -118,14 +118,23 @@ return {
   end,
 
   zig = function(ctx, inputs, opts)
-    opts = opts or {}
+    opts = release_contract.normalize_opts(opts)
+    if not opts.mode or not opts.backend then ctx.fail("meteorite.zig requires explicit mode and backend") end
     local root = opts.root or "."
     local tool = opts.tool or "zig"
     local output = opts.output or "dist/server"
     local output_path = join(root, output)
     return ctx:native_task({
       tool = tool,
-      args = { "build", "install-server", "--", output },
+      args = release_tasks.build_args_for(opts.mode, {
+        output = output,
+        graph_input = opts.input or "src/main.lua",
+        graph_output = opts.graph or opts.graph_output or ".meteorite/graph/current",
+        backend = opts.backend,
+        hybrid_profile = opts.hybrid_profile,
+        router_dispatch = opts.router_dispatch,
+        optimize = opts.optimize,
+      }),
       cwd = root,
       outputs = { output_path },
       cacheable = false,

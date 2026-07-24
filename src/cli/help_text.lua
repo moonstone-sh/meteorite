@@ -53,6 +53,7 @@ Flags:
 Examples:
   meteorite init my-app
   meteorite init my-app --static
+  moon init my-app --empty && cd my-app && moon add --tool moonstone/meteorite && moon exec meteorite init .
   meteorite init . --hybrid --no-sync]]
 
 help.build = [[Meteorite build

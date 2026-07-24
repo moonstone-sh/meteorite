@@ -4,7 +4,9 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const mode = b.option([]const u8, "mode", "Meteorite build mode") orelse "release-static";
-    const backend = "std_http";
+    const graph_input = b.option([]const u8, "graph-input", "Meteorite graph input") orelse "src/main.lua";
+    const graph_output = b.option([]const u8, "graph-output", "Meteorite graph output") orelse ".meteorite/graph/current";
+    const backend = b.option([]const u8, "backend", "Meteorite HTTP backend") orelse "std_http";
     const fast_http_strategy = "single";
     const fast_http_workers: u32 = 0;
     const fast_http_queue: u32 = 1024;
@@ -15,11 +17,11 @@ pub fn build(b: *std.Build) void {
     const peer_allow_uid = "";
     const peer_allow_gid = "";
     const router_dispatch = b.option([]const u8, "router-dispatch", "Router dispatch strategy: method_buckets, static_fast_path, param_matchers, or legacy_scan") orelse "method_buckets";
-    const hybrid_profile = "default";
+    const hybrid_profile = b.option([]const u8, "hybrid-profile", "Meteorite hybrid runtime profile") orelse "default";
     const lua_runtime = !std.mem.eql(u8, mode, "release-static");
     const lua_state_strategy = if (lua_runtime and std.mem.eql(u8, hybrid_profile, "optimized")) "per_thread_cached_refs" else if (lua_runtime) "per_request_state" else "none";
 
-    const graph_step = b.addSystemCommand(&.{ "luajit", "../../../src/cli/main.lua", "graph", "src/main.lua", ".meteorite/graph/current", mode });
+    const graph_step = b.addSystemCommand(&.{ "luajit", "../../../src/cli/main.lua", "graph", graph_input, graph_output, mode, backend });
 
     const build_info_content = std.fmt.allocPrint(b.allocator,
         \\const builtin = @import("builtin");

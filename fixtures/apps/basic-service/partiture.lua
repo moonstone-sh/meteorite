@@ -10,6 +10,7 @@ return ballad.partiture(function(p)
 		input = "src/main.lua",
 		output = ".meteorite/graph/current",
 		mode = "release-static",
+		backend = "std_http",
 	})
 	local server = m.zig({
 		root = fixture_root,
@@ -17,6 +18,8 @@ return ballad.partiture(function(p)
 		zig = "zig",
 		output = "dist/server",
 		target = "zig",
+		mode = "release-static",
+		backend = "std_http",
 	})
 
 	p.sink.artifact(graph, { out = fixture_root .. "/.meteorite/graph/current" })

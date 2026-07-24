@@ -26,8 +26,12 @@ run_gate() {
   local label="$1"
   shift
   echo "=== release gate: $label ==="
-  if "$@"; then return 0; fi
-  local status=$?
+  local status
+  if "$@"; then
+    return 0
+  else
+    status=$?
+  fi
   echo "FAIL: release gate: $label (exit $status)" >&2
   exit "$status"
 }
