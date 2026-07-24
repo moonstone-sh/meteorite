@@ -38,7 +38,7 @@ return ballad.partiture(function(p)
 		},
 		materialize = {
 			type = "command",
-			command = "zig build install-server -- " .. common.server_output,
+			command = "true",
 			collect = {
 				bins = {
 					{ name = "meteorite", path = "bin/meteorite" },
