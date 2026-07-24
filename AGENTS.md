@@ -465,7 +465,7 @@ end)
 Run with:
 
 ```bash
-moon exec ballad -- play partiture.lua
+moon exec ballad play partiture.lua
 # or from meteorite repo:
 moon run release   # (if a release script is defined)
 ```
