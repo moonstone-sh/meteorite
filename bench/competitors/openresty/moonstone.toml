@@ -5,7 +5,7 @@ kind = "bin"
 
 [interpreter]
 name = "luajit"
-version = "2.1"
+version = "2.1.1783773675"
 abi = "5.1"
 
 [[dependencies]]
@@ -23,3 +23,6 @@ role = "runtime"
 name = "lua-cjson"
 constraint = "rocks:lua-cjson@*"
 role = "runtime"
+
+[scripts]
+hello = "lua -e 'print(\"Hello from OpenResty Orbit!\")'"
