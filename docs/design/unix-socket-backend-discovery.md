@@ -319,8 +319,8 @@ Annotation: this phase is the guardrail against accidentally creating a second f
 
 - [x] Add `unix_socket` to the backend family everywhere valid backends are parsed or displayed.
 - [x] Accept `meteorite build --backend unix_socket` and translate it to the Zig backend option.
-- [x] Accept `[server] backend = "unix_socket"` and `[server.unix_socket]` config for `path`, `mode`, and `unlink_stale`.
-- [x] Define config precedence as CLI flags, then project manifest, then defaults.
+- [x] **Superseded:** the original `[server]` manifest experiment was removed. Socket behavior is now explicit in CLI/Ballad invocation arguments.
+- [x] Define request precedence as left-to-right invocation arguments; the final repeated value wins. Generated Moonstone scripts provide visible defaults.
 - [x] Emit backend metadata that can represent `backend = "unix_socket"`, `transport = "unix"`, and `protocol = "meteorite.ipc.v0"`.
 - [x] Ensure diagnostics list `unix_socket`, `std_http`, and `fast_http` in a stable order.
 - [x] Ensure `meteorite doctor` recognizes `unix_socket` config and reports unsafe socket paths before build.

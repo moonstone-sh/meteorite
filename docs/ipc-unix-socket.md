@@ -15,26 +15,22 @@ CLI build selection:
 
 ```bash
 meteorite build --backend ipc_unixsocket \
+  --mode hybrid \
   --unix-socket-path /tmp/meteorite.sock \
   --unix-socket-mode 0660
 
 meteorite build --backend ipc_unixsocket_http \
+  --mode hybrid \
   --unix-socket-path /tmp/meteorite-http.sock
 ```
 
-Project manifest selection:
-
-```toml
-[server]
-backend = "ipc_unixsocket"
-
-[server.ipc_unixsocket]
-path = "/tmp/meteorite.sock"
-mode = "0660"
-unlink_stale = true
-```
-
-`meteorite doctor` validates Unix socket paths and modes for both Unix backends. Socket paths must be absolute. Stale unlinking only removes an existing Unix-domain socket; regular files and other unsafe paths are rejected.
+For repeatable project defaults, put the same explicit arguments in a
+Moonstone script or generated Ballad partiture. Meteorite no longer reads a
+`[server]` manifest section. `meteorite doctor` reports project/tool health;
+the selected socket path and mode are validated by the invocation that builds
+or checks the target. Socket paths must be absolute. Stale unlinking only
+removes an existing Unix-domain socket; regular files and other unsafe paths
+are rejected.
 
 ## Native Message Naming
 

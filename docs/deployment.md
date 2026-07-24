@@ -9,7 +9,7 @@ The simplest deployment: a single binary with no runtime dependencies.
 
 ```bash
 # Build a static release
-meteorite build --mode release-static
+meteorite build --mode release-static --backend fast_http
 
 # The binary is at dist/server
 ./dist/server
@@ -165,7 +165,7 @@ ENTRYPOINT ["/server"]
 ```
 
 ```bash
-meteorite build --mode release-static
+meteorite build --mode release-static --backend fast_http
 docker build -t meteorite-app .
 docker run -p 8080:8080 meteorite-app
 ```
