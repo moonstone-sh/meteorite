@@ -527,7 +527,7 @@ assert hybrid["target_lua"]["source_payload_path"] == "runtime/source/lua-5.4.7.
 assert hybrid["static"]["count"] == 0, hybrid["static"]
 PY
 
-LUA_PATH='src/?.lua;src/?/init.lua;../ballad/src/?.lua;../ballad/src/?/init.lua;;' ./.moonstone/env/bin/lua <<'LUA'
+./.moonstone/env/bin/lua -e 'package.path = "src/?.lua;src/?/init.lua;../ballad/src/?.lua;../ballad/src/?/init.lua;" .. package.path' - <<'LUA'
 local release_contract = require("ballad.release_contract")
 local release_assets = require("ballad.release_assets")
 
@@ -648,7 +648,7 @@ LUA
 cat > "$hybrid_assets_root/src/unused/secret.lua" <<'LUA'
 return { message = "do not package" }
 LUA
-LUA_PATH='src/?.lua;src/?/init.lua;../ballad/src/?.lua;../ballad/src/?/init.lua;;' HYBRID_ASSETS_ROOT="$hybrid_assets_root" ./.moonstone/env/bin/lua <<'LUA'
+HYBRID_ASSETS_ROOT="$hybrid_assets_root" ./.moonstone/env/bin/lua -e 'package.path = "src/?.lua;src/?/init.lua;../ballad/src/?.lua;../ballad/src/?/init.lua;" .. package.path' - <<'LUA'
 local graph = require("ballad.graph")
 local release_assets = require("ballad.release_assets")
 local root = assert(os.getenv("HYBRID_ASSETS_ROOT"))
