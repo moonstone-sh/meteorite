@@ -4,6 +4,10 @@ version = "0.1.13"
 kind = "bin"
 description = "Moonstone-zig service compiler prototype"
 
+[origin]
+kind = "git"
+url = "https://github.com/moonstone-sh/meteorite"
+
 [interpreter]
 name = "lua"
 version = "5.4"
