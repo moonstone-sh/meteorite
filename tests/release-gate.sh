@@ -41,7 +41,9 @@ run_gate registry-export bash tests/registry-export.sh
 run_gate lua-suite bash tests/run-all.sh
 run_gate web-standards bash fixtures/tests/web-standards.sh
 run_gate ipc-backends bash fixtures/tests/ipc-backends.sh
-run_gate basic-service bash fixtures/tests/basic-service.sh
+run_gate basic-service-build bash fixtures/tests/basic-service-build.sh
+run_gate basic-service-http env METEORITE_BASIC_SERVICE_BUILT=1 bash fixtures/tests/basic-service-http.sh
+run_gate basic-service-contracts bash fixtures/tests/basic-service-contracts.sh
 run_gate release-smoke bash fixtures/tests/release-smoke.sh
 run_gate release-reproducibility bash tests/release-reproducibility.sh
 run_gate ipc-release-smoke bash fixtures/tests/ipc-release-smoke.sh

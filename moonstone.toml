@@ -1,6 +1,6 @@
 [package]
 name = "moonstone/meteorite"
-version = "0.1.18"
+version = "0.1.19"
 kind = "bin"
 description = "Moonstone-zig service compiler prototype"
 
@@ -32,6 +32,9 @@ abi = "5.4"
 "test-ipc-backends" = "bash fixtures/tests/ipc-backends.sh"
 "bench:meteorite-app" = "bash bench/run.sh --mode=meteorite-app \"$@\""
 "test-acceptance" = "bash fixtures/tests/basic-service.sh"
+"test-basic-service-build" = "bash fixtures/tests/basic-service-build.sh"
+"test-basic-service-http" = "bash fixtures/tests/basic-service-http.sh"
+"test-basic-service-contracts" = "bash fixtures/tests/basic-service-contracts.sh"
 "graph" = "lua src/cli/main.lua graph fixtures/apps/showcase-service/src/main.lua .meteorite/graph/current release-static fast_http"
 "test-release-reproducibility" = "bash tests/release-reproducibility.sh"
 "bench:work" = "bash bench/run.sh --mode=work \"$@\""
