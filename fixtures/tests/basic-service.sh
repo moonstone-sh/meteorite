@@ -144,7 +144,7 @@ s = p.read_text()
 s = s.replace('max_dfa_bytes = "8kb"', 'max_dfa_bytes = "128"')
 p.write_text(s)
 PY
-(cd "$tmp_budget" && ! luajit "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current release-static >/tmp/meteorite-budget.log 2>&1)
+(cd "$tmp_budget" && ! luajit "$ROOT/src/cli/main.lua" graph src/main.lua .meteorite/graph/current release-static std_http >/tmp/meteorite-budget.log 2>&1)
 grep -q 'pattern exceeded DFA byte budget' /tmp/meteorite-budget.log
 grep -q 'dfa_states' /tmp/meteorite-budget.log
 grep -q 'estimated_size' /tmp/meteorite-budget.log
@@ -174,13 +174,13 @@ local app = m.app({
 app:get("/health", "handlers.health")
 return app
 LUA
-luajit src/cli/main.lua graph "$tmp_profile/src/main.lua" "$tmp_profile/.meteorite/graph/current" release-static >/tmp/meteorite-profile.log
+luajit src/cli/main.lua graph "$tmp_profile/src/main.lua" "$tmp_profile/.meteorite/graph/current" release-static std_http >/tmp/meteorite-profile.log
 grep -q 'memory profile: tiny' /tmp/meteorite-profile.log
 grep -q 'uri limit: 512 bytes' /tmp/meteorite-profile.log
 grep -q 'max URI: 512b' "$tmp_profile/.meteorite/graph/current/build-report.txt"
 
 demo_root="fixtures/apps/hybrid-demo"
-luajit src/cli/main.lua graph "$demo_root/src/main.lua" "$demo_root/.meteorite/graph/current" dev >/tmp/meteorite-demo-graph.log
+luajit src/cli/main.lua graph "$demo_root/src/main.lua" "$demo_root/.meteorite/graph/current" dev fast_http >/tmp/meteorite-demo-graph.log
 grep -q 'capabilities: auth, http, zig' /tmp/meteorite-demo-graph.log
 grep -q 'inline_lua' "$demo_root/.meteorite/graph/current/routes.zon"
 grep -q 'data_cruncher' "$demo_root/.meteorite/graph/current/capabilities.zon"
@@ -210,7 +210,7 @@ hybrid.invoke(app, { method = "GET", path = "/users/2" }, { store = store })
 assert(store.capabilities["auth.db"].refresh_count == 1, "auth token refresh should be capability-owned and cached")
 LUA
 
-! luajit src/cli/main.lua graph "$demo_root/src/main.lua" "$demo_root/.meteorite/static-fail" release-static >/tmp/meteorite-static-inline.log 2>&1
+! luajit src/cli/main.lua graph "$demo_root/src/main.lua" "$demo_root/.meteorite/static-fail" release-static std_http >/tmp/meteorite-static-inline.log 2>&1
 grep -q 'static build cannot include inline Lua handler' /tmp/meteorite-static-inline.log
 grep -q 'build hybrid' /tmp/meteorite-static-inline.log
 
@@ -223,7 +223,7 @@ s = p.read_text()
 s = re.sub(r'app:capability\("auth", \{\n  db = \{\n    token_url = "http://localhost:8888/token",\n    audience = "db",\n    refresh_before_seconds = 30,\n  \},\n\}\)\n\n', '', s)
 p.write_text(s)
 PY
-! luajit src/cli/main.lua graph "$tmp_cap/src/main.lua" "$tmp_cap/.meteorite/graph/current" dev >/tmp/meteorite-capability.log 2>&1
+! luajit src/cli/main.lua graph "$tmp_cap/src/main.lua" "$tmp_cap/.meteorite/graph/current" dev fast_http >/tmp/meteorite-capability.log 2>&1
 grep -q 'route uses undeclared AUTH capability `db`' /tmp/meteorite-capability.log
 
 tmp_upvalue="$(mktemp -d /tmp/meteorite-upvalue.XXXXXX)"
@@ -237,7 +237,7 @@ app:get("/", function(c)
 end)
 return app
 LUA
-! luajit src/cli/main.lua graph "$tmp_upvalue/src/main.lua" "$tmp_upvalue/.meteorite/graph/current" dev >/tmp/meteorite-upvalue.log 2>&1
+! luajit src/cli/main.lua graph "$tmp_upvalue/src/main.lua" "$tmp_upvalue/.meteorite/graph/current" dev fast_http >/tmp/meteorite-upvalue.log 2>&1
 grep -q 'captures outer local `message`' /tmp/meteorite-upvalue.log
 
 tmp_stubs="$(mktemp -d /tmp/meteorite-stubs.XXXXXX)"
@@ -248,7 +248,7 @@ local app = m.app({ name = "stub-demo" })
 app:get("/users/:id", { params = { id = m.u64() } }, "handlers.get_user")
 return app
 LUA
-luajit src/cli/main.lua graph "$tmp_stubs/src/main.lua" "$tmp_stubs/.meteorite/graph/current" dev >/tmp/meteorite-stubs.log
+luajit src/cli/main.lua graph "$tmp_stubs/src/main.lua" "$tmp_stubs/.meteorite/graph/current" dev fast_http >/tmp/meteorite-stubs.log
 test ! -e "$tmp_stubs/zig/handlers.zig"
 test ! -e "$tmp_stubs/.luarc.json"
 grep -q 'pub fn get_user(c: mt.ctx.get_user)' "$tmp_stubs/.meteorite/aids/handlers.stub.zig"
@@ -258,7 +258,7 @@ test -f "$tmp_stubs/.luarc.json"
 grep -q '<meteorite:generated-stub>' "$tmp_stubs/zig/handlers.zig"
 grep -q 'created .*zig/handlers.zig' "$tmp_stubs/.meteorite/aids/handler-sync.warnings.txt"
 grep -q 'pub fn get_user(c: mt.ctx.get_user)' "$tmp_stubs/zig/handlers.zig"
-! luajit src/cli/main.lua graph "$tmp_stubs/src/main.lua" "$tmp_stubs/.meteorite/graph/current" release-static >/tmp/meteorite-stubs-release.log 2>&1
+! luajit src/cli/main.lua graph "$tmp_stubs/src/main.lua" "$tmp_stubs/.meteorite/graph/current" release-static std_http >/tmp/meteorite-stubs-release.log 2>&1
 grep -q 'release build contains generated handler stub `get_user`' /tmp/meteorite-stubs-release.log
 
 tmp_typed="$(mktemp -d /tmp/meteorite-typed.XXXXXX)"

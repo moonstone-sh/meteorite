@@ -13,6 +13,6 @@ abi = "5.4"
 "moonstone/meteorite" = "path:../.."
 
 [scripts]
-"graph" = "lua src/cli/main.lua graph src/main.lua .meteorite/graph/current release-static"
-"dev" = "luajit ../../../src/cli/main.lua graph src/main.lua .meteorite/graph/current dev && zig build install-server -- dist/server && ./dist/server"
+"graph" = "lua src/cli/main.lua graph src/main.lua .meteorite/graph/current release-static std_http"
+"dev" = "luajit ../../../src/cli/main.lua graph src/main.lua .meteorite/graph/current dev fast_http && zig build install-server -- dist/server && ./dist/server"
 "build" = "zig build install-server"
