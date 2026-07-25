@@ -171,7 +171,9 @@ local app = m.app({
     },
   }),
 })
-app:get("/health", "handlers.health")
+app:get("/health", {
+  summary = "Report profile health",
+}, "handlers.health")
 return app
 LUA
 luajit src/cli/main.lua graph "$tmp_profile/src/main.lua" "$tmp_profile/.meteorite/graph/current" release-static std_http >/tmp/meteorite-profile.log
@@ -245,7 +247,10 @@ mkdir -p "$tmp_stubs/src" "$tmp_stubs/zig"
 cat > "$tmp_stubs/src/main.lua" <<'LUA'
 local m = require("meteorite")
 local app = m.app({ name = "stub-demo" })
-app:get("/users/:id", { params = { id = m.u64() } }, "handlers.get_user")
+app:get("/users/:id", {
+  summary = "Fetch one stub user",
+  params = { id = m.u64() },
+}, "handlers.get_user")
 return app
 LUA
 luajit src/cli/main.lua graph "$tmp_stubs/src/main.lua" "$tmp_stubs/.meteorite/graph/current" dev fast_http >/tmp/meteorite-stubs.log
