@@ -847,35 +847,36 @@ HttpClient.__index = HttpClient
 
 local http_client = require("cli.http_client")
 
-local function http_request(method, base_url, path, opts)
+local function http_request(request_fn, method, base_url, path, opts)
+  if request_fn then return request_fn(method, base_url, path, opts) end
   return http_client.request(method, base_url, path, opts)
 end
 
 function HttpClient:get(path, opts)
-  return http_request("GET", self.base_url, path, opts)
+  return http_request(self.request_fn, "GET", self.base_url, path, opts)
 end
 
 function HttpClient:post(path, opts)
-  return http_request("POST", self.base_url, path, opts)
+  return http_request(self.request_fn, "POST", self.base_url, path, opts)
 end
 
 function HttpClient:put(path, opts)
-  return http_request("PUT", self.base_url, path, opts)
+  return http_request(self.request_fn, "PUT", self.base_url, path, opts)
 end
 
 function HttpClient:patch(path, opts)
-  return http_request("PATCH", self.base_url, path, opts)
+  return http_request(self.request_fn, "PATCH", self.base_url, path, opts)
 end
 
 function HttpClient:delete(path, opts)
-  return http_request("DELETE", self.base_url, path, opts)
+  return http_request(self.request_fn, "DELETE", self.base_url, path, opts)
 end
 
 function Context:http(name)
   local capability = assert(self.capabilities.http and self.capabilities.http[name], "undeclared http capability: " .. tostring(name))
   local base_url = capability.base_url
   assert(type(base_url) == "string", "http capability missing base_url")
-  return setmetatable({ base_url = base_url, requests = self.http_requests }, HttpClient)
+  return setmetatable({ base_url = base_url, requests = self.http_requests, request_fn = self.http_request }, HttpClient)
 end
 
 local Auth = {}
@@ -981,6 +982,7 @@ local function new_context(opts)
     capability_store = opts.capability_store or {},
     capabilities = opts.capabilities or {},
     zig_helpers = opts.zig_helpers,
+    http_request = opts.http_request,
     http_requests = {},
   }, Context)
 end
@@ -1054,7 +1056,7 @@ function hybrid.invoke(app, request, opts)
       if query_error then return query_error end
       local validation_error = validate_request_domains(route, request)
       if validation_error then return validation_error end
-      local ctx = new_context({ request = request, params = params, query = query, raw_query_values = query_values, raw_query_all = query_all, scope = route.scope.context or {}, capabilities = graph.capabilities, zig_helpers = opts.zig_helpers, worker_cache = app.cache, capability_store = store.capabilities })
+      local ctx = new_context({ request = request, params = params, query = query, raw_query_values = query_values, raw_query_all = query_all, scope = route.scope.context or {}, capabilities = graph.capabilities, zig_helpers = opts.zig_helpers, http_request = opts.http_request, worker_cache = app.cache, capability_store = store.capabilities })
       local plugin_response = execute_scope_plugins(route, ctx, plugin_map)
       if plugin_response then return plugin_response end
       if route.handler.kind == "inline_lua" then

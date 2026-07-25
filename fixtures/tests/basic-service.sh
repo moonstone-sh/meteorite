@@ -1,5 +1,17 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
+
+on_error() {
+  local status=$?
+  printf 'FAIL: basic-service line %s: %s (exit %s)\n' "$1" "$2" "$status" >&2
+  if [[ -f /tmp/meteorite-basic-service.log ]]; then
+    printf '%s\n' '--- server log ---' >&2
+    tail -n 80 /tmp/meteorite-basic-service.log >&2 || true
+  fi
+  exit "$status"
+}
+
+trap 'on_error "$LINENO" "$BASH_COMMAND"' ERR
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LUA_PROJECT_PATH="${ROOT}/src/?.lua;${ROOT}/src/?/init.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?/init.lua;${ROOT}/../ballad/src/?.lua;${ROOT}/../ballad/src/?/init.lua;;"
@@ -197,7 +209,6 @@ demo_invoke() {
 }
 [[ "$(demo_invoke GET /)" == $'200\ttext/plain; charset=utf-8\thello from meteorite' ]]
 [[ "$(demo_invoke GET /health)" == $'200\tapplication/json\t{"ok":true,"runtime":"lua"}' ]]
-[[ "$(demo_invoke GET /users/456)" == $'200\tapplication/json\t{"id":"456","message":"typed params from zig graph","user":{"capability":"db","echo":{"id":"456"},"headers":{"authorization":"Bearer demo-token-for-db"},"ok":true,"path":"/get-user-from-db"}}' ]]
 [[ "$(demo_invoke POST /echo 'hello body')" == $'200\ttext/plain; charset=utf-8\thello body' ]]
 [[ "$(demo_invoke GET /devices/router_01)" == $'200\tapplication/json\t{"device":"device:router_01"}' ]]
 [[ "$(demo_invoke GET /devices/INVALID)" == $'404\ttext/plain\tnot found' ]]
@@ -207,8 +218,27 @@ package.path = "fixtures/apps/hybrid-demo/src/?.lua;fixtures/apps/hybrid-demo/sr
 local hybrid = require("cli.hybrid")
 local app = assert(loadfile("fixtures/apps/hybrid-demo/src/main.lua"))()
 local store = { capabilities = {} }
-hybrid.invoke(app, { method = "GET", path = "/users/1" }, { store = store })
-hybrid.invoke(app, { method = "GET", path = "/users/2" }, { store = store })
+local requests = 0
+local function fake_http(method, base_url, path, opts)
+  requests = requests + 1
+  assert(method == "POST")
+  assert(base_url == "http://localhost:8888")
+  assert(path == "/get-user-from-db")
+  assert(opts.headers.authorization == "Bearer demo-token-for-db")
+  assert(opts.body.id == "1" or opts.body.id == "2")
+  return {
+    status = 200,
+    headers = { ["content-type"] = "application/json" },
+    body = { ok = true, path = path, capability = "db", echo = opts.body },
+  }
+end
+local first = hybrid.invoke(app, { method = "GET", path = "/users/1" }, { store = store, http_request = fake_http })
+local second = hybrid.invoke(app, { method = "GET", path = "/users/2" }, { store = store, http_request = fake_http })
+assert(first.body:find('"id":"1"', 1, true))
+assert(first.body:find('"echo":{"id":"1"}', 1, true))
+assert(second.body:find('"id":"2"', 1, true))
+assert(second.body:find('"echo":{"id":"2"}', 1, true))
+assert(requests == 2)
 assert(store.capabilities["auth.db"].refresh_count == 1, "auth token refresh should be capability-owned and cached")
 LUA
 
