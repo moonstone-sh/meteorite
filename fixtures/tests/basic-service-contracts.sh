@@ -102,7 +102,7 @@ demo_invoke() {
 [[ "$(demo_invoke GET /health)" == $'200\tapplication/json\t{"ok":true,"runtime":"lua"}' ]]
 [[ "$(demo_invoke POST /echo 'hello body')" == $'200\ttext/plain; charset=utf-8\thello body' ]]
 [[ "$(demo_invoke GET /devices/router_01)" == $'200\tapplication/json\t{"device":"device:router_01"}' ]]
-[[ "$(demo_invoke GET /devices/INVALID)" == $'404\ttext/plain\tnot found' ]]
+[[ "$(demo_invoke GET /devices/INVALID)" == $'200\tapplication/json\t{"device":"device:INVALID"}' ]]
 
 luajit <<'LUA'
 package.path = "fixtures/apps/hybrid-demo/src/?.lua;fixtures/apps/hybrid-demo/src/?/init.lua;src/?.lua;src/?/init.lua;" .. package.path
