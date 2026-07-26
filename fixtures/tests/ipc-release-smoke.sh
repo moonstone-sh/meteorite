@@ -21,6 +21,7 @@ SERVER_LOG="/tmp/meteorite-ipc-native-release-server.log"
 
 rm -rf fixtures/apps/ipc-native-service/dist fixtures/apps/ipc-native-service/.meteorite/release fixtures/apps/ipc-native-service/.meteorite/graph/ipc-native-release
 rm -f "$SOCK" "$BUILD_LOG" "$SERVER_LOG"
+moon orbit sync ipc-native-service --update >/tmp/meteorite-ipc-native-release-sync.log
 (
   cd "$ROOT/fixtures/apps/ipc-native-service"
   LUA_PATH="$LUA_PROJECT_PATH" luajit "$ROOT/../ballad/src/main.lua" play partiture.lua
