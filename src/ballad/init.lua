@@ -204,7 +204,6 @@ return {
       generated = true,
       metadata = { mode = release_mode, graph_hash = result.graph_hash, contract = contract.format },
     }))
-    release_assets.add_graph_assets(ctx, assets, root, opts.graph_output or ".meteorite/graph/current", opts.graph_output or ".meteorite/graph/current")
     release_assets.add_static_assets(ctx, assets, path.join(graph_output, "static"))
     if release_mode == "hybrid" then
       release_assets.add_hybrid_lua_assets(ctx, assets, root, result.graph)

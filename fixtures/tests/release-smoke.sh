@@ -130,6 +130,7 @@ test -x "$deploy_root/bin/server"
 test -f "$deploy_root/meteorite-release.json"
 test -d "$deploy_root/static"
 ! find "$deploy_root" -path '*/.moonstone/env*' -print -quit | grep -q .
+! find "$deploy_root" -path '*/.meteorite/graph*' -print -quit | grep -q .
 ! find "$deploy_root" -path '*/src/*' -print -quit | grep -q .
 ! find "$deploy_root" -path '*/site/dist/*' -print -quit | grep -q .
 ! find "$deploy_root" -path '*/runtime/lua/*' -print -quit | grep -q .
