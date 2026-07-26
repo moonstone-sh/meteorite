@@ -56,23 +56,18 @@ cleanup_cross_target() {
 }
 trap cleanup_cross_target EXIT INT TERM HUP
 
-# Ensure the fixture has a .moonstone/env/bin/lua for build.zig's graph step.
-# The release flow generates the graph via emitter.emit() in Lua, but build.zig
-# also runs a graph step that needs a Lua binary at {project_root}/.moonstone/env/bin/lua.
+# Materialize the complete child environment. Ballad's Moonstone plugin reads
+# env.toml as well as the runtime binary; a hand-made lua symlink is not a
+# valid project environment and hides fixture dependency drift.
 FIXTURE_ROOT="$ROOT/fixtures/apps/hybrid-demo"
-if [ ! -x "$FIXTURE_ROOT/.moonstone/env/bin/lua" ]; then
-  mkdir -p "$FIXTURE_ROOT/.moonstone/env/bin"
-  if [ -x "$ROOT/.moonstone/env/bin/lua" ]; then
-    ln -sf "$ROOT/.moonstone/env/bin/lua" "$FIXTURE_ROOT/.moonstone/env/bin/lua"
-  elif command -v lua >/dev/null 2>&1; then
-    ln -sf "$(command -v lua)" "$FIXTURE_ROOT/.moonstone/env/bin/lua"
-  elif command -v luajit >/dev/null 2>&1; then
-    ln -sf "$(command -v luajit)" "$FIXTURE_ROOT/.moonstone/env/bin/lua"
-  else
-    echo "cross-target: no lua binary found for fixture env" >&2
-    exit 1
-  fi
+SYNC_LOG="${TMPDIR:-/tmp}/meteorite-cross-target-sync.log"
+if ! moon orbit sync hybrid-demo --update >"$SYNC_LOG" 2>&1; then
+  echo "cross-target: failed to materialize the hybrid-demo environment:" >&2
+  cat "$SYNC_LOG" >&2
+  exit 1
 fi
+test -f "$FIXTURE_ROOT/.moonstone/env/env.toml"
+test -x "$FIXTURE_ROOT/.moonstone/env/bin/lua"
 
 cleanup_port() {
   while read -r pid; do
