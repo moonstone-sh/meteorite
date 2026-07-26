@@ -2,7 +2,7 @@ local m = require("meteorite")
 local app = m.app({ name = "static-site-basic" })
 
 m.site(app, {
-  root = "fixtures/apps/static-site/site/dist",
+  root = "site/dist",
   html = {
     ["/"] = "index.html",
     ["/docs/:route*"] = "index.html",
