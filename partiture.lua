@@ -10,7 +10,7 @@ return ballad.partiture(function(p)
 		version = project.version,
 		kind = "bin",
 		include = {
-			"HMR_partiture.lua",
+			"Watch_partiture.lua",
 			"partiture_common.lua",
 			"build.zig",
 			"bin/**",

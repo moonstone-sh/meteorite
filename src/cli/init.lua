@@ -176,7 +176,7 @@ function init.run(argv, config)
   local generated_partitures = {
     ["partiture_common.lua"] = cli_templates.partiture_common(),
     ["Dev_partiture.lua"] = cli_templates.dev_partiture(),
-    ["HMR_partiture.lua"] = cli_templates.hmr_partiture(),
+    ["Watch_partiture.lua"] = cli_templates.watch_partiture(),
     ["Check_partiture.lua"] = cli_templates.check_partiture(),
   }
   for relative_path, content in pairs(generated_partitures) do

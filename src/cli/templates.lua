@@ -421,7 +421,7 @@ function handler_sync.moonstone_manifest(name, build_mode)
     "",
     "[scripts]",
     "graph = \"meteorite graph src/main.lua .meteorite/graph/current " .. tostring(build_mode or "hybrid") .. " fast_http\"",
-    "dev = \"moon exec ballad play HMR_partiture.lua -- --mode hybrid_dev --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers\"",
+    "dev = \"moon exec ballad play Watch_partiture.lua -- --mode hybrid_dev --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers\"",
     "build = \"moon exec ballad play Dev_partiture.lua -- --mode hybrid_dev --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers\"",
     "run = \"moon run build && ./dist/server\"",
     "release = \"moon exec ballad play partiture.lua -- --mode " .. release_mode .. " --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers\"",
@@ -500,7 +500,7 @@ function handler_sync.dev_partiture()
   }, "\n")
 end
 
-function handler_sync.hmr_partiture()
+function handler_sync.watch_partiture()
   return table.concat({
     "local ballad = require(\"ballad\")",
     "local common = require(\"partiture_common\")",
@@ -510,7 +510,7 @@ function handler_sync.hmr_partiture()
     "  local request = common.request(p)",
     "  local app = p.source.files({ \"**/*.lua\" }, { root = \"src\" })",
     "  local build = p.task.native({",
-    "    id = \"meteorite.hmr.build.v1\", tool = \"meteorite\",",
+    "    id = \"meteorite.watch.build.v1\", tool = \"meteorite\",",
     "    args = request.to_cli_args(request),",
     "    inputs = { \"src/**/*.lua\", \"moonstone.toml\", \"moonstone.lock\", \"build.zig\", \"zig/**\" },",
     "    outputs = { \".meteorite/graph/current\", \"dist/server\" },",

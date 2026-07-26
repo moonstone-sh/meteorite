@@ -36,7 +36,7 @@ test "generated manifests keep behavior explicit and generate the full partiture
   test.assert_true(manifest:find("check:release", 1, true) ~= nil, "release check")
   test.assert_false(manifest:find("[server]", 1, true) ~= nil, "no server section")
   test.assert_false(manifest:find("[meteorite]", 1, true) ~= nil, "no hidden Meteorite section")
-  for _, factory in ipairs({ "partiture_common", "release_partiture", "dev_partiture", "hmr_partiture", "check_partiture" }) do
+  for _, factory in ipairs({ "partiture_common", "release_partiture", "dev_partiture", "watch_partiture", "check_partiture" }) do
     local chunk, err = load(templates[factory]())
     test.assert_true(chunk ~= nil, factory .. ": " .. tostring(err))
   end

@@ -39,7 +39,7 @@ abi = "5.4"
 "graph" = "lua src/cli/main.lua graph fixtures/apps/showcase-service/src/main.lua .meteorite/graph/current release-static fast_http"
 "test-release-reproducibility" = "bash tests/release-reproducibility.sh"
 "bench:work" = "bash bench/run.sh --mode=work \"$@\""
-"dev" = "moon exec ballad play HMR_partiture.lua -- --mode hybrid_dev --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers"
+"dev" = "moon exec ballad play Watch_partiture.lua -- --mode hybrid_dev --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers"
 
 [[orbits.member]]
 name = "lapis-cqueues"
