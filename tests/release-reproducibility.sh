@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LUA_PROJECT_PATH="${ROOT}/src/?.lua;${ROOT}/src/?/init.lua;${ROOT}/../ballad/dist/ballad/libexec/ballad/lua/?.lua;${ROOT}/../ballad/dist/ballad/libexec/ballad/lua/?/init.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?/init.lua;${ROOT}/../ballad/src/?.lua;${ROOT}/../ballad/src/?/init.lua;;"
+LUA_PROJECT_PATH="${ROOT}/src/ballad_plugin/?.lua;${ROOT}/src/ballad_plugin/?/init.lua;${ROOT}/src/?.lua;${ROOT}/src/?/init.lua;${ROOT}/../ballad/dist/ballad/libexec/ballad/lua/?.lua;${ROOT}/../ballad/dist/ballad/libexec/ballad/lua/?/init.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?/init.lua;${ROOT}/../ballad/src/?.lua;${ROOT}/../ballad/src/?/init.lua;;"
 RELEASE_ROOT="$ROOT/fixtures/apps/static-site/dist/release"
 FIRST_MANIFEST="$(mktemp /tmp/meteorite-release-manifest-first.XXXXXX)"
 SECOND_MANIFEST="$(mktemp /tmp/meteorite-release-manifest-second.XXXXXX)"
@@ -16,8 +16,10 @@ cd "$ROOT"
 bash fixtures/tests/release-smoke.sh
 cp "$RELEASE_ROOT/meteorite-release.json" "$FIRST_MANIFEST"
 
-LUA_PATH="$LUA_PROJECT_PATH" luajit ../ballad/src/main.lua play fixtures/apps/static-site/partiture.lua \
-  >/tmp/meteorite-release-reproducibility-ballad.log
+(
+  cd "$ROOT/fixtures/apps/static-site"
+  LUA_PATH="$LUA_PROJECT_PATH" luajit "$ROOT/../ballad/src/main.lua" play partiture.lua
+) >/tmp/meteorite-release-reproducibility-ballad.log
 cp "$RELEASE_ROOT/meteorite-release.json" "$SECOND_MANIFEST"
 
 python3 - "$FIRST_MANIFEST" "$SECOND_MANIFEST" <<'PY'

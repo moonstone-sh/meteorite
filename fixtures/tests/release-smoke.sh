@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-LUA_PROJECT_PATH="${ROOT}/src/?.lua;${ROOT}/src/?/init.lua;${ROOT}/../ballad/dist/ballad/libexec/ballad/lua/?.lua;${ROOT}/../ballad/dist/ballad/libexec/ballad/lua/?/init.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?/init.lua;${ROOT}/../ballad/src/?.lua;${ROOT}/../ballad/src/?/init.lua;;"
+LUA_PROJECT_PATH="${ROOT}/src/ballad_plugin/?.lua;${ROOT}/src/ballad_plugin/?/init.lua;${ROOT}/src/?.lua;${ROOT}/src/?/init.lua;${ROOT}/../ballad/dist/ballad/libexec/ballad/lua/?.lua;${ROOT}/../ballad/dist/ballad/libexec/ballad/lua/?/init.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?/init.lua;${ROOT}/../ballad/src/?.lua;${ROOT}/../ballad/src/?/init.lua;;"
 
 cd "$ROOT"
 source "$(dirname "${BASH_SOURCE[0]}")/cleanup.sh"
@@ -54,7 +54,10 @@ fi
 grep -q 'static file not found' /tmp/meteorite-release-missing-static.log
 grep -q 'site/dist/missing.txt' /tmp/meteorite-release-missing-static.log
 
-LUA_PATH="$LUA_PROJECT_PATH" luajit ../ballad/src/main.lua play fixtures/apps/static-site/partiture.lua >/tmp/meteorite-release-smoke-ballad.log
+(
+  cd "$ROOT/fixtures/apps/static-site"
+  LUA_PATH="$LUA_PROJECT_PATH" luajit "$ROOT/../ballad/src/main.lua" play partiture.lua
+) >/tmp/meteorite-release-smoke-ballad.log
 
 test -x fixtures/apps/static-site/dist/release/bin/server
 test -f fixtures/apps/static-site/dist/release/meteorite-release.json

@@ -37,7 +37,7 @@ Meteorite is a Moonstone package (`moonstone/meteorite`) and a Ballad plugin con
 
 ### Ballad
 
-- Meteorite registers as a Ballad plugin under the name `meteorite.ballad` (see `src/meteorite/ballad.lua` → `src/ballad/init.lua`).
+- Meteorite registers as a Ballad plugin under the name `meteorite.ballad` through the narrow facade at `src/ballad_plugin/meteorite/ballad.lua`, which loads `src/ballad/init.lua` without shadowing Ballad core modules.
 - Ballad's `moonstone` plugin (`ballad.plugins.moonstone`) exposes project metadata, runtime facts, and package facts via `project_prepare()` / `project()`.
 - Meteorite's release export runs inside a Ballad partiture (`partiture.lua` for registry export; per-app `partiture.lua` for production releases).
 - Ballad's `registry.source_package` creates the publishable Moonstone source package for Meteorite itself.
@@ -402,9 +402,12 @@ The release smoke test (`fixtures/tests/release-smoke.sh`) verifies:
 ### Running Tests Without Moon (Direct Lua)
 
 ```bash
-# Set LUA_PATH to include meteorite src/ and ballad
-LUA_PATH='src/?.lua;src/?/init.lua;../ballad/.moonstone/env/share/lua/5.1/?.lua;../ballad/.moonstone/env/share/lua/5.1/?/init.lua;../ballad/src/?.lua;../ballad/src/?/init.lua;;' \
-  luajit ../ballad/src/main.lua play fixtures/apps/basic-service/partiture.lua
+# Run fixture partitures from their own project root and expose the narrow
+# `meteorite.ballad` facade separately from Meteorite's runtime modules.
+root="$PWD"
+cd fixtures/apps/basic-service
+LUA_PATH="$root/src/ballad_plugin/?.lua;$root/src/ballad_plugin/?/init.lua;$root/src/?.lua;$root/src/?/init.lua;$root/../ballad/.moonstone/env/share/lua/5.1/?.lua;$root/../ballad/.moonstone/env/share/lua/5.1/?/init.lua;$root/../ballad/src/?.lua;$root/../ballad/src/?/init.lua;;" \
+  luajit "$root/../ballad/src/main.lua" play partiture.lua
 ```
 
 ### Fixture Conventions

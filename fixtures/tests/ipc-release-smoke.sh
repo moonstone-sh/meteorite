@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-LUA_PROJECT_PATH="${ROOT}/src/?.lua;${ROOT}/src/?/init.lua;${ROOT}/../ballad/dist/ballad/libexec/ballad/lua/?.lua;${ROOT}/../ballad/dist/ballad/libexec/ballad/lua/?/init.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?/init.lua;${ROOT}/../ballad/src/?.lua;${ROOT}/../ballad/src/?/init.lua;;"
+LUA_PROJECT_PATH="${ROOT}/src/ballad_plugin/?.lua;${ROOT}/src/ballad_plugin/?/init.lua;${ROOT}/src/?.lua;${ROOT}/src/?/init.lua;${ROOT}/../ballad/dist/ballad/libexec/ballad/lua/?.lua;${ROOT}/../ballad/dist/ballad/libexec/ballad/lua/?/init.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?/init.lua;${ROOT}/../ballad/src/?.lua;${ROOT}/../ballad/src/?/init.lua;;"
 
 cd "$ROOT"
 source "$(dirname "${BASH_SOURCE[0]}")/cleanup.sh"
@@ -21,7 +21,10 @@ SERVER_LOG="/tmp/meteorite-ipc-native-release-server.log"
 
 rm -rf fixtures/apps/ipc-native-service/dist fixtures/apps/ipc-native-service/.meteorite/release fixtures/apps/ipc-native-service/.meteorite/graph/ipc-native-release
 rm -f "$SOCK" "$BUILD_LOG" "$SERVER_LOG"
-LUA_PATH="$LUA_PROJECT_PATH" luajit ../ballad/src/main.lua play fixtures/apps/ipc-native-service/partiture.lua >"$BUILD_LOG" 2>&1
+(
+  cd "$ROOT/fixtures/apps/ipc-native-service"
+  LUA_PATH="$LUA_PROJECT_PATH" luajit "$ROOT/../ballad/src/main.lua" play partiture.lua
+) >"$BUILD_LOG" 2>&1
 
 test -x "$RELEASE_ROOT/bin/server"
 test -f "$RELEASE_ROOT/meteorite-release.json"

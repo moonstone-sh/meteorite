@@ -2,7 +2,7 @@
 
 meteorite_test_setup() {
   ROOT="$(cd "$(dirname "${BASH_SOURCE[1]}")/../.." && pwd)"
-  LUA_PROJECT_PATH="${ROOT}/src/?.lua;${ROOT}/src/?/init.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?/init.lua;${ROOT}/../ballad/src/?.lua;${ROOT}/../ballad/src/?/init.lua;;"
+  LUA_PROJECT_PATH="${ROOT}/src/ballad_plugin/?.lua;${ROOT}/src/ballad_plugin/?/init.lua;${ROOT}/src/?.lua;${ROOT}/src/?/init.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?/init.lua;${ROOT}/../ballad/src/?.lua;${ROOT}/../ballad/src/?/init.lua;;"
   cd "$ROOT"
   export MOONSTONE_HOME="$ROOT/.moonstone-home"
 }
@@ -22,5 +22,8 @@ meteorite_graph() {
 }
 
 meteorite_export_basic_service() {
-  LUA_PATH="$LUA_PROJECT_PATH" luajit ../ballad/src/main.lua play fixtures/apps/basic-service/partiture.lua >/tmp/meteorite-partiture-test.log
+  (
+    cd "$ROOT/fixtures/apps/basic-service"
+    LUA_PATH="$LUA_PROJECT_PATH" luajit "$ROOT/../ballad/src/main.lua" play partiture.lua
+  ) >/tmp/meteorite-partiture-test.log
 }

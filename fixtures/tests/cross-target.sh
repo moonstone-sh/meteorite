@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-LUA_PROJECT_PATH="${ROOT}/src/?.lua;${ROOT}/src/?/init.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?/init.lua;${ROOT}/../ballad/src/?.lua;${ROOT}/../ballad/src/?/init.lua;;"
+LUA_PROJECT_PATH="${ROOT}/src/ballad_plugin/?.lua;${ROOT}/src/ballad_plugin/?/init.lua;${ROOT}/src/?.lua;${ROOT}/src/?/init.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?/init.lua;${ROOT}/../ballad/src/?.lua;${ROOT}/../ballad/src/?/init.lua;;"
 TARGET="${METEORITE_CROSS_TARGET:-aarch64-linux-gnu}"
 ZIG_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-/tmp/zig-cache-meteorite-cross}"
 
@@ -83,16 +83,18 @@ cleanup_port
 
 rm -rf fixtures/apps/hybrid-demo/dist/release fixtures/apps/hybrid-demo/.meteorite/graph/release
 
-LUA_PATH="$LUA_PROJECT_PATH" \
-PATH="$CMODULE_FIXTURE_DIR/bin:$PATH" \
-METEORITE_CROSS_TARGET="$TARGET" \
-METEORITE_CMODULE_SOURCE="$CMODULE_FIXTURE_DIR/mockcmodule.tar.gz" \
-METEORITE_CMODULE_ROCKSPEC="$CMODULE_FIXTURE_DIR/mockcmodule-0.1-1.rockspec" \
-METEORITE_LUA_SOURCE="$LUA_SOURCE_ARCHIVE" \
-METEORITE_LUA_SOURCE_KIND="puc_lua_source" \
-ZIG_GLOBAL_CACHE_DIR="$ZIG_CACHE_DIR" \
-  luajit ../ballad/src/main.lua play fixtures/apps/hybrid-demo/partiture-cross-target.lua \
-  >/tmp/meteorite-cross-target-ballad.log 2>&1
+(
+  cd "$ROOT/fixtures/apps/hybrid-demo"
+  LUA_PATH="$LUA_PROJECT_PATH" \
+  PATH="$CMODULE_FIXTURE_DIR/bin:$PATH" \
+  METEORITE_CROSS_TARGET="$TARGET" \
+  METEORITE_CMODULE_SOURCE="$CMODULE_FIXTURE_DIR/mockcmodule.tar.gz" \
+  METEORITE_CMODULE_ROCKSPEC="$CMODULE_FIXTURE_DIR/mockcmodule-0.1-1.rockspec" \
+  METEORITE_LUA_SOURCE="$LUA_SOURCE_ARCHIVE" \
+  METEORITE_LUA_SOURCE_KIND="puc_lua_source" \
+  ZIG_GLOBAL_CACHE_DIR="$ZIG_CACHE_DIR" \
+    luajit "$ROOT/../ballad/src/main.lua" play partiture-cross-target.lua
+) >/tmp/meteorite-cross-target-ballad.log 2>&1
 
 # Verify the release binary exists and is the correct architecture
 test -x fixtures/apps/hybrid-demo/dist/release/bin/server
