@@ -25,7 +25,7 @@ return ballad.partiture(function(p)
   local project = moonstone.project_prepare({ root = ".", roles = { "runtime" } })
   local release = m.release({
     project = project,
-    root = "fixtures/apps/hybrid-demo",
+    root = ".",
     input = "src/main.lua",
     graph_output = ".meteorite/graph/release",
     output = ".meteorite/release/server-bin",
@@ -38,5 +38,5 @@ return ballad.partiture(function(p)
     runtime_source = runtime_source,
     runtime_source_kind = runtime_source_kind,
   })
-  p.sink.directory(release, { out = "fixtures/apps/hybrid-demo/dist/release", file_graph = true })
+  p.sink.directory(release, { out = "dist/release", file_graph = true })
 end)

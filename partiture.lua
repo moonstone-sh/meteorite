@@ -12,8 +12,6 @@ return ballad.partiture(function(p)
 		include = {
 			"HMR_partiture.lua",
 			"partiture_common.lua",
-			"moonstone.toml",
-			"moonstone.lock",
 			"build.zig",
 			"bin/**",
 			"src/**",

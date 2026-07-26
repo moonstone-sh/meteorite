@@ -31,6 +31,7 @@ dist/
 fixtures/apps/*/.meteorite/
 fixtures/apps/*/.moonstone/
 fixtures/apps/*/.moonstone-home/
+fixtures/apps/*/moonstone.lock
 fixtures/apps/*/.zig-cache/
 fixtures/apps/*/dist/
 fixtures/apps/*/zig-cache/

@@ -3,7 +3,7 @@ local ballad = require("ballad")
 return ballad.partiture(function(p)
   local meteorite = p:use("meteorite.ballad")
   local release = meteorite.release({
-    input = "fixtures/apps/ipc-native-service/src/main.lua",
+    input = "src/main.lua",
     output = ".meteorite/release/ipc-native/server",
     graph_output = ".meteorite/graph/ipc-native-release",
     mode = "hybrid",
@@ -13,5 +13,5 @@ return ballad.partiture(function(p)
     unix_socket_mode = "0660",
     unix_socket_unlink_stale = true,
   })
-  p.sink.directory(release, { out = "fixtures/apps/ipc-native-service/dist/release", file_graph = true })
+  p.sink.directory(release, { out = "dist/release", file_graph = true })
 end)

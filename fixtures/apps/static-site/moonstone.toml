@@ -1,16 +1,13 @@
 [package]
-name = "meteorite-basic-service"
+name = "meteorite-static-site"
 version = "0.1.0"
 kind = "script"
-description = "Meteorite basic service example"
+description = "Meteorite static site release example"
 
 [interpreter]
 name = "lua"
 version = "5.4"
 abi = "5.4"
-
-[scripts]
-"graph" = "moon exec meteorite graph src/main.lua .meteorite/graph/current release-static std_http"
 
 [[dependencies]]
 name = "../../.."

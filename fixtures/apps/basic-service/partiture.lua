@@ -2,7 +2,7 @@ local ballad = require("ballad")
 local meteorite = require("meteorite.ballad")
 
 return ballad.partiture(function(p)
-	local fixture_root = "fixtures/apps/basic-service"
+	local fixture_root = "."
 
 	local m = p:use(meteorite)
 	local graph = m.graph({

@@ -20,9 +20,16 @@ if [[ -z "$archive" ]]; then
 fi
 
 contents="$(zstd -dc "$archive" | tar -tf -)"
-for required_path in README.md moonstone.toml moonstone.lock docs/roadmap/v0.1-ga.md; do
+for required_path in README.md docs/roadmap/v0.1-ga.md; do
   if ! grep -Fqx "./$required_path" <<<"$contents" && ! grep -Fqx "$required_path" <<<"$contents"; then
     echo "registry export: source archive missing $required_path" >&2
+    exit 1
+  fi
+done
+
+for forbidden_path in moonstone.toml moonstone.lock; do
+  if grep -Fqx "./$forbidden_path" <<<"$contents" || grep -Fqx "$forbidden_path" <<<"$contents"; then
+    echo "registry export: source archive contains development manifest $forbidden_path" >&2
     exit 1
   fi
 done

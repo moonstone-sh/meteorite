@@ -41,6 +41,8 @@ end
 local function with_package_path(root, fn)
   local previous_path = package.path
   package.path = table.concat({
+    path.join(plugin_root(), "src/?.lua"),
+    path.join(plugin_root(), "src/?/init.lua"),
     path.join(root, "src/?.lua"),
     path.join(root, "src/?/init.lua"),
     "src/?.lua",
