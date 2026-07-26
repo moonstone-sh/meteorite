@@ -25,10 +25,15 @@ moon orbit sync ipc-native-service --update >/tmp/meteorite-ipc-native-release-s
 (
   cd "$ROOT/fixtures/apps/ipc-native-service"
   LUA_PATH="$LUA_PROJECT_PATH" luajit "$ROOT/../ballad/src/main.lua" play partiture.lua
-) >"$BUILD_LOG" 2>&1
+) >"$BUILD_LOG" 2>&1 || {
+  cat "$BUILD_LOG" >&2
+  exit 1
+}
 
-test -x "$RELEASE_ROOT/bin/server"
-test -f "$RELEASE_ROOT/meteorite-release.json"
+if [[ ! -x "$RELEASE_ROOT/bin/server" || ! -f "$RELEASE_ROOT/meteorite-release.json" ]]; then
+  cat "$BUILD_LOG" >&2
+  exit 1
+fi
 python3 - "$RELEASE_ROOT/meteorite-release.json" "$ROOT" <<'PY'
 import json
 import sys
@@ -81,7 +86,11 @@ for _ in $(seq 1 100); do
   fi
   sleep 0.1
 done
-test -S "$SOCK"
+if [[ ! -S "$SOCK" ]]; then
+  echo "IPC release server did not create $SOCK" >&2
+  cat "$SERVER_LOG" >&2 || true
+  exit 1
+fi
 
 health=$("$LUA_BIN" src/cli/main.lua ipc send --socket "$SOCK" --message health.get)
 case "$health" in
