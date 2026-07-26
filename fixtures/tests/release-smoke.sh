@@ -16,6 +16,7 @@ cleanup_port() {
 
 cleanup_port
 rm -rf fixtures/apps/static-site/dist fixtures/apps/static-site/.meteorite/release fixtures/apps/static-site/.meteorite/graph/static-site-basic-release
+moon orbit sync static-site --update >/tmp/meteorite-release-static-site-sync.log
 missing_static_root="$(mktemp -d /tmp/meteorite-release-missing-static.XXXXXX)"
 mkdir -p "$missing_static_root/src"
 cat > "$missing_static_root/src/main.lua" <<'LUA'
