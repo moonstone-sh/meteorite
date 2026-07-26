@@ -19,6 +19,8 @@ RELEASE_ROOT="fixtures/apps/ipc-native-service/dist/release"
 BUILD_LOG="/tmp/meteorite-ipc-native-release-ballad.log"
 SERVER_LOG="/tmp/meteorite-ipc-native-release-server.log"
 
+trap 'status=$?; printf "FAIL: ipc-release-smoke line %s: %s (exit %s)\n" "$LINENO" "$BASH_COMMAND" "$status" >&2; cat "$BUILD_LOG" >&2 2>/dev/null || true; cat "$SERVER_LOG" >&2 2>/dev/null || true; exit "$status"' ERR
+
 rm -rf fixtures/apps/ipc-native-service/dist fixtures/apps/ipc-native-service/.meteorite/release fixtures/apps/ipc-native-service/.meteorite/graph/ipc-native-release
 rm -f "$SOCK" "$BUILD_LOG" "$SERVER_LOG"
 moon orbit sync ipc-native-service --update >/tmp/meteorite-ipc-native-release-sync.log
