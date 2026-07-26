@@ -83,7 +83,8 @@ cleanup_port
 
 rm -rf fixtures/apps/hybrid-demo/dist/release fixtures/apps/hybrid-demo/.meteorite/graph/release
 
-(
+BALLAD_LOG="${TMPDIR:-/tmp}/meteorite-cross-target-ballad.log"
+if ! (
   cd "$ROOT/fixtures/apps/hybrid-demo"
   LUA_PATH="$LUA_PROJECT_PATH" \
   PATH="$CMODULE_FIXTURE_DIR/bin:$PATH" \
@@ -94,7 +95,11 @@ rm -rf fixtures/apps/hybrid-demo/dist/release fixtures/apps/hybrid-demo/.meteori
   METEORITE_LUA_SOURCE_KIND="puc_lua_source" \
   ZIG_GLOBAL_CACHE_DIR="$ZIG_CACHE_DIR" \
     luajit "$ROOT/../ballad/src/main.lua" play partiture-cross-target.lua
-) >/tmp/meteorite-cross-target-ballad.log 2>&1
+) >"$BALLAD_LOG" 2>&1; then
+  echo "cross-target: Ballad release failed; captured output follows:" >&2
+  cat "$BALLAD_LOG" >&2
+  exit 1
+fi
 
 # Verify the release binary exists and is the correct architecture
 test -x fixtures/apps/hybrid-demo/dist/release/bin/server
