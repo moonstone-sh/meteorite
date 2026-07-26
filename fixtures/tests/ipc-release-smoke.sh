@@ -16,6 +16,7 @@ fi
 
 SOCK="/tmp/meteorite-ipc-native-release.sock"
 RELEASE_ROOT="fixtures/apps/ipc-native-service/dist/release"
+GRAPH_ROOT="fixtures/apps/ipc-native-service/.meteorite/graph/ipc-native-release"
 BUILD_LOG="/tmp/meteorite-ipc-native-release-ballad.log"
 SERVER_LOG="/tmp/meteorite-ipc-native-release-server.log"
 
@@ -34,6 +35,11 @@ moon orbit sync ipc-native-service --update >/tmp/meteorite-ipc-native-release-s
 
 if [[ ! -x "$RELEASE_ROOT/bin/server" || ! -f "$RELEASE_ROOT/meteorite-release.json" ]]; then
   cat "$BUILD_LOG" >&2
+  exit 1
+fi
+if grep -R -Fq '.meteorite/graph/ipc-native-release/../../lua/' "$GRAPH_ROOT"; then
+  echo "release graph leaked a build-relative Lua handler path" >&2
+  grep -R -Fn '.meteorite/graph/ipc-native-release/../../lua/' "$GRAPH_ROOT" >&2 || true
   exit 1
 fi
 python3 - "$RELEASE_ROOT/meteorite-release.json" "$ROOT" <<'PY'

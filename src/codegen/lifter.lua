@@ -100,6 +100,10 @@ local function route_mode(opts)
   return tostring((opts and opts.mode) or "hybrid")
 end
 
+local function runtime_chunk_path(_, kind, route_id)
+  return ".meteorite/lua/" .. kind .. "/" .. route_id .. ".lua"
+end
+
 local function check_upvalues(route, fn, opts)
   local index = 1
   while true do
@@ -202,6 +206,7 @@ function lifter.lift(route, opts)
   return {
     id = route.id,
     chunk_path = chunk_path,
+    runtime_path = opts.runtime_path or runtime_chunk_path(opts.output, "inline", route.id),
     source_file = source,
     source_line = first,
     source_column = 1,
@@ -223,7 +228,11 @@ function lifter.lift_plugin(plugin, opts)
     source = { file = source, line = info.linedefined or 0, column = 1 },
   }
   local output = opts and opts.output or ".meteorite/graph/current"
-  local plugin_opts = { output = output, out_dir = output .. "/../../lua/plugins" }
+  local plugin_opts = {
+    output = output,
+    out_dir = output .. "/../../lua/plugins",
+    runtime_path = runtime_chunk_path(output, "plugins", plugin.id),
+  }
   return lifter.lift(route, plugin_opts)
 end
 

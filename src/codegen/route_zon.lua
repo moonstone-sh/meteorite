@@ -46,7 +46,20 @@ function route_zon.route_to_zon(route)
   elseif route.handler.kind == "lua" then handler = { lua_file = { id = route.id, path = route.handler.path or route.handler.module } }
   elseif route.handler.kind == "file" then handler = { file = { artifact_path = route.handler.artifact_path, content_type = route.handler.content_type, content_length = route.handler.content_length, etag = route.handler.etag, cache_control = route.handler.cache_control, only_accept = route.handler.only_accept } }
   elseif route.handler.kind == "dir" then handler = { dir = { param = route.handler.param, cache_control = route.handler.cache_control, immutable = route.handler.immutable, manifest = route.handler.manifest or {} } }
-  else handler = { inline_lua = route.handler.lifted or { id = route.id } } end
+  else
+    local lifted = route.handler.lifted or { id = route.id }
+    handler = {
+      inline_lua = {
+        id = lifted.id or route.id,
+        chunk_path = lifted.runtime_path or lifted.chunk_path or "",
+        source_file = lifted.source_file,
+        source_line = lifted.source_line,
+        source_column = lifted.source_column,
+        nparams = lifted.nparams,
+        arg_mode = lifted.arg_mode,
+      },
+    }
+  end
   local capabilities = {}
   for _, ref in ipairs(route.capabilities or {}) do capabilities[#capabilities + 1] = { [ref.kind] = ref.name } end
   local runtime = {

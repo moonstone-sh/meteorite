@@ -68,4 +68,46 @@ test "hybrid inline chunks collect project-rooted generated paths" (function()
   test.assert_eq(assets.assets[1].virtual_path, ".meteorite/lua/inline/route_1.lua", "virtual path")
 end)
 
+test "lifted chunks keep a separate release runtime path" (function()
+  local lifter = require("codegen.lifter")
+  local root = os.tmpname()
+  os.remove(root)
+  mkdir_p(root .. "/.meteorite/graph/release")
+  local source = root .. "/handler.lua"
+  write_file(source, "return function(ctx) return ctx end\n")
+  local handler = assert(loadfile(source))()
+  local lifted = lifter.lift({
+    id = "route_1",
+    method = "GET",
+    raw_path = "/",
+    source = { file = source, line = 1, column = 1 },
+    handler = { value = handler },
+  }, { output = root .. "/.meteorite/graph/release" })
+
+  test.assert_eq(lifted.runtime_path, ".meteorite/lua/inline/route_1.lua", "runtime path")
+  test.assert_eq(lifted.chunk_path, root .. "/.meteorite/graph/release/../../lua/inline/route_1.lua", "source path")
+end)
+
+test "generated route descriptors use the runtime path" (function()
+  local graph_routes = require("codegen.graph_routes")
+  local route = {
+    id = "route_1",
+    source = { file = "src/main.lua", line = 1, column = 1 },
+    handler = {
+      kind = "inline_lua",
+      lifted = {
+        chunk_path = ".meteorite/graph/current/../../lua/inline/route_1.lua",
+        runtime_path = ".meteorite/lua/inline/route_1.lua",
+      },
+    },
+  }
+  local plugin = {
+    id = "plugin_1",
+    handler = { kind = "inline_lua", lifted = route.handler.lifted },
+  }
+
+  test.assert_true(graph_routes.route_handler_zig(route):find('chunk_path = ".meteorite/lua/inline/route_1.lua"', 1, true) ~= nil, "route runtime path")
+  test.assert_true(graph_routes.plugin_handler_zig(plugin):find('chunk_path = ".meteorite/lua/inline/route_1.lua"', 1, true) ~= nil, "plugin runtime path")
+end)
+
 test.run()

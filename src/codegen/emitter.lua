@@ -71,7 +71,7 @@ local function handler_descriptor(route)
     return { kind = "dir", id = route.id, manifest_hash = helpers.hash_zon(handler.manifest or {}), param = handler.param, cache_control = handler.cache_control, immutable = handler.immutable, manifest = handler.manifest or {} }
   end
   local lifted = handler.lifted or {}
-  local chunk_path = lifted.chunk_path or ""
+  local chunk_path = lifted.runtime_path or lifted.chunk_path or ""
   return {
     kind = "inline_lua",
     id = route.id,
@@ -147,7 +147,7 @@ local function plugin_handler_descriptor(plugin)
     return {
       kind = "inline_lua",
       id = plugin.id,
-      chunk_path = lifted.chunk_path,
+      chunk_path = lifted.runtime_path or lifted.chunk_path,
       source_file = lifted.source_file,
       source_line = lifted.source_line,
       source_column = lifted.source_column,
@@ -207,7 +207,8 @@ local function build_partitions(graph, routes_text, graph_hash, mode, backend)
     local handler = handler_descriptor(route)
     handlers[#handlers + 1] = { id = route.id, kind = handler.kind, hash = helpers.hash_zon(handler) }
     if handler.kind == "inline_lua" then
-      lua_chunks[#lua_chunks + 1] = { id = route.id, path = handler.chunk_path, hash = helpers.hash_text(read_file(handler.chunk_path) or "") }
+      local source_path = (route.handler.lifted or {}).chunk_path or handler.chunk_path
+      lua_chunks[#lua_chunks + 1] = { id = route.id, path = handler.chunk_path, hash = helpers.hash_text(read_file(source_path) or "") }
     elseif handler.kind == "lua" then
       lua_chunks[#lua_chunks + 1] = { id = route.id, path = handler.path, hash = helpers.hash_text(read_file(handler.path) or "") }
     elseif handler.kind == "file" then
@@ -246,7 +247,7 @@ local function build_partitions(graph, routes_text, graph_hash, mode, backend)
     plugin_list[#plugin_list + 1] = { id = plugin.id, kind = plugin.kind, hash = helpers.hash_zon(plugin_descriptor(plugin)) }
     if plugin.handler and plugin.handler.kind == "inline_lua" then
       local lifted = plugin.handler.lifted
-      lua_chunks[#lua_chunks + 1] = { id = plugin.id, path = lifted.chunk_path, hash = helpers.hash_text(read_file(lifted.chunk_path) or "") }
+      lua_chunks[#lua_chunks + 1] = { id = plugin.id, path = lifted.runtime_path or lifted.chunk_path, hash = helpers.hash_text(read_file(lifted.chunk_path) or "") }
     end
   end
   return {
