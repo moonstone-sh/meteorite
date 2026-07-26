@@ -17,5 +17,5 @@ role = "tool"
 
 [[dependencies]]
 name = "moonstone/ballad"
-constraint = "^0.2.39"
+constraint = "^0.2.41"
 role = "tool"

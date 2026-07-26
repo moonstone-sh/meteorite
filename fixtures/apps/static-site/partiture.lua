@@ -10,5 +10,5 @@ return ballad.partiture(function(p)
     backend = "std_http",
     router_dispatch = "param_matchers",
   })
-  p.sink.directory(release, { out = "dist/release", file_graph = true })
+  p.sink.directory(release, { out = "dist/release", file_graph = true, product = "release" })
 end)

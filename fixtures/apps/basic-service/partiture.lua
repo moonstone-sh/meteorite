@@ -22,6 +22,6 @@ return ballad.partiture(function(p)
 		backend = "std_http",
 	})
 
-	p.sink.artifact(graph, { out = fixture_root .. "/.meteorite/graph/current" })
-	p.sink.artifact(server, { out = fixture_root .. "/dist/server" })
+	p.sink.artifact(graph, { out = fixture_root .. "/.meteorite/graph/current", product = "graph" })
+	p.sink.artifact(server, { out = fixture_root .. "/dist/server", product = "server" })
 end)

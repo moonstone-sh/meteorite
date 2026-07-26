@@ -38,5 +38,5 @@ return ballad.partiture(function(p)
     runtime_source = runtime_source,
     runtime_source_kind = runtime_source_kind,
   })
-  p.sink.directory(release, { out = "dist/release", file_graph = true })
+  p.sink.directory(release, { out = "dist/release", file_graph = true, product = "release" })
 end)

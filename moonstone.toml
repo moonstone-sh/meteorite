@@ -1,6 +1,6 @@
 [package]
 name = "moonstone/meteorite"
-version = "0.1.20"
+version = "0.1.21"
 kind = "bin"
 description = "Moonstone-zig service compiler prototype"
 
@@ -115,5 +115,5 @@ role = "runtime"
 
 [[dependencies]]
 name = "moonstone/ballad"
-constraint = "^0.2.39"
+constraint = "^0.2.41"
 role = "tool"

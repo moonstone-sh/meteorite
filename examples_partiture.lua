@@ -9,28 +9,30 @@ return ballad.partiture(function(p)
       partiture = "partiture.lua",
       inputs = { "moonstone.toml", "partiture.lua", "src/**", "../../../src/**" },
       lua_paths = { "../../../src/ballad_plugin" },
+      products = { "graph", "server" },
     },
     {
       name = "ipc-native-service",
       partiture = "partiture.lua",
       inputs = { "moonstone.toml", "partiture.lua", "src/**", "../../../src/**" },
       lua_paths = { "../../../src/ballad_plugin" },
+      products = { "release" },
     },
   }
 
   for _, example in ipairs(examples) do
-    local export = moonstone.orbit({
-      name = example.name,
-      partiture = example.partiture,
+    local export = moonstone.orbit(example.name):partiture(example.partiture):run({
       inputs = example.inputs,
       lua_paths = example.lua_paths,
       sync = "update",
       cacheable = false,
       description = "export Meteorite example " .. example.name,
     })
-    p.sink.directory(export, {
-      out = "dist/examples/" .. example.name,
-      file_graph = true,
-    })
+    for _, product in ipairs(example.products) do
+      p.sink.directory(export.product(product), {
+        out = "dist/examples/" .. example.name .. "/" .. product,
+        file_graph = true,
+      })
+    end
   end
 end)

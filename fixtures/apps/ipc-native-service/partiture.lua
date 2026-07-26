@@ -13,5 +13,5 @@ return ballad.partiture(function(p)
     unix_socket_mode = "0660",
     unix_socket_unlink_stale = true,
   })
-  p.sink.directory(release, { out = "dist/release", file_graph = true })
+  p.sink.directory(release, { out = "dist/release", file_graph = true, product = "release" })
 end)
