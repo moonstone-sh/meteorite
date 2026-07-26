@@ -63,10 +63,29 @@ local function validation_response(domain, field, reason)
 end
 
 local function pattern_match(pattern, value)
-  if not pattern or not pattern.parsed then return true end
+  if not pattern then return true end
+
+  if pattern.class_map and pattern.transitions and pattern.accept then
+    if pattern.max_len and #value > pattern.max_len then return false end
+    local class_count = pattern.class_count or 1
+    local state = (pattern.start_state or 1) - 1
+    local dead_state = (pattern.dead_state or 1) - 1
+
+    for index = 1, #value do
+      local class = pattern.class_map[value:byte(index) + 1]
+      if class == nil then return false end
+      local transition = pattern.transitions[state * class_count + class + 1]
+      if transition == nil or transition == dead_state then return false end
+      state = transition
+    end
+
+    return pattern.accept[state + 1] == true
+  end
+
+  if not pattern.parsed then return true end
   if #value < pattern.parsed.min or #value > pattern.parsed.max then return false end
-  for i = 1, #value do
-    local byte = value:byte(i)
+  for index = 1, #value do
+    local byte = value:byte(index)
     local ok = false
     for _, range in ipairs(pattern.parsed.ranges) do
       if byte >= range[1] and byte <= range[2] then ok = true; break end
