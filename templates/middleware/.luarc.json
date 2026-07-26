@@ -6,17 +6,26 @@
       ".moonstone/env/lib/lua/{{lua_ver}}",
       "src"
     ],
-    "checkThirdParty": false,
-    "useGitIgnore": false,
+    "checkThirdParty": "Disable",
+    "useGitIgnore": true,
     "ignoreDir": [
       ".moonstone/env/bin",
+      ".moonstone/env/bin-runtime",
       ".moonstone/env/include",
+      ".moonstone/env/libexec",
+      ".ballad",
       "zig-cache",
+      ".zig-cache",
       "zig-out",
       ".meteorite/graph",
+      ".meteorite/dev",
+      ".meteorite/cache",
       "dist",
+      "node_modules",
       ".git"
-    ]
+    ],
+    "maxPreload": 2000,
+    "preloadFileSize": 200
   },
   "runtime": {
     "version": "Lua {{lua_ver}}",
