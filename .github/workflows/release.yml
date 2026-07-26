@@ -1,70 +1,28 @@
-name: Meteorite CI
+name: Publish Meteorite
 
 on:
-  pull_request:
   push:
-    branches: [main]
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing v* tag to publish after a publish-only failure.
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 jobs:
-  validate:
-    name: Validate Meteorite
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          repository: moonstone-sh/moonstone
-          ref: v0.3.47
-          path: .ci/moonstone
-      - uses: actions/checkout@v4
-        with:
-          repository: moonstone-sh/ballad
-          path: .ci/ballad
-          fetch-depth: 0
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: 0.16.0
-      - name: Install release tooling
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y b3sum file lsof luajit zstd
-      - name: Build Moonstone CLI
-        working-directory: .ci/moonstone
-        run: |
-          zig build
-          echo "$GITHUB_WORKSPACE/.ci/moonstone/zig-out/bin" >> "$GITHUB_PATH"
-      - name: Synchronize project lockfile
-        run: moon sync --locked
-      - name: Prepare locked Ballad integration checkout
-        run: |
-          ballad_version="$(awk '
-            /^\[\[package\]\]$/ { in_ballad = 0; next }
-            $0 == "name = \"moonstone/ballad\"" { in_ballad = 1; next }
-            in_ballad && /^version = / { value = $0; sub(/^version = "/, "", value); sub(/"$/, "", value); print value; exit }
-          ' moonstone.lock)"
-          test -n "$ballad_version"
-          git -C .ci/ballad checkout --detach "v$ballad_version"
-          ln -s "$GITHUB_WORKSPACE/.ci/ballad" "$GITHUB_WORKSPACE/../ballad"
-          cd .ci/ballad
-          moon sync --locked
-      - name: Validate release gate
-        run: moon run test-release-gate
-      - name: Export with locked Ballad tool
-        run: moon exec ballad play partiture.lua
-
   publish:
     name: Publish Meteorite registry artifact
-    needs: validate
-    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
       - uses: actions/checkout@v4
         with:
           repository: moonstone-sh/moonstone
@@ -105,17 +63,20 @@ jobs:
         run: |
           moon exec ballad play partiture.lua
       - name: Verify tag version
-        run: test "${GITHUB_REF_NAME#v}" = "$(sed -n 's/^version = "\(.*\)"$/\1/p' moonstone.toml | head -1)"
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+        run: test "${RELEASE_TAG#v}" = "$(sed -n 's/^version = "\(.*\)"$/\1/p' moonstone.toml | head -1)"
       - name: Upload immutable GitHub release artifact
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
         run: |
           set -eu
           asset="$(find dist/registry/meteorite -maxdepth 1 -type f -name '*.tar.zst' -print -quit)"
           test -n "$asset"
-          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "Meteorite $GITHUB_REF_NAME" --generate-notes
-          gh release upload "$GITHUB_REF_NAME" "$asset" --clobber
-          echo "MOONSTONE_ARTIFACT_URL=https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/$(basename "$asset")" >> "$GITHUB_ENV"
+          gh release view "$RELEASE_TAG" >/dev/null 2>&1 || gh release create "$RELEASE_TAG" --title "Meteorite $RELEASE_TAG" --generate-notes
+          gh release upload "$RELEASE_TAG" "$asset"
+          echo "MOONSTONE_ARTIFACT_URL=https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/$(basename "$asset")" >> "$GITHUB_ENV"
       - name: Publish registry artifact
         env:
           MOONSTONE_TOKEN: ${{ secrets.MOONSTONE_TOKEN }}
