@@ -45,9 +45,9 @@ For development, run the partition-aware supervisor:
 moon run dev
 ```
 
-`moon run dev` regenerates the graph on source changes, rebuilds/restarts for route/zig/build changes, and reloads inline Lua handler chunks in-process when only `lua_chunk` partitions changed. The dev loop uses `hybrid_dev`, `std_http`, and the optimized cached Lua runtime so Lua handler edits update without a Zig rebuild or server restart.
+`moon run dev` is a Ballad-owned watch and live-reload loop. It regenerates the graph, materializes the development binary, and restarts the server when watched inputs change. Ballad can reuse unchanged graph and build products from its cache, but the running server is a supervised effect rather than a cached product.
 
-The dev command runs `HMR_partiture.lua` through Ballad's watcher plugin. Ballad owns polling, debounce, terminal traps, and cleanup; Meteorite's single refresh cycle decides whether a graph change can reload Lua handlers in-process or needs a rebuild. If a session is interrupted or port `8080` looks stuck, run `scripts/guard.sh status` or `scripts/guard.sh handoff` from the repo root.
+The dev command runs `Watch_partiture.lua` through Ballad's watcher plugin. Ballad owns polling, debounce, terminal traps, and cleanup; Meteorite owns graph generation and the development binary. The direct `meteorite dev` supervisor can use an in-process Lua-only reload optimization, but the packaged watch recipe deliberately provides restart-safe live reload and does not promise state-preserving HMR. The future stateful-HMR design is documented in `docs/design/stateful-hmr-supervisor.md`. If a session is interrupted or port `8080` looks stuck, run `scripts/guard.sh status` or `scripts/guard.sh handoff` from the repo root.
 
 For deployable output, use the app's Ballad partiture instead of `dist/server`:
 

@@ -219,7 +219,7 @@ These are the minimum must-haves to be taken seriously against Hono for API serv
 - [x] CORS: real helper plus benchmark/header tests.
 - [x] Validation: params/query/body/header/cookie with graph metadata.
 - [x] OpenAPI: generated spec from graph.
-- [x] Dev UX: `init`, `doctor`, `routes`, `invoke`, hot reload, clear diagnostics.
+- [x] Dev UX: `init`, `doctor`, `routes`, `invoke`, live reload, clear diagnostics.
 - [x] Release UX: static/hybrid gates, manifest, smoke tests, no source leaks.
 - [x] Performance UX: honest benchmark proof with counters and invalidation reasons.
 - [x] Docs: copyable examples for JSON API, CORS, auth, cookies, static site, OpenAPI, and hybrid Lua.
