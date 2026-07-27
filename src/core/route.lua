@@ -9,6 +9,7 @@
 ---@type RouteModule
 local profiles = require("core.profile")
 local contract = require("core.contract")
+local scope_model = require("core.scope")
 
 local route = {}
 
@@ -483,7 +484,7 @@ function route.normalize_app(app, opts)
     local memory = profiles.route_memory(resolved_profile, declaration.method, declaration.memory)
     local is_message = message.source == "message"
     local normalized = {
-      id = is_message and message_symbol_id(message.name) or ((handler.kind == "zig" or handler.kind == "zig_file") and handler.symbol or ("route_" .. tostring(index))),
+      id = declaration.id or (is_message and message_symbol_id(message.name) or ((handler.kind == "zig" or handler.kind == "zig_file") and handler.symbol or ("route_" .. tostring(index)))),
       method = declaration.method,
       raw_path = declaration.raw_path,
       canonical_id = (message.source == "message" and "message." or "route.") .. message.name,
@@ -516,7 +517,7 @@ function route.normalize_app(app, opts)
         requires_worker_pool = false,
       },
       capabilities = declaration.capabilities,
-      scope = declaration.scope or root_scope(),
+      scope = scope_model.snapshot(declaration.scope or root_scope()),
       memory = memory,
       source = declaration.source,
       policy = declaration.policy,
@@ -557,14 +558,22 @@ function route.normalize_app(app, opts)
   local plugins = {}
   local plugin_seen = {}
   for _, route in ipairs(nodes) do
-    for _, plugin in ipairs(route.scope.plugins or {}) do
-      if type(plugin) == "table" and plugin.__meteorite_plugin and not plugin_seen[plugin] then
-        plugin_seen[plugin] = true
-        plugins[#plugins + 1] = { id = plugin.id, kind = plugin.kind, options = plugin.options, execute = plugin.execute, source = plugin.source }
+    for _, id in ipairs(route.scope.plugins or {}) do
+      local definition = (app.__meteorite_request_plugins or {})[id]
+      if not definition then error("unknown request plugin in normalized graph: " .. tostring(id)) end
+      if not plugin_seen[id] then
+        plugin_seen[id] = definition
+        plugins[#plugins +1] = { id = definition.id, kind = definition.kind, options = definition.options, execute = definition.execute, source = definition.source }
+      elseif plugin_seen[id] ~= definition then
+        error("conflicting request plugin identity in normalized graph: " .. tostring(id))
       end
     end
   end
   table.sort(plugins, function(a, b) return a.id < b.id end)
+
+  local plugin_diagnostics = {}
+  local plugin_codegen_units = {}
+  local plugin_profile_counters = {}
 
   -- Run graph plugins (new contract system)
   local graph_plugins = app.graph_plugins or {}
@@ -595,6 +604,16 @@ function route.normalize_app(app, opts)
     plugin_graph.plugin_diagnostics = plugin_result.diagnostics
     plugin_graph.plugin_codegen_units = plugin_result.codegen_units
     plugin_graph.plugin_profile_counters = plugin_result.profile_counters
+    plugin_diagnostics = plugin_result.diagnostics
+    plugin_codegen_units = plugin_result.codegen_units
+    plugin_profile_counters = plugin_result.profile_counters
+  end
+
+  local hooks_mod = require("core.hooks")
+  local hook_errors = hooks_mod.validate_graph({ routes = nodes, hooks = {} })
+  for _, err in ipairs(hook_errors) do error("hook validation error: " .. err) end
+  for _, node in ipairs(nodes) do
+    contract.validate_pipeline(node.pipeline, node.id or node.raw_path)
   end
 
   validate_backend_resource_contracts(nodes, backend)
@@ -647,6 +666,9 @@ function route.normalize_app(app, opts)
     plugins = plugins,
     capabilities = app.capabilities or {},
     middleware = app.middleware,
+    plugin_diagnostics = plugin_diagnostics,
+    plugin_codegen_units = plugin_codegen_units,
+    plugin_profile_counters = plugin_profile_counters,
     undocumented_routes = undocumented,
   }
 end

@@ -72,6 +72,7 @@ function plugin_contract.define(spec)
     validate = spec.validate,
     transform = spec.transform,
     codegen = spec.codegen,
+    profile = spec.profile,
     __meteorite_graph_plugin = true,
   }
 
@@ -241,10 +242,18 @@ function plugin_contract.run_passes(graph, plugins)
   local all_diagnostics = {}
   local all_codegen_units = {}
   local all_profile_counters = {}
+  local ordered_plugins = {}
+  local seen_ids = {}
+  for _, plugin in ipairs(plugins or {}) do
+    if seen_ids[plugin.id] then error("duplicate graph plugin id: " .. tostring(plugin.id)) end
+    seen_ids[plugin.id] = true
+    ordered_plugins[#ordered_plugins + 1] = plugin
+  end
+  table.sort(ordered_plugins, function(left, right) return left.id < right.id end)
 
   -- Check policy ownership conflicts
   local policy_owners = {}
-  for _, plugin in ipairs(plugins) do
+  for _, plugin in ipairs(ordered_plugins) do
     for _, policy_key in ipairs(plugin.consumes_policy or {}) do
       if policy_owners[policy_key] then
         all_diagnostics[#all_diagnostics + 1] = {
@@ -261,7 +270,7 @@ function plugin_contract.run_passes(graph, plugins)
 
   -- Run passes in order: validate -> transform -> codegen -> profile
   for _, pass in ipairs({ "validate", "transform", "codegen", "profile" }) do
-    for _, plugin in ipairs(plugins) do
+    for _, plugin in ipairs(ordered_plugins) do
       local fn = plugin[pass]
       if type(fn) == "function" then
         local diag_emitter = {
@@ -284,7 +293,14 @@ function plugin_contract.run_passes(graph, plugins)
 
         -- Collect API outputs
         for _, d in ipairs(api._diagnostics) do all_diagnostics[#all_diagnostics + 1] = d end
-        for _, u in ipairs(api._codegen_units) do all_codegen_units[#all_codegen_units + 1] = u end
+        for _, u in ipairs(api._codegen_units) do
+          for _, existing in ipairs(all_codegen_units) do
+            if existing.name == u.name then
+              error("codegen unit collision: " .. tostring(u.name) .. " from " .. tostring(existing.owner) .. " and " .. tostring(plugin.id))
+            end
+          end
+          all_codegen_units[#all_codegen_units + 1] = u
+        end
         for _, c in ipairs(api._profile_counters) do all_profile_counters[#all_profile_counters + 1] = c end
       end
     end

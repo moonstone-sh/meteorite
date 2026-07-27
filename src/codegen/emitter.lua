@@ -8,6 +8,7 @@ local handler_sync = require("codegen.handler_sync")
 local graph_emit = require("codegen.graph_emit")
 local openapi = require("codegen.openapi")
 local fs = require("utils.fs")
+local json = require("utils.json")
 
 local emitter = {}
 
@@ -31,6 +32,49 @@ local path_join = helpers.path_join
 
 local function json_quote(value)
   return '"' .. tostring(value):gsub('\\', '\\\\'):gsub('"', '\\"'):gsub('\n', '\\n') .. '"'
+end
+
+local function fact_keys(value)
+  local keys = {}
+  for key, _ in pairs(value or {}) do keys[#keys + 1] = tostring(key) end
+  table.sort(keys)
+  return keys
+end
+
+local function scope_descriptor(scope)
+  local declared = scope.declared or {}
+  local effective = scope.effective or {}
+  return {
+    id = scope.id,
+    parent = scope.parent,
+    local_prefix = scope.local_prefix,
+    path_prefix = scope.path_prefix,
+    source = scope.source,
+    chain = scope.chain or {},
+    declared = {
+      params = fact_keys(declared.params),
+      query = fact_keys(declared.query),
+      capabilities = fact_keys(declared.capabilities),
+      context = declared.context or {},
+      plugins = declared.plugins or {},
+    },
+    effective = {
+      params = fact_keys(effective.params),
+      query = fact_keys(effective.query),
+      capabilities = fact_keys(effective.capabilities),
+      context = effective.context or {},
+      plugins = effective.plugins or {},
+    },
+  }
+end
+
+local function emit_scopes(graph, output)
+  local by_id = {}
+  for _, route in ipairs(graph.nodes or graph.routes or {}) do
+    local scope = route.scope or {}
+    if scope.id and not by_id[scope.id] then by_id[scope.id] = scope_descriptor(scope) end
+  end
+  helpers.write_file(output .. "/scopes.json", json.pretty_encode({ format = "meteorite.scopes.v0", scopes = by_id }) .. "\n")
 end
 
 local function emit_patterns_report(graph, output)
@@ -324,6 +368,7 @@ function emitter.emit(app, opts)
   helpers.write_file(output .. "/runtime.zon", zon.encode({ mode = helpers.mode_enum(mode), lua_runtime = mode ~= "release-static", backend = { __meteorite_enum = true, value = backend }, transport = backend_transport(backend), protocol = backend_protocol(backend), capabilities = backend_capabilities(backend), workers = { strategy = { __meteorite_enum = true, value = "auto" }, lua_state = { __meteorite_enum = true, value = "single_locked" } }, memory = graph.memory_report }))
   helpers.write_file(output .. "/capabilities.zon", zon.encode({ backend = backend, transport = backend_transport(backend), protocol = backend_protocol(backend), backend_capabilities = backend_capabilities(backend), methods = { "GET", "POST", "PUT", "PATCH", "DELETE" }, declared = graph.capabilities or {} }))
   helpers.write_file(output .. "/listen.zon", zon.encode(graph.listen or { host = "127.0.0.1", port = 8080 }))
+  emit_scopes(graph, output)
     helpers.write_file(output .. "/listen_config.zig", "pub const listen_zon = @embedFile(\"listen.zon\");\n")
   helpers.write_file(output .. "/graph_hash.txt", graph_hash .. "\n")
   emit_patterns_report(graph, output)

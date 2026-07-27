@@ -39,10 +39,10 @@ app:mount("/orgs/:org_id", {
   org:mount("/projects/:project_id", {
     id = "project",
     params = { project_id = m.u64() },
-    context = { tenant = "project" },
+    context = { project_kind = "project" },
   }, function(project)
     project:get("/", function(c)
-      return c:json({ scope = c.scope.tenant, state = c:get("tenant") })
+      return c:json({ scope = c.scope.project_kind, tenant = c.scope.tenant, state = c:get("tenant") })
     end)
   end)
 end)
@@ -71,6 +71,7 @@ local r4 = hybrid.invoke(app, { method = "GET", path = "/orgs/123/projects/456",
 assert_eq("nested status", r4.status, 200)
 local body4 = r4.body or ""
 if not body4:find('"scope":"project"', 1, true) then error("expected scope project in body: " .. body4) end
-if not body4:find('"state":"project"', 1, true) then error("expected state project in body: " .. body4) end
+if not body4:find('"tenant":"org"', 1, true) then error("expected inherited tenant org in body: " .. body4) end
+if not body4:find('"state":"org"', 1, true) then error("expected inherited tenant state in body: " .. body4) end
 
 print("scope plugin tests passed")

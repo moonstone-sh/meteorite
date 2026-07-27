@@ -79,7 +79,7 @@ function luals_aids.emit(graph, output)
     "---@field patch fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table",
     "---@field delete fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table",
     "---@field delete fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table",
-    "---@field use fun(self: MeteoriteApp, plugin_or_middleware: table|function, options?: table): MeteoriteApp",
+    "---@field use fun(self: MeteoriteApp, plugin: MeteoritePlugin|table, options?: table): MeteoriteApp",
     "---@field capability fun(self: MeteoriteApp, kind: string, spec: table): MeteoriteApp",
   }
   append_route_overloads(lines)

@@ -595,16 +595,21 @@ function contract.build(method, decl, scope)
     end
   end
 
-  -- Validate stage id uniqueness
-  if route_contract.pipeline then
+  contract.validate_pipeline(route_contract.pipeline, route_contract.id or route_contract.route, route_contract)
+
+  return route_contract
+end
+
+function contract.validate_pipeline(pipeline, route_label, route_contract)
+  if pipeline then
     local seen_ids = {}
-    for _, stage in ipairs(route_contract.pipeline) do
+    for _, stage in ipairs(pipeline) do
       if stage.id then
         if seen_ids[stage.id] then
           error(table.concat({
             "duplicate stage id in pipeline",
             "",
-            "route: " .. (route_contract.id or route_contract.route),
+            "route: " .. tostring(route_label),
             "stage id: " .. stage.id,
             "",
             "hint: stage ids must be unique within a route pipeline",
@@ -616,19 +621,19 @@ function contract.build(method, decl, scope)
 
     -- Validate deterministic hook ordering around the response producer.
     local first_handle_position = nil
-    for index, stage in ipairs(route_contract.pipeline) do
+    for index, stage in ipairs(pipeline) do
       if stage.kind == "handle" and not first_handle_position then
         first_handle_position = index
       end
     end
     if first_handle_position then
-      for index, stage in ipairs(route_contract.pipeline) do
+      for index, stage in ipairs(pipeline) do
         if stage.kind == "hook" then
           if before_handle_phases[stage.phase] and index > first_handle_position then
             error(table.concat({
               "invalid hook ordering in pipeline",
               "",
-              "route: " .. (route_contract.id or route_contract.route),
+              "route: " .. tostring(route_label),
               "hook phase: " .. tostring(stage.phase),
               "stage id: " .. tostring(stage.id or "<anonymous>"),
               "",
@@ -639,7 +644,7 @@ function contract.build(method, decl, scope)
             error(table.concat({
               "invalid hook ordering in pipeline",
               "",
-              "route: " .. (route_contract.id or route_contract.route),
+              "route: " .. tostring(route_label),
               "hook phase: " .. tostring(stage.phase),
               "stage id: " .. tostring(stage.id or "<anonymous>"),
               "",
@@ -652,20 +657,19 @@ function contract.build(method, decl, scope)
 
     -- Validate that pipeline has at least one handle or response-producing stage
     local has_handler = false
-    for _, stage in ipairs(route_contract.pipeline) do
+    for _, stage in ipairs(pipeline) do
       if stage.kind == "handle" then
         has_handler = true
         break
       end
     end
-    if not has_handler and #route_contract.pipeline > 0 then
+    if not has_handler and #pipeline > 0 and route_contract then
       -- Transforms only — the last one is expected to produce a response
       -- This is valid but worth noting in diagnostics
       route_contract._transform_only_pipeline = true
     end
   end
 
-  return route_contract
 end
 
 -- ============================================================

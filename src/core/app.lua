@@ -2,6 +2,7 @@
 
 local route = require("core.route")
 local contract = require("core.contract")
+local scope_model = require("core.scope")
 
 local app_core = {}
 
@@ -54,6 +55,7 @@ local function add_route(self, method, path_or_table, options_or_handler, maybe_
           declaration.handler = { kind = "zig_file", path = handler_stage.path, decl = handler_stage.decl or "handle" }
         end
       end
+      declaration.id = rc.id
       -- Store the pipeline on the declaration for graph inspection
       declaration.pipeline = rc.pipeline
       declaration.policy = rc.policy
@@ -64,6 +66,7 @@ local function add_route(self, method, path_or_table, options_or_handler, maybe_
         params = rc.params, query = rc.query, body = rc.body,
         memory = rc.memory, capabilities = rc.capabilities, message = rc.message, message_source = rc.message_source, scope = scope,
       }, rc.handler)
+      declaration.id = rc.id
       declaration.policy = rc.policy
     else
       -- No handler or pipeline — shouldn't happen after validation
@@ -87,48 +90,6 @@ local function add_route(self, method, path_or_table, options_or_handler, maybe_
   self.routes[#self.routes + 1] = declaration
   return declaration
 end
-
-local function join_path(prefix, path)
-  if prefix == nil or prefix == "" or prefix == "/" then return path end
-  if path == "/" then return prefix end
-  return prefix:gsub("/$", "") .. path
-end
-
-local function merge_map(parent, child)
-  local out = {}
-  for k, v in pairs(parent or {}) do out[k] = v end
-  for k, v in pairs(child or {}) do out[k] = v end
-  return out
-end
-
-local function append_list(parent, child)
-  local out = {}
-  for _, value in ipairs(parent or {}) do out[#out + 1] = value end
-  for _, value in ipairs(child or {}) do out[#out + 1] = value end
-  return out
-end
-
-local function root_scope()
-  return { id = "root", parent = "", path_prefix = "", chain = {}, plugins = {}, context = {} }
-end
-
-local function scope_ref(scope)
-  return { id = scope.id or "root", path_prefix = scope.path_prefix or "" }
-end
-
-local function scope_chain(parent_scope, mounted_scope)
-  local out = {}
-  for _, item in ipairs(parent_scope.chain or {}) do out[#out + 1] = item end
-  out[#out + 1] = scope_ref(mounted_scope)
-  return out
-end
-
-local function scope_id(prefix)
-  local value = tostring(prefix or "/"):gsub("^/", ""):gsub("/$", "")
-  if value == "" then return "root" end
-  return value:gsub("%W", "_")
-end
-
 
 local function source_info(level)
   local info = debug.getinfo(level or 3, "Sl") or {}
@@ -304,8 +265,12 @@ end
 ---@return MeteoriteApp
 function App:use(plugin_or_middleware, options)
   if type(plugin_or_middleware) == "table" and plugin_or_middleware.__meteorite_graph_plugin then
-    -- Graph plugin (new contract system) — register for graph passes
     self.graph_plugins = self.graph_plugins or {}
+    for _, existing in ipairs(self.graph_plugins) do
+      if existing.id == plugin_or_middleware.id then
+        error("duplicate graph plugin id: " .. tostring(plugin_or_middleware.id), 2)
+      end
+    end
     self.graph_plugins[#self.graph_plugins + 1] = plugin_or_middleware
     return self
   end
@@ -318,13 +283,24 @@ function App:use(plugin_or_middleware, options)
     else
       plugin.options = options
     end
-    local scope = self.__meteorite_scope or root_scope()
-    scope.plugins = scope.plugins or {}
-    scope.plugins[#scope.plugins + 1] = plugin
+    local scope = self.__meteorite_scope or scope_model.root()
+    local attachment = scope_model.attach_plugin(scope, plugin, options)
+    self.__meteorite_request_plugins = self.__meteorite_request_plugins or {}
+    local existing = self.__meteorite_request_plugins[attachment.id]
+    if existing and existing ~= attachment.definition then
+      error("conflicting request plugin identity: " .. tostring(attachment.id), 2)
+    end
+    self.__meteorite_request_plugins[attachment.id] = attachment.definition
     return self
   end
-  self.middleware[#self.middleware + 1] = plugin_or_middleware
-  return self
+  error(table.concat({
+    "raw app:use(function) middleware is not supported",
+    "",
+    "Raw middleware is not part of Meteorite's normalized release graph and would otherwise be a silent no-op.",
+    "",
+    "hint: use m.plugin({ id = \"...\", execute = function(ctx) ... end }) for a scoped request plugin,",
+    "or use a canonical route pipeline for explicit stage metadata.",
+  }, "\n"), 2)
 end
 
 ---@param prefix string
@@ -336,15 +312,30 @@ function App:mount(prefix, options_or_fn, maybe_fn)
   local build_fn = type(options_or_fn) == "function" and options_or_fn or maybe_fn
   assert(type(prefix) == "string" and prefix:sub(1, 1) == "/", "mount prefix must start with /")
   assert(type(build_fn) == "function", "mount requires a function")
-  local parent_scope = self.__meteorite_scope or root_scope()
-  local mounted_scope = {
-    id = options.id or scope_id(join_path(parent_scope.path_prefix or "", prefix)),
-    parent = parent_scope.id or "root",
-    path_prefix = join_path(parent_scope.path_prefix or "", prefix),
-    plugins = append_list(parent_scope.plugins, options.plugins),
-    context = merge_map(parent_scope.context, options.context),
-  }
-  mounted_scope.chain = scope_chain(parent_scope, mounted_scope)
+  local parent_scope = self.__meteorite_scope or scope_model.root()
+  local mounted_scope = scope_model.new_child(parent_scope, prefix, options, source_info(3))
+  local registry = self.__meteorite_scope_registry or {}
+  if registry[mounted_scope.id] then
+    error(table.concat({
+      "duplicate mounted scope id",
+      "",
+      "scope id: " .. tostring(mounted_scope.id),
+      "first declaration: " .. tostring(registry[mounted_scope.id].source.file) .. ":" .. tostring(registry[mounted_scope.id].source.line),
+      "second declaration: " .. tostring(mounted_scope.source.file) .. ":" .. tostring(mounted_scope.source.line),
+      "",
+      "hint: scope IDs are globally unique within an app; pass a distinct id = \"...\".",
+    }, "\n"), 2)
+  end
+  registry[mounted_scope.id] = mounted_scope
+  self.__meteorite_request_plugins = self.__meteorite_request_plugins or {}
+  for _, attachment in ipairs(mounted_scope.plugins) do
+    local existing = self.__meteorite_request_plugins[attachment.id]
+    local definition = attachment.definition or attachment
+    if existing and existing ~= definition then
+      error("conflicting request plugin identity: " .. tostring(attachment.id), 2)
+    end
+    self.__meteorite_request_plugins[attachment.id] = definition
+  end
   local child = setmetatable({
     name = self.name,
     routes = {},
@@ -354,15 +345,15 @@ function App:mount(prefix, options_or_fn, maybe_fn)
     options = self.options,
     profile = self.profile,
     __meteorite_scope = mounted_scope,
+    __meteorite_scope_registry = registry,
+    __meteorite_request_plugins = self.__meteorite_request_plugins,
     __meteorite_app = true,
   }, App)
   build_fn(child)
   for _, declaration in ipairs(child.routes) do
-    declaration.raw_path = join_path(prefix, declaration.raw_path)
+    scope_model.merge_route(mounted_scope, declaration)
+    declaration.raw_path = scope_model.join_path(prefix, declaration.raw_path)
     declaration.path = { segments = route.parse_path(declaration.raw_path) }
-    declaration.params = merge_map(options.params, declaration.params)
-    declaration.query = merge_map(options.query, declaration.query)
-    declaration.capabilities = merge_map(options.capabilities, declaration.capabilities)
     self.routes[#self.routes + 1] = declaration
   end
   return self
@@ -404,6 +395,7 @@ function app_core.new(opts)
       "Hint: treat Forwarded, X-Forwarded-For, X-Real-IP, and CF-Connecting-IP as untrusted request headers, or enforce trusted proxy policy outside Meteorite for this release.",
     }, "\n"))
   end
+  local initial_scope = scope_model.root()
   return setmetatable({
     name = opts.name or "meteorite-app",
     routes = {},
@@ -412,7 +404,9 @@ function app_core.new(opts)
     cache = {},
     options = opts,
     profile = opts.profile,
-    __meteorite_scope = root_scope(),
+    __meteorite_scope = initial_scope,
+    __meteorite_scope_registry = { root = initial_scope },
+    __meteorite_request_plugins = {},
     __meteorite_app = true,
   }, App)
 end

@@ -989,6 +989,15 @@ end
 
 local function new_context(opts)
   local params = opts.params or {}
+  local scope_values = {}
+  for key, value in pairs(opts.scope or {}) do scope_values[key] = value end
+  local readonly_scope = setmetatable({}, {
+    __index = scope_values,
+    __newindex = function(_, key)
+      error("ctx.scope is read-only; use ctx:set(\"" .. tostring(key) .. "\", value) for request-local state", 2)
+    end,
+    __pairs = function() return pairs(scope_values) end,
+  })
   return setmetatable({
     request = opts.request,
     params = params,
@@ -996,7 +1005,7 @@ local function new_context(opts)
     _raw_query_values = opts.raw_query_values or {},
     _raw_query_all = opts.raw_query_all or {},
     state = {},
-    scope = opts.scope or {},
+    scope = readonly_scope,
     worker_cache = opts.worker_cache or {},
     capability_store = opts.capability_store or {},
     capabilities = opts.capabilities or {},

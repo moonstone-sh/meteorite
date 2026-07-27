@@ -37,10 +37,10 @@ app:mount("/orgs/:org_id", {
   org:mount("/projects/:project_id", {
     id = "project",
     params = { project_id = m.u64() },
-    context = { tenant = "project" },
+    context = { project_kind = "project" },
   }, function(project)
     project:get("/", function(c)
-      return c:json({ scope = c.scope.tenant, state = c:get("tenant") })
+      return c:json({ scope = c.scope.project_kind, tenant = c.scope.tenant, state = c:get("tenant") })
     end)
   end)
 end)

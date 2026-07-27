@@ -30,6 +30,7 @@ local utility_exports = require("core.utility_exports")
 ---@class MeteoriteContext
 ---@field params table<string, string|integer|number|boolean> Route path parameters (table access in request_table mode)
 ---@field state table<string, any> Request-local mutable state
+---@field scope table<string, string|integer|number|boolean|table> Read-only effective mounted-scope context
 ---@field query table<string, string|integer|number|boolean|nil> Validated query values (table access in request_table mode)
 ---@field param fun(self: MeteoriteContext, name: string): string|integer|nil Look up a route parameter by name
 ---@field query fun(self: MeteoriteContext, name: string): string|nil Look up a percent-decoded query value (first-wins for repeated keys)
