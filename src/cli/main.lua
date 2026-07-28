@@ -2,7 +2,7 @@ local source = debug.getinfo(1, "S").source
 if source:sub(1, 1) == "@" then source = source:sub(2) end
 local script_dir = source:match("^(.*[/\\])") or "src/cli/"
 local module_root = script_dir:gsub("cli[/\\]$", "")
-local install_root = module_root:gsub("src[/\\]$", "")
+local install_root = module_root:gsub("src[/\\]$", ""):gsub("meteorite[/\\]$", "")
 package.path = "src/?.lua;src/?/init.lua;" .. module_root .. "?.lua;" .. module_root .. "?/init.lua;" .. install_root .. "?.lua;" .. install_root .. "?/init.lua;" .. package.path
 
 local cli_deps = require("cli.deps").new(source)

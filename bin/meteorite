@@ -12,12 +12,15 @@ done
 root=$(CDPATH= cd -- "$(dirname -- "$self")/.." && pwd)
 if [ -f "$root/src/cli/main.lua" ]; then
   meteorite_src="$root/src"
+  entry="$root/src/cli/main.lua"
 elif [ -f "$root/meteorite/cli/main.lua" ]; then
   meteorite_src="$root/meteorite"
+  entry="$root/meteorite/cli/main.lua"
 elif [ -f "$root/files/meteorite/cli/main.lua" ]; then
-  meteorite_src="$root/files/meteorite"
+  meteorite_src="$root/files"
+  entry="$root/files/meteorite/cli/main.lua"
 else
-  echo "meteorite: cannot locate src/cli/main.lua near $root" >&2
+  echo "meteorite: cannot locate cli/main.lua near $root" >&2
   exit 1
 fi
-LUA_PATH="$meteorite_src/?.lua;$meteorite_src/?/init.lua;${LUA_PATH:-;;}" exec "${LUA_BIN:-lua}" "$meteorite_src/cli/main.lua" "$@"
+LUA_PATH="$meteorite_src/?.lua;$meteorite_src/?/init.lua;${LUA_PATH:-;;}" exec "${LUA_BIN:-lua}" "$entry" "$@"
