@@ -33,6 +33,13 @@ return ballad.partiture(function(p)
 			"dist/**",
 			"fixtures/**",
 			".git/**",
+			"**/.moonstone",
+			"**/.moonstone/**",
+			"**/.meteorite",
+			"**/.meteorite/**",
+			"**/.ballad",
+			"**/.ballad/**",
+			"**/.DS_Store",
 		},
 		materialize = {
 			type = "command",
