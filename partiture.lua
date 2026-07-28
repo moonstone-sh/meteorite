@@ -130,7 +130,7 @@ return ballad.partiture(function(p)
 					{ name = "meteorite/cli/hybrid.lua", path = "src/cli/hybrid.lua" },
 					{ name = "meteorite/cli/http_client.lua", path = "src/cli/http_client.lua" },
 					{ name = "meteorite/utils/json.lua", path = "src/utils/json.lua" },
-					{ name = "meteorite/ballad.lua", path = "src/meteorite/ballad.lua" },
+					{ name = "meteorite/ballad.lua", path = "src/ballad_plugin/meteorite/ballad.lua" },
 					{ name = "docs/examples.md", path = "docs/examples.md" },
 					{ name = "build.zig", path = "build.zig" },
 					{ name = "zig/main.zig", path = "zig/main.zig" },
