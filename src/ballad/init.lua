@@ -9,7 +9,14 @@ local release_tasks = require("ballad.release_tasks")
 local function plugin_root()
   local source = debug.getinfo(1, "S").source or ""
   source = source:gsub("^@", "")
-  local root = path.dirname(path.dirname(path.dirname(source)))
+  local root2 = path.dirname(path.dirname(source))
+  local root = root2
+  local pipe_check = io.open(path.join(root2, "build.zig"), "r")
+  if pipe_check then
+    pipe_check:close()
+  else
+    root = path.dirname(root2)
+  end
   -- Ensure absolute path so native tasks with different cwd can locate scripts
   if root == "" or root == "." then
     local pipe = io.popen("pwd", "r")
@@ -29,6 +36,12 @@ local function plugin_build_file()
 end
 
 local function plugin_cli_file()
+  local p1 = path.join(plugin_root(), "cli/main.lua")
+  local f = io.open(p1, "r")
+  if f then
+    f:close()
+    return p1
+  end
   return path.join(plugin_root(), "src/cli/main.lua")
 end
 

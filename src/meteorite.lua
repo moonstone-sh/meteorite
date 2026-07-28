@@ -1,3 +1,16 @@
+local source = debug.getinfo(1, "S").source:gsub("^@", "")
+local met_dir = source:match("^(.*)/meteorite%.lua$") or source:match("^(.*)/src/meteorite%.lua$")
+if met_dir then
+  local sub_dir = met_dir .. "/meteorite"
+  package.path = table.concat({
+    sub_dir .. "/?.lua",
+    sub_dir .. "/?/init.lua",
+    met_dir .. "/?.lua",
+    met_dir .. "/?/init.lua",
+    package.path,
+  }, ";")
+end
+
 local app_core = require("core.app")
 local schema_exports = require("core.schema_exports")
 local handler_exports = require("core.handler_exports")
