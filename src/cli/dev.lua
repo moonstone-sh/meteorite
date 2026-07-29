@@ -124,11 +124,19 @@ local function start_server()
   local command = shell_quote(server) .. " >" .. shell_quote(log_file) .. " 2>&1 & echo $!"
   local pid = capture(command):match("%d+")
   if pid then write_file(pid_file, pid .. "\n") end
-  os.execute("sleep 0.1")
-  if pid and not pid_running(pid) then
-    io.stderr:write("Meteorite dev server failed to stay running; see " .. log_file .. "\n")
+  local is_up = false
+  for _ = 1, 5 do
+    os.execute("sleep 0.1")
+    if pid_running(pid) then
+      is_up = true
+      break
+    end
   end
-  io.stderr:write("Meteorite dev server: http://127.0.0.1:" .. dev_port .. " pid=" .. tostring(pid or "?") .. " log=" .. log_file .. "\n")
+  if not is_up then
+    io.stderr:write("Meteorite dev server failed to stay running; see " .. log_file .. "\n")
+  else
+    io.stderr:write("Meteorite dev server: http://127.0.0.1:" .. dev_port .. " pid=" .. tostring(pid or "?") .. " log=" .. log_file .. "\n")
+  end
 end
 
 local function source_fingerprint()
