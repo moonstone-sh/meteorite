@@ -26,14 +26,36 @@ local function shell_quote(value)
   return "'" .. tostring(value):gsub("'", "'\\''") .. "'"
 end
 
+local running = true
+local stop_server
+
+local function handle_signal()
+  running = false
+  if stop_server then stop_server() end
+  os.exit(0)
+end
+
+local function is_signal(ok, exit_type, code)
+  if exit_type == "signal" then return true end
+  if type(ok) == "number" and (ok == 2 or ok == 130 or ok == 15 or ok == 143) then return true end
+  if type(code) == "number" and (code == 2 or code == 130 or code == 15 or code == 143) then return true end
+  return false
+end
+
 local function run(command)
   io.stderr:write("$ " .. command .. "\n")
-  local ok, _, code = os.execute(command)
+  local ok, exit_type, code = os.execute(command)
+  if is_signal(ok, exit_type, code) then
+    handle_signal()
+  end
   return ok == true or ok == 0 or code == 0
 end
 
 local function quiet_run(command)
-  local ok, _, code = os.execute(command)
+  local ok, exit_type, code = os.execute(command)
+  if is_signal(ok, exit_type, code) then
+    handle_signal()
+  end
   return ok == true or ok == 0 or code == 0
 end
 
@@ -88,7 +110,7 @@ local function server_running()
   return pid_running(current_server_pid())
 end
 
-local function stop_server()
+stop_server = function()
   if guard("cleanup") then return end
   local pid = current_server_pid()
   if pid then
@@ -218,12 +240,6 @@ if input == "--classify-partitions" then
 end
 
 mkdir_p(state_dir)
-local running = true
-local function handle_signal()
-  running = false
-  stop_server()
-  os.exit(0)
-end
 
 if prebuilt then
   io.stderr:write("Meteorite dev: supervising a Ballad-materialized server\n")
@@ -246,7 +262,6 @@ while running do
   local current = source_fingerprint()
   if current ~= last then
     local force_build = changed_zig_or_build(last, current) or not file_exists(server)
-    last = current
     io.stderr:write("\nMeteorite dev: change detected; regenerating graph...\n")
     if graph() then
       local changes = parse_partition_changes()
@@ -270,9 +285,13 @@ while running do
     else
       io.stderr:write("Meteorite dev: graph failed; keeping previous server state.\n")
     end
+    last = source_fingerprint()
   end
   if once then break end
-  os.execute("sleep 1")
+  local ok, exit_type, code = os.execute("sleep 1")
+  if is_signal(ok, exit_type, code) then
+    handle_signal()
+  end
 end
 
 if not once then handle_signal() end
