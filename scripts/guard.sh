@@ -48,6 +48,9 @@ is_meteorite_server() {
     *"$server_path"*) return 0 ;;
     *"/dist/server"*) return 0 ;;
     *"dist/server"*) return 0 ;;
+    *"/dist/release/bin/server"*) return 0 ;;
+    *"dist/release/bin/server"*) return 0 ;;
+    *"bin/server"*) return 0 ;;
     *"/server"*) return 0 ;;
     *) return 1 ;;
   esac
