@@ -136,6 +136,7 @@ return ballad.partiture(function(p)
 					{ name = "meteorite/ballad.lua", path = "src/ballad_plugin/meteorite/ballad.lua" },
 					{ name = "meteorite/docs/examples.md", path = "docs/examples.md" },
 					{ name = "meteorite/build.zig", path = "build.zig" },
+					{ name = "meteorite/zig/build_api.zig", path = "zig/build_api.zig" },
 					{ name = "meteorite/zig/main.zig", path = "zig/main.zig" },
 					{ name = "meteorite/zig/meteorite.zig", path = "zig/meteorite.zig" },
 					{ name = "meteorite/zig/bridge.zig", path = "zig/bridge.zig" },

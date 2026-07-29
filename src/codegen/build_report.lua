@@ -107,7 +107,7 @@ function build_report.emit(graph, output, mode, backend)
     "  max URI: " .. build_report.format_bytes(memory.max_uri_bytes),
     "  max path: " .. build_report.format_bytes(memory.max_path_bytes),
     "  max query: " .. build_report.format_bytes(memory.max_query_bytes) .. " / " .. tostring(memory.max_query_pairs) .. " pairs",
-    "  DFA tables: " .. build_report.format_bytes(memory.dfa_bytes) .. " / " .. tostring(memory.dfa_states) .. " states",
+    "  DFA static data: " .. build_report.format_bytes(memory.dfa_bytes) .. " / " .. tostring(memory.dfa_states) .. " states",
     "  graph data: ~" .. build_report.format_bytes(memory.graph_bytes),
     "  artifact: dist/server",
     "",

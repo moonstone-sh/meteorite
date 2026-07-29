@@ -28,7 +28,7 @@ grep -q 'return meteorite' fixtures/apps/basic-service/.meteorite/aids/lua/meteo
 grep -q 'memory profile: default' fixtures/apps/basic-service/.meteorite/graph/current/build-report.txt
 grep -q 'peak route memory:' fixtures/apps/basic-service/.meteorite/graph/current/build-report.txt
 grep -q 'max URI: 8kb' fixtures/apps/basic-service/.meteorite/graph/current/build-report.txt
-grep -q 'DFA tables:' fixtures/apps/basic-service/.meteorite/graph/current/build-report.txt
+grep -q 'DFA static data:' fixtures/apps/basic-service/.meteorite/graph/current/build-report.txt
 grep -q 'max_uri_bytes = 8192' fixtures/apps/basic-service/.meteorite/graph/current/graph.zig
 grep -q 'RouteMemory' fixtures/apps/basic-service/.meteorite/graph/current/graph.zig
 grep -q 'memory = .{' fixtures/apps/basic-service/.meteorite/graph/current/runtime.zon

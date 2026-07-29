@@ -60,7 +60,7 @@ dist/release/bin/server
 
 `dist/server` is a local development binary. `dist/release/` is the self-contained deploy directory with `bin/server`, `meteorite-release.json`, static assets, and any same-host hybrid Lua/module trees needed by the app.
 
-Generated route data is split into `.meteorite/graph/current/routes/<route_id>.zig` modules and DFA tables are split into `.meteorite/graph/current/patterns/<pattern_id>.zig` modules. Generated files are written only when content changes, so route-shape or pattern edits touch the affected module instead of rewriting every generated declaration.
+Generated route data is split into `.meteorite/graph/current/routes/<route_id>.zig` modules and DFA matcher data is split into `.meteorite/graph/current/patterns/<pattern_id>.zig` modules. Generated files are written only when content changes, so route-shape or pattern edits touch the affected module instead of rewriting every generated declaration.
 
 Mounted route scopes are represented in the graph and executed by the hybrid runner. `app:mount("/orgs/:org_id", { params = { org_id = m.u64() } }, function(api) ... end)` prefixes child routes, inherits declared mount params/query/capabilities, and records a deterministic scope chain. Scope metadata includes local and effective facts, `id`, `parent`, `path_prefix`, inherited plugin references, and context. Plugins registered via `app:use(plugin)` or mount `plugins = { ... }` execute in root-to-leaf scope order before the hybrid route handler, and a short-circuiting plugin response skips the handler. Handlers read effective scope context through the read-only `ctx.scope.<key>` view. Full cross-backend lifecycle execution remains a separately tracked contract.
 

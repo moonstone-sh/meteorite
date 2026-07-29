@@ -208,7 +208,13 @@ function init.run(argv, config)
   if not read_file(partiture_path) then
     write_file(partiture_path, release_partiture(), opts.force)
   end
+  local build_path = path_join(target, "build.zig")
+  local generated_build = not read_file(build_path)
+  if generated_build and not read_file(path_join(target, "build.zig.zon")) then
+    os.execute("cd " .. shell_quote(target) .. " && zig init --minimal >/dev/null 2>&1")
+  end
   local generated_partitures = {
+    ["build.zig"] = cli_templates.project_build_zig(),
     ["partiture_common.lua"] = cli_templates.partiture_common(),
     ["Dev_partiture.lua"] = cli_templates.dev_partiture(),
     ["Watch_partiture.lua"] = cli_templates.watch_partiture(),
@@ -216,7 +222,11 @@ function init.run(argv, config)
   }
   for relative_path, content in pairs(generated_partitures) do
     local path = path_join(target, relative_path)
-    if not read_file(path) then write_file(path, content, opts.force) end
+    if relative_path == "build.zig" and generated_build then
+      write_file(path, content, true)
+    elseif not read_file(path) then
+      write_file(path, content, opts.force)
+    end
   end
   if not opts.no_sync then os.execute("cd " .. shell_quote(target) .. " && moon sync") end
   print("Meteorite project initialized: " .. target .. " (template: " .. template_name .. ")" .. (opts.with_zig and " (with Zig scaffolding)" or ""))

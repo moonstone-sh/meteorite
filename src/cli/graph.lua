@@ -36,7 +36,7 @@ local function print_result(result, mode, backend)
     print("  memory profile: " .. tostring(memory.profile))
     print("  peak memory: " .. tostring(memory.estimated_peak_bytes) .. " bytes (" .. tostring(memory.peak_route) .. ")")
     print("  uri limit: " .. tostring(memory.max_uri_bytes) .. " bytes")
-    print("  dfa tables: " .. tostring(memory.dfa_bytes) .. " bytes")
+    print("  dfa static data: " .. tostring(memory.dfa_bytes) .. " bytes")
   end
   local capability_kinds = {}
   for kind, _ in pairs(result.graph.capabilities or {}) do capability_kinds[#capability_kinds + 1] = kind end

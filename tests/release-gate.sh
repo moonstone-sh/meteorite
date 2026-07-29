@@ -39,6 +39,7 @@ run_gate() {
 run_gate repository-hygiene bash tests/repository-hygiene.sh
 run_gate registry-export bash tests/registry-export.sh
 run_gate lua-suite bash tests/run-all.sh
+run_gate zig-build-api-native bash tests/build-api-native.sh
 run_gate web-standards bash fixtures/tests/web-standards.sh
 run_gate ipc-backends bash fixtures/tests/ipc-backends.sh
 run_gate basic-service-build bash fixtures/tests/basic-service-build.sh

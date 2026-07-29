@@ -1,6 +1,6 @@
 [package]
 name = "moonstone/meteorite"
-version = "0.1.41"
+version = "0.1.42"
 kind = "bin"
 description = "Moonstone-zig service compiler prototype"
 
@@ -20,7 +20,7 @@ abi = "5.4"
 "bench:public" = "bash bench/run.sh --mode=public \"$@\""
 "bench:smoke" = "bash bench/run.sh --mode=smoke \"$@\""
 "test-release-gate" = "bash tests/release-gate.sh"
-"test-all" = "bash tests/run-all.sh && bash fixtures/tests/ipc-backends.sh"
+"test-all" = "bash tests/run-all.sh && bash tests/build-api-native.sh && bash fixtures/tests/ipc-backends.sh"
 "test-fixture" = "root=\"$PWD\"; cd fixtures/apps/basic-service && LUA_PATH=\"$root/src/ballad_plugin/?.lua;$root/src/ballad_plugin/?/init.lua;$root/src/?.lua;$root/src/?/init.lua;$root/../ballad/.moonstone/env/share/lua/5.1/?.lua;$root/../ballad/.moonstone/env/share/lua/5.1/?/init.lua;$root/../ballad/src/?.lua;$root/../ballad/src/?/init.lua;;\" luajit \"$root/../ballad/src/main.lua\" play partiture.lua"
 "test-web-standards" = "bash fixtures/tests/web-standards.sh"
 "test-registry-export" = "bash tests/registry-export.sh"
@@ -108,9 +108,8 @@ constraint = "rocks:etlua@^1.3.0-1"
 role = "runtime"
 
 [[dependencies]]
-name = "luasql-sqlite3"
-constraint = "^2.8.0-1"
-registry = "rocks"
+name = "rocks:luasql-sqlite3"
+constraint = "2.8.0-1"
 role = "runtime"
 
 [[dependencies]]

@@ -7,7 +7,7 @@ routes: {{route_count}}
 
 {{memory_section}}
 
-DFA tables: {{dfa_bytes}} bytes
+DFA static data: {{dfa_bytes}} bytes
 
 handlers:
 {{handler_section}}
