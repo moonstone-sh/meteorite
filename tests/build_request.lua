@@ -42,4 +42,22 @@ test "generated manifests keep behavior explicit and generate the full partiture
   end
 end)
 
+test "dev command passes mode and backend to dev supervisor" (function()
+  local dev_command = require("cli.dev_command")
+  local captured_command = nil
+  dev_command.run({ "dev", "--mode", "hybrid", "--backend", "fast_http" }, {
+    shell_quote = function(val) return "'" .. tostring(val) .. "'" end,
+    build_request = request,
+    package_cli_file = function() return "src/cli/main.lua" end,
+    current_dir = function() return "/app" end,
+    package_guard_file = function() return "scripts/guard.sh" end,
+    package_build_file = function() return "build.zig" end,
+    package_dev_file = function() return "src/cli/dev.lua" end,
+    read_file = function() return nil end,
+    run_command = function(cmd) captured_command = cmd; return true end,
+  })
+  test.assert_true(captured_command ~= nil, "command captured")
+  test.assert_true(captured_command:find("'src/cli/dev.lua' '/app/src/main.lua' '/app/.meteorite/graph/current' 'hybrid' 'fast_http'", 1, true) ~= nil, "passes backend to dev.lua")
+end)
+
 test.run()

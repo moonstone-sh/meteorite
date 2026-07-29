@@ -1,8 +1,9 @@
 local input = arg[1] or "src/main.lua"
 local output = arg[2] or ".meteorite/graph/current"
 local mode = arg[3] or "hybrid_dev"
-local build_args = arg[4] or ("-Dmode=" .. mode .. " -Dbackend=std_http -Dhybrid-profile=optimized -Drouter-dispatch=param_matchers")
-local server = arg[5] or "dist/server"
+local backend = arg[4] or "std_http"
+local build_args = arg[5] or ("-Dmode=" .. mode .. " -Dbackend=" .. backend .. " -Dhybrid-profile=optimized -Drouter-dispatch=param_matchers")
+local server = arg[6] or "dist/server"
 local state_dir = ".meteorite/dev"
 local pid_file = state_dir .. "/server.pid"
 local log_file = state_dir .. "/server.log"
@@ -180,7 +181,7 @@ local function reload_lua()
 end
 
 local function graph()
-  local graph_command = table.concat({ shell_quote(lua_bin), shell_quote(meteorite_cli), "graph", shell_quote(input), shell_quote(output), shell_quote(mode) }, " ")
+  local graph_command = table.concat({ shell_quote(lua_bin), shell_quote(meteorite_cli), "graph", shell_quote(input), shell_quote(output), shell_quote(mode), shell_quote(backend) }, " ")
   return run(graph_command)
 end
 

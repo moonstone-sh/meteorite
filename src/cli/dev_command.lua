@@ -23,7 +23,7 @@ function dev_command.run(argv, deps)
     "METEORITE_GUARD_SCRIPT=" .. quote(guard),
     "METEORITE_BUILD_COMMAND=" .. quote(build_command),
     quote(lua), quote(deps.package_dev_file()),
-    quote(root .. "/src/main.lua"), quote(root .. "/.meteorite/graph/current"), quote(request.mode),
+    quote(root .. "/src/main.lua"), quote(root .. "/.meteorite/graph/current"), quote(request.mode), quote(request.backend),
   }, " ")
   local cleanup = table.concat({
     "METEORITE_DEV_STATE_DIR=" .. quote(root .. "/.meteorite/dev"),
