@@ -101,13 +101,13 @@ local function ensure_tool_dependencies(path)
   if not content:find('"moonstone/meteorite"', 1, true) then
     deps[#deps + 1] = {
       name = "moonstone/meteorite",
-      constraint = "^0.1.13",
+      constraint = "^0.1.41",
     }
   end
   if not content:find('"moonstone/ballad"', 1, true) then
     deps[#deps + 1] = {
       name = "moonstone/ballad",
-      constraint = "^0.2.32",
+      constraint = "^0.2.41",
     }
   end
   if #deps == 0 then return false end

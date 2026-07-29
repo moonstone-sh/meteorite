@@ -44,6 +44,10 @@ function dev_command.run(argv, deps)
     "    return 0\n",
     "  fi\n",
     "  cleanup_done=1\n",
+    "  server_pid=$(sed -n 's/[^0-9].*$//; /^[0-9][0-9]*$/p; q' \"$METEORITE_DEV_PID_FILE\" 2>/dev/null || true)\n",
+    "  if [ -n \"$server_pid\" ]; then\n",
+    "    printf '%s\\n' \"Meteorite dev: shutting down Meteorite dev server PID=$server_pid...\" >&2\n",
+    "  fi\n",
     "  if [ -n \"$dev_pid\" ] && kill -0 \"$dev_pid\" 2>/dev/null; then\n",
     "    printf '%s\\n' \"Meteorite dev: stopping supervisor pid=$dev_pid...\" >&2\n",
     "    kill -TERM \"$dev_pid\" 2>/dev/null || true\n",
@@ -110,21 +114,6 @@ function dev_command.run(argv, deps)
     "trap - EXIT\n",
     "exit \"$exit_status\"\n",
   }, "")
-  -- Write the supervisor script to a file and exec into it.
-  --
-  -- We avoid passing the script as `sh -c '...'` because Lua's os.execute
-  -- calls C system(), which sets SIGINT to SIG_IGN in the parent. While
-  -- POSIX requires system() to restore SIGINT to SIG_DFL in the child
-  -- before exec, the intermediate `sh -c` is a single-shot shell that may
-  -- not set up trap-friendly signal handling properly.
-  --
-  -- By writing the script to a file and using `exec sh /path/supervisor.sh`,
-  -- the `exec` replaces the intermediate shell spawned by system() with our
-  -- long-running supervisor, which installs its own traps. Since the
-  -- supervisor runs as a direct child of the lua process (which has
-  -- SIGINT=SIG_IGN during system()), it survives even when the grandparent
-  -- `moon` process dies from SIGINT. The supervisor catches SIGINT via its
-  -- trap, runs ordered cleanup, and exits.
   local script_file = root .. "/.meteorite/dev/supervisor.sh"
   local write = deps.write_file or function(path, content)
     os.execute("mkdir -p " .. quote(root .. "/.meteorite/dev"))
@@ -133,6 +122,13 @@ function dev_command.run(argv, deps)
   end
   write(script_file, script)
 
+  -- The package launcher runs this preflight with
+  -- METEORITE_DEV_PREPARE_ONLY=1, then execs the script directly. Keeping the
+  -- signal-owning shell outside Lua avoids Lua's os.execute/system() signal
+  -- disposition changes while the supervisor is active.
+  if deps.prepare_only then return end
+
+  -- Direct Lua CLI invocation remains supported for development use.
   local command_line = "exec sh " .. quote(script_file)
   if not deps.run_command(command_line) then os.exit(1) end
 end

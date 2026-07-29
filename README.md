@@ -1,6 +1,8 @@
 # Meteorite
 
-Meteorite is a Moonstone-zig service compiler prototype.
+Meteorite is a Moonstone-zig service compiler prototype. Visit the official
+site at [meteorite.moonstone.sh](https://meteorite.moonstone.sh) for guided
+documentation and API reference material.
 
 ```text
 Lua declares.

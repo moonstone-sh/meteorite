@@ -26,7 +26,7 @@ role = "runtime"
 [[dependencies]]
 name = "luasql-sqlite3"
 constraint = "^2.8.0-1"
-resolver = "rocks"
+registry = "rocks"
 role = "runtime"
 
 [[dependencies]]

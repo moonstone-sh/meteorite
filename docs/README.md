@@ -1,6 +1,10 @@
 # Meteorite Docs
 
-Meteorite's root `README.md` is the public landing page. This directory owns durable product docs, design notes, roadmaps, maintenance records, and historical archive material.
+Meteorite's root `README.md` is the public landing page. The guided
+documentation and API reference live at
+[meteorite.moonstone.sh](https://meteorite.moonstone.sh). This directory owns
+durable product docs, design notes, roadmaps, maintenance records, and
+historical archive material.
 
 ## Product Docs
 

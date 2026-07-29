@@ -23,4 +23,17 @@ else
   echo "meteorite: cannot locate cli/main.lua near $root" >&2
   exit 1
 fi
+
+if [ "${1:-}" = "dev" ]; then
+  METEORITE_DEV_PREPARE_ONLY=1 "${LUA_BIN:-lua}" "$entry" "$@"
+
+  supervisor="$PWD/.meteorite/dev/supervisor.sh"
+  if [ ! -f "$supervisor" ]; then
+    echo "meteorite: dev supervisor was not created: $supervisor" >&2
+    exit 1
+  fi
+
+  exec sh "$supervisor"
+fi
+
 LUA_PATH="$meteorite_src/?.lua;$meteorite_src/?/init.lua;${LUA_PATH:-;;}" exec "${LUA_BIN:-lua}" "$entry" "$@"

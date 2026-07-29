@@ -62,6 +62,7 @@ function deps.new(source)
       package_build_file = ctx.package_build_file,
       package_dev_file = ctx.package_dev_file,
       package_guard_file = ctx.package_guard_file,
+      prepare_only = os.getenv("METEORITE_DEV_PREPARE_ONLY") == "1",
       run_command = shell.run,
       build_request = build_request,
     }

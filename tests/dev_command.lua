@@ -3,7 +3,7 @@ package.path = "src/?.lua;src/?/init.lua;tests/?.lua;" .. package.path
 local test = require("test")
 local dev_command = require("cli.dev_command")
 
-test("dev_command writes supervisor script to file and execs into it", function()
+test("dev_command prepares supervisor script for the package launcher", function()
   local ran_command = nil
   local written_file = nil
   local written_content = nil
@@ -15,6 +15,7 @@ test("dev_command writes supervisor script to file and execs into it", function(
     package_dev_file = function() return "/tmp/mock-meteorite/cli/dev.lua" end,
     package_guard_file = function() return "/tmp/mock-meteorite/scripts/guard.sh" end,
     read_file = function() return "lua" end,
+    prepare_only = true,
     write_file = function(path, content)
       written_file = path
       written_content = content
@@ -37,11 +38,9 @@ test("dev_command writes supervisor script to file and execs into it", function(
   test.assert_true(written_file:find("supervisor%.sh") ~= nil, "script file should be supervisor.sh")
   test.assert_true(written_content ~= nil, "script content should not be nil")
 
-  -- Assert exec sh invocation (no python, no sh -c)
-  test.assert_true(ran_command ~= nil, "run_command should have been invoked")
-  test.assert_true(ran_command:find("^exec sh ") ~= nil, "command should use exec sh")
-  test.assert_true(ran_command:find("supervisor%.sh") ~= nil, "command should reference the script file")
-  test.assert_true(ran_command:find("python") == nil, "command should not use python")
+  -- The package launcher execs this script after Lua preflight so the shell,
+  -- rather than os.execute(), owns terminal signals.
+  test.assert_true(ran_command == nil, "preflight should not invoke the supervisor through Lua")
 
   -- Assert trap structure in script content
   local script = written_content
@@ -60,6 +59,7 @@ test("dev_command writes supervisor script to file and execs into it", function(
 
   -- Assert ordered cleanup logging and guard invocations
   test.assert_true(script:find("stopping supervisor") ~= nil, "should log stopping supervisor")
+  test.assert_true(script:find("shutting down Meteorite dev server PID=") ~= nil, "should log the server PID during shutdown")
   test.assert_true(script:find("cleaning up server processes") ~= nil, "should log cleaning server processes")
   test.assert_true(script:find("cleaning up stale sessions") ~= nil, "should log cleaning stale sessions")
   test.assert_true(script:find('"$GUARD" cleanup') ~= nil, "should run guard cleanup")

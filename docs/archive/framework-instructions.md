@@ -33,7 +33,7 @@ For `luasql` and `etlua`, you can configure your framework's `moonstone.toml` to
 [[dependencies]]
 name = "luasql-sqlite3"
 constraint = "^2.8.0-1"
-resolver = "rocks"
+registry = "rocks"
 role = "runtime"
 
 [[dependencies]]

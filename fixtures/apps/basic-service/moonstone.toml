@@ -13,9 +13,8 @@ abi = "5.4"
 "graph" = "moon exec meteorite graph src/main.lua .meteorite/graph/current release-static std_http"
 
 [[dependencies]]
-name = "../../.."
-constraint = "*"
-resolver = "path"
+name = "moonstone/meteorite"
+constraint = "path:../../.."
 role = "tool"
 
 [[dependencies]]

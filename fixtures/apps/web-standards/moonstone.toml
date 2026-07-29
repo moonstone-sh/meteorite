@@ -10,7 +10,6 @@ version = "5.4"
 abi = "5.4"
 
 [[dependencies]]
-name = "../../.."
-constraint = "*"
-resolver = "path"
+name = "moonstone/meteorite"
+constraint = "path:../../.."
 role = "tool"
