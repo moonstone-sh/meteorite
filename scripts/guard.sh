@@ -48,6 +48,7 @@ is_meteorite_server() {
     *"$server_path"*) return 0 ;;
     *"/dist/server"*) return 0 ;;
     *"dist/server"*) return 0 ;;
+    *"/server"*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -97,7 +98,7 @@ dev_session_pids() {
     -v exclude="$exclude" '
       /guard\.sh/ { next }
       /awk / { next }
-      /src\/meteorite\/dev\.lua/ || /moon run dev/ {
+      /cli\/dev\.lua/ || /dev\.lua/ || /main\.lua dev/ || /meteorite dev/ || /moon run dev/ {
         pid=$1
         ppid=$2
         if (pid == self || pid == parent || pid == exclude) next

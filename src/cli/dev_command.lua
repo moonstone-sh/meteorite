@@ -25,13 +25,17 @@ function dev_command.run(argv, deps)
     quote(lua), quote(deps.package_dev_file()),
     quote(root .. "/src/main.lua"), quote(root .. "/.meteorite/graph/current"), quote(request.mode), quote(request.backend),
   }, " ")
-  local cleanup = table.concat({
+  local env_vars = table.concat({
     "METEORITE_DEV_STATE_DIR=" .. quote(root .. "/.meteorite/dev"),
     "METEORITE_DEV_PID_FILE=" .. quote(root .. "/.meteorite/dev/server.pid"),
     "METEORITE_DEV_SERVER=" .. quote(root .. "/dist/server"),
-    quote(guard), "cleanup >/dev/null 2>&1 || true",
   }, " ")
-  local command_line = "sh -c " .. quote("trap " .. quote(cleanup) .. " EXIT INT TERM HUP; " .. inner)
+  local handoff = env_vars .. " " .. quote(guard) .. " handoff >/dev/null 2>&1 || true; "
+  local cleanup = table.concat({
+    env_vars, quote(guard), "cleanup >/dev/null 2>&1 || true;",
+    env_vars, quote(guard), "cleanup-sessions >/dev/null 2>&1 || true;",
+  }, " ")
+  local command_line = "sh -c " .. quote(handoff .. "trap " .. quote(cleanup) .. " EXIT INT TERM HUP; " .. inner)
   if not deps.run_command(command_line) then os.exit(1) end
 end
 
