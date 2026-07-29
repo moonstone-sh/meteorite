@@ -94,7 +94,38 @@ local function release_partiture()
   return cli_templates.release_partiture()
 end
 
-local function ensure_tool_dependencies(path)
+local function script_key_pattern(key)
+  return tostring(key):gsub("([^%w])", "%%%1")
+end
+
+local function has_script(content, key)
+  local bare = script_key_pattern(key)
+  return content:match("\n%s*" .. bare .. "%s*=") ~= nil
+    or content:match("\n%s*\"" .. key .. "\"%s*=") ~= nil
+end
+
+local function merge_scripts(content, build_mode)
+  local missing = {}
+  for _, script in ipairs(cli_templates.moonstone_scripts(build_mode)) do
+    if not has_script(content, script.key) then
+      missing[#missing + 1] = script.key .. ' = "' .. script.command .. '"'
+    end
+  end
+  if #missing == 0 then return content end
+
+  local scripts_start, scripts_end = content:find("%[scripts%][^\n]*\n?")
+  if not scripts_start then
+    return content:gsub("%s*$", "\n\n[scripts]\n" .. table.concat(missing, "\n") .. "\n")
+  end
+
+  local next_table = content:find("\n%[", scripts_end)
+  local insert_at = next_table or (#content + 1)
+  local prefix = content:sub(1, insert_at - 1)
+  if not prefix:match("\n$") then prefix = prefix .. "\n" end
+  return prefix .. table.concat(missing, "\n") .. "\n" .. content:sub(insert_at)
+end
+
+local function ensure_project_manifest(path, build_mode)
   local content = read_file(path)
   if not content then return false end
   local deps = {}
@@ -110,17 +141,21 @@ local function ensure_tool_dependencies(path)
       constraint = "^0.2.41",
     }
   end
-  if #deps == 0 then return false end
-  local blocks = {}
-  for _, dep in ipairs(deps) do
-    blocks[#blocks + 1] = table.concat({
-      "[[dependencies]]",
-      'name = "' .. dep.name .. '"',
-      'constraint = "' .. dep.constraint .. '"',
-      'role = "tool"',
-    }, "\n")
+  local updated = content
+  if #deps > 0 then
+    local blocks = {}
+    for _, dep in ipairs(deps) do
+      blocks[#blocks + 1] = table.concat({
+        "[[dependencies]]",
+        'name = "' .. dep.name .. '"',
+        'constraint = "' .. dep.constraint .. '"',
+        'role = "tool"',
+      }, "\n")
+    end
+    updated = updated:gsub("%s*$", "\n\n" .. table.concat(blocks, "\n\n") .. "\n")
   end
-  local updated = content:gsub("%s*$", "\n\n" .. table.concat(blocks, "\n\n") .. "\n")
+  updated = merge_scripts(updated, build_mode)
+  if updated == content then return false end
   return write_file(path, updated, true)
 end
 
@@ -167,7 +202,7 @@ function init.run(argv, config)
   if not read_file(manifest_path) then
     write_file(manifest_path, moonstone_manifest(name), opts.force)
   else
-    ensure_tool_dependencies(manifest_path)
+    ensure_project_manifest(manifest_path, _G.METEORITE_INIT_BUILD_MODE)
   end
   local partiture_path = path_join(target, "partiture.lua")
   if not read_file(partiture_path) then

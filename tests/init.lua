@@ -49,6 +49,44 @@ test "meteorite init augments an empty Moonstone host with canonical tools" (fun
   test.assert_true(updated:find('constraint = "^0.2.41"', 1, true) ~= nil)
   test.assert_true(updated:find('[dependencies.tool]', 1, true) == nil)
   test.assert_true(updated:find('role = "tool"', 1, true) ~= nil)
+  test.assert_true(updated:find('[scripts]', 1, true) ~= nil)
+  test.assert_true(updated:find('dev = "moon exec ballad play Watch_partiture.lua', 1, true) ~= nil)
+  test.assert_true(updated:find('build = "moon exec ballad play Dev_partiture.lua', 1, true) ~= nil)
+  test.assert_true(updated:find('check = "moon exec ballad play Check_partiture.lua', 1, true) ~= nil)
+
+  remove_tree(target)
+end)
+
+test "meteorite init preserves existing Moonstone scripts" (function()
+  local target = os.tmpname()
+  os.remove(target)
+  assert(os.execute("mkdir -p " .. string.format("%q", target)))
+  local manifest_path = target .. "/moonstone.toml"
+  local manifest = assert(io.open(manifest_path, "wb"))
+  manifest:write(table.concat({
+    "[package]",
+    'name = "service"',
+    'version = "0.1.0"',
+    'kind = "script"',
+    "",
+    "[scripts]",
+    'dev = "echo user-owned-dev"',
+    "",
+  }, "\n"))
+  manifest:close()
+
+  init.run({ "init", target, "--no-sync" }, {
+    print_help = function() end,
+    roots = {
+      install_root = "./",
+      module_root = "src/",
+    },
+  })
+
+  local updated = read_file(manifest_path)
+  test.assert_true(updated:find('dev = "echo user-owned-dev"', 1, true) ~= nil)
+  test.assert_true(updated:find('build = "moon exec ballad play Dev_partiture.lua', 1, true) ~= nil)
+  test.assert_true(updated:find('check = "moon exec ballad play Check_partiture.lua', 1, true) ~= nil)
 
   remove_tree(target)
 end)
