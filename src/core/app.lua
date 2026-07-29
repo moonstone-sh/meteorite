@@ -106,18 +106,25 @@ end
 ---@field cache table
 ---@field options table
 ---@field profile string|table|nil
+---@field get fun(self: MeteoriteApp, spec: MeteoriteCanonicalRouteSpec): table
 ---@field get fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table
 ---@field get fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table
+---@field head fun(self: MeteoriteApp, spec: MeteoriteCanonicalRouteSpec): table
 ---@field head fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table
 ---@field head fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table
+---@field post fun(self: MeteoriteApp, spec: MeteoriteCanonicalRouteSpec): table
 ---@field post fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table
 ---@field post fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table
+---@field put fun(self: MeteoriteApp, spec: MeteoriteCanonicalRouteSpec): table
 ---@field put fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table
 ---@field put fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table
+---@field patch fun(self: MeteoriteApp, spec: MeteoriteCanonicalRouteSpec): table
 ---@field patch fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table
 ---@field patch fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table
+---@field delete fun(self: MeteoriteApp, spec: MeteoriteCanonicalRouteSpec): table
 ---@field delete fun(self: MeteoriteApp, path: string, handler: MeteoriteHandler): table
 ---@field delete fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table
+---@field all fun(self: MeteoriteApp, spec: MeteoriteCanonicalRouteSpec): table
 ---@field all fun(self: MeteoriteApp, path: string, options: MeteoriteRouteOptions, handler: MeteoriteHandler): table
 ---@field route fun(self: MeteoriteApp, method: string, path: string, options_or_handler?: MeteoriteRouteOptions|MeteoriteHandler, maybe_handler?: MeteoriteHandler): table
 ---@field message fun(self: MeteoriteApp, name: string, options_or_handler?: MeteoriteRouteOptions|MeteoriteHandler, maybe_handler?: MeteoriteHandler): table
@@ -131,52 +138,52 @@ end
 ---@field __meteorite_app true
 local AppDoc = {}
 
----@param path string
----@param options? MeteoriteRouteOptions
----@param handler MeteoriteHandler
+---@param path_or_spec string|MeteoriteCanonicalRouteSpec
+---@param options? MeteoriteRouteOptions|MeteoriteHandler
+---@param handler? MeteoriteHandler
 ---@return table
-function App:get(path, options, handler)
-  return add_route(self, "GET", path, options, handler)
+function App:get(path_or_spec, options, handler)
+  return add_route(self, "GET", path_or_spec, options, handler)
 end
 
----@param path string
----@param options? MeteoriteRouteOptions
----@param handler MeteoriteHandler
+---@param path_or_spec string|MeteoriteCanonicalRouteSpec
+---@param options? MeteoriteRouteOptions|MeteoriteHandler
+---@param handler? MeteoriteHandler
 ---@return table
-function App:head(path, options, handler)
-  return add_route(self, "HEAD", path, options, handler)
+function App:head(path_or_spec, options, handler)
+  return add_route(self, "HEAD", path_or_spec, options, handler)
 end
 
----@param path string
----@param options? MeteoriteRouteOptions
----@param handler MeteoriteHandler
+---@param path_or_spec string|MeteoriteCanonicalRouteSpec
+---@param options? MeteoriteRouteOptions|MeteoriteHandler
+---@param handler? MeteoriteHandler
 ---@return table
-function App:post(path, options, handler)
-  return add_route(self, "POST", path, options, handler)
+function App:post(path_or_spec, options, handler)
+  return add_route(self, "POST", path_or_spec, options, handler)
 end
 
----@param path string
----@param options? MeteoriteRouteOptions
----@param handler MeteoriteHandler
+---@param path_or_spec string|MeteoriteCanonicalRouteSpec
+---@param options? MeteoriteRouteOptions|MeteoriteHandler
+---@param handler? MeteoriteHandler
 ---@return table
-function App:put(path, options, handler)
-  return add_route(self, "PUT", path, options, handler)
+function App:put(path_or_spec, options, handler)
+  return add_route(self, "PUT", path_or_spec, options, handler)
 end
 
----@param path string
----@param options? MeteoriteRouteOptions
----@param handler MeteoriteHandler
+---@param path_or_spec string|MeteoriteCanonicalRouteSpec
+---@param options? MeteoriteRouteOptions|MeteoriteHandler
+---@param handler? MeteoriteHandler
 ---@return table
-function App:patch(path, options, handler)
-  return add_route(self, "PATCH", path, options, handler)
+function App:patch(path_or_spec, options, handler)
+  return add_route(self, "PATCH", path_or_spec, options, handler)
 end
 
----@param path string
----@param options? MeteoriteRouteOptions
----@param handler MeteoriteHandler
+---@param path_or_spec string|MeteoriteCanonicalRouteSpec
+---@param options? MeteoriteRouteOptions|MeteoriteHandler
+---@param handler? MeteoriteHandler
 ---@return table
-function App:delete(path, options, handler)
-  return add_route(self, "DELETE", path, options, handler)
+function App:delete(path_or_spec, options, handler)
+  return add_route(self, "DELETE", path_or_spec, options, handler)
 end
 
 ---@param method string

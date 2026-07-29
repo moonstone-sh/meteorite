@@ -129,6 +129,7 @@ return ballad.partiture(function(p)
 					},
 					{ name = "meteorite/cli/main.lua", path = "src/cli/main.lua" },
 					{ name = "meteorite/cli/dev.lua", path = "src/cli/dev.lua" },
+					{ name = "meteorite/scripts/guard.sh", path = "scripts/guard.sh" },
 					{ name = "meteorite/cli/hybrid.lua", path = "src/cli/hybrid.lua" },
 					{ name = "meteorite/cli/http_client.lua", path = "src/cli/http_client.lua" },
 					{ name = "meteorite/utils/json.lua", path = "src/utils/json.lua" },

@@ -27,11 +27,20 @@ local function shell_quote(value)
 end
 
 local running = true
+local is_shutting_down = false
 local stop_server
 
-local function handle_signal()
+-- Reaction handler for subprocess signal interruptions (e.g. from os.execute).
+-- Note: This is NOT a C/OS native signal handler; the shell supervisor owns OS signals.
+local function handle_execute_signal()
+  if is_shutting_down then return end
+  is_shutting_down = true
   running = false
+  io.stderr:write("\nMeteorite dev: stopping dev server...\n")
+  io.stderr:flush()
   if stop_server then stop_server() end
+  io.stderr:write("Meteorite dev: stopped.\n")
+  io.stderr:flush()
   os.exit(0)
 end
 
@@ -44,9 +53,10 @@ end
 
 local function run(command)
   io.stderr:write("$ " .. command .. "\n")
+  io.stderr:flush()
   local ok, exit_type, code = os.execute(command)
   if is_signal(ok, exit_type, code) then
-    handle_signal()
+    handle_execute_signal()
   end
   return ok == true or ok == 0 or code == 0
 end
@@ -54,7 +64,7 @@ end
 local function quiet_run(command)
   local ok, exit_type, code = os.execute(command)
   if is_signal(ok, exit_type, code) then
-    handle_signal()
+    handle_execute_signal()
   end
   return ok == true or ok == 0 or code == 0
 end
@@ -111,17 +121,26 @@ local function server_running()
 end
 
 stop_server = function()
-  if guard("cleanup") then return end
+  -- Capture PID before guard cleanup removes the PID file
   local pid = current_server_pid()
-  if pid then
-    os.execute("kill " .. pid .. " >/dev/null 2>&1 || true")
-    os.remove(pid_file)
+  if path_exists(guard_script) then
+    local env = table.concat({
+      "METEORITE_DEV_STATE_DIR=" .. shell_quote(state_dir),
+      "METEORITE_DEV_PID_FILE=" .. shell_quote(pid_file),
+      "METEORITE_DEV_PORT=" .. shell_quote(dev_port),
+      "METEORITE_DEV_SERVER=" .. shell_quote(server),
+    }, " ")
+    os.execute(env .. " " .. shell_quote(guard_script) .. " cleanup >/dev/null 2>&1 || true")
   end
+  if pid and pid_running(pid) then
+    os.execute("kill -9 " .. tostring(pid) .. " >/dev/null 2>&1 || true")
+  end
+  os.remove(pid_file)
 end
 
 local function start_server()
   if not guard("assert-free") then stop_server() end
-  local command = shell_quote(server) .. " >" .. shell_quote(log_file) .. " 2>&1 & echo $!"
+  local command = "(trap - INT TERM HUP; exec " .. shell_quote(server) .. ") >" .. shell_quote(log_file) .. " 2>&1 & echo $!"
   local pid = capture(command):match("%d+")
   if pid then write_file(pid_file, pid .. "\n") end
   local is_up = false
@@ -298,8 +317,8 @@ while running do
   if once then break end
   local ok, exit_type, code = os.execute("sleep 1")
   if is_signal(ok, exit_type, code) then
-    handle_signal()
+    handle_execute_signal()
   end
 end
 
-if not once then handle_signal() end
+if not once then handle_execute_signal() end

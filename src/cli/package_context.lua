@@ -73,6 +73,7 @@ function Context:package_guard_file()
     self.package_root .. "/scripts/guard.sh",
     self.install_root .. "scripts/guard.sh",
     self.install_root .. "../scripts/guard.sh",
+    self.share_root and (self.share_root .. "/meteorite/scripts/guard.sh") or nil,
     self.libexec_root and (self.libexec_root .. "/scripts/guard.sh") or nil,
     self.libexec_root and (self.libexec_root .. "/files/scripts/guard.sh") or nil,
   })

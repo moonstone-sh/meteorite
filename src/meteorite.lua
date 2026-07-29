@@ -37,6 +37,21 @@ local utility_exports = require("core.utility_exports")
 ---@field context? table
 ---@field id? string
 
+---@class MeteoriteCanonicalRouteSpec
+---@field route string Route path pattern (e.g. "/users/:id")
+---@field handler? MeteoriteHandler Route handler
+---@field pipeline? fun(p: any) Multi-stage pipeline builder
+---@field params? table<string, MeteoriteSchemaValue> Path parameter validators
+---@field query? table<string, MeteoriteSchemaValue> Query parameter validators
+---@field body? {max?: number|string, [string]: any} Body limits
+---@field memory? {max_body?: number|string, request_arena?: number|string} Resource limits
+---@field capabilities? table<string, any> Capabilities required
+---@field message? string|{name?: string, pattern?: string} Native message name
+---@field metadata? table<string, MeteoriteSchemaValue> Native metadata
+---@field policy? table Route plugin policy
+---@field hooks? table Route hook overrides
+---@field id? string Route identifier
+
 --- Handler context for inline Lua and Lua-file handlers.
 --- Use `ctx` or `c` as the first parameter name for lazy_context mode
 --- (method-based access). Use `req` for request_table mode (table access).

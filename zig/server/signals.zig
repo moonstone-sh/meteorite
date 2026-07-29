@@ -29,4 +29,5 @@ pub fn requestShutdown() void {
 
 fn signalHandler(_: posix.SIG) callconv(.c) void {
     shutdown_requested.store(true, .release);
+    std.process.exit(0);
 }

@@ -218,12 +218,33 @@ handoff() {
   assert_free
 }
 
+assert_stopped() {
+  running=0
+  pid="$(tracked_pid)"
+  if [ -n "$pid" ] && is_running "$pid"; then
+    echo "guard: tracked server pid=$pid is still running" >&2
+    running=1
+  fi
+  for p in $(port_pids); do
+    if is_running "$p" && is_meteorite_server "$p"; then
+      echo "guard: port $port is still occupied by Meteorite server pid=$p" >&2
+      running=1
+    fi
+  done
+  if [ -f "$pid_file" ]; then
+    echo "guard: pid file $pid_file still exists" >&2
+    running=1
+  fi
+  return "$running"
+}
+
 case "$command_name" in
   status) status ;;
   cleanup-sessions) cleanup_sessions ;;
   handoff) handoff ;;
   cleanup|stop) cleanup ;;
   assert-free) assert_free ;;
+  assert-stopped) assert_stopped ;;
   -h|--help|help) usage ;;
   *) usage; exit 2 ;;
 esac
