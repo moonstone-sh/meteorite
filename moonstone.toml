@@ -108,8 +108,8 @@ constraint = "rocks:etlua@^1.3.0-1"
 role = "runtime"
 
 [[dependencies]]
-name = "rocks:luasql-sqlite3"
-constraint = "2.8.0-1"
+name = "luasql-sqlite3"
+constraint = "rocks:luasql-sqlite3@2.8.0-1"
 role = "runtime"
 
 [[dependencies]]
