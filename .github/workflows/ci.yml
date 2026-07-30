@@ -17,9 +17,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: moonstone-sh/moonstone
-          # Formal registry identities and the lockfile projection introduced
-          # after v0.3.50 are required by Meteorite's rocks: dependencies.
-          ref: 94deed95d3e3ded203e806c73d6a7110059eaea6
+          # Meteorite uses the formal registry and lockfile contract.
+          ref: e6b0200b6f459801b9cb57fac5e00b79a25a4329
           path: .ci/moonstone
       - uses: actions/checkout@v4
         with:
