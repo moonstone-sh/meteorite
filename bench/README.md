@@ -47,10 +47,10 @@ From the Meteorite project root:
 
 ```bash
 # Public/fair comparison suite used for presentation numbers.
-moon run bench:public
+moon run bench-public
 
 # Shorter version for local sanity checks.
-moon run bench:smoke
+moon run bench-smoke
 
 # Default smoke-sized run through Moonstone scripts
 moon run bench
