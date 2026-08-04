@@ -1,6 +1,7 @@
 --- Meteorite project initialization command.
 
 local cli_templates = require("cli.templates")
+local json = require("utils.json")
 
 local init = {}
 
@@ -94,69 +95,65 @@ local function release_partiture()
   return cli_templates.release_partiture()
 end
 
-local function script_key_pattern(key)
-  return tostring(key):gsub("([^%w])", "%%%1")
+local function capture(command)
+  local pipe = assert(io.popen(command, "r"))
+  local output = pipe:read("*a") or ""
+  local ok, _, code = pipe:close()
+  if ok == true or code == 0 then return output end
+  error("Moonstone command failed: " .. command)
 end
 
-local function has_script(content, key)
-  local bare = script_key_pattern(key)
-  return content:match("\n%s*" .. bare .. "%s*=") ~= nil
-    or content:match("\n%s*\"" .. key .. "\"%s*=") ~= nil
+local function json_string_pattern(value)
+  return '"' .. tostring(value):gsub("([^%w])", "%%%1") .. '"'
 end
 
-local function merge_scripts(content, build_mode)
-  local missing = {}
+local function manifest_has_named_entry(document, section, name)
+  local section_start = document:find('"' .. section .. '":[', 1, true)
+  if not section_start then return false end
+  local section_end = document:find("]", section_start, true) or #document
+  local section_json = document:sub(section_start, section_end)
+  return section_json:find('"name":' .. json_string_pattern(name)) ~= nil
+end
+
+local function apply_manifest_operations(target, build_mode, moon_bin)
+  local export = capture(shell_quote(moon_bin) .. " -C " .. shell_quote(target) .. " manifest export --json 2>/dev/null")
+  local revision = export:match('"storage_revision":"([^"]+)"')
+  if not revision then error("Moonstone manifest export did not return a storage revision") end
+
+  local operations = {}
+  for _, dependency in ipairs({
+    { name = "moonstone/meteorite", constraint = "^0.1.41" },
+    { name = "moonstone/ballad", constraint = "^0.2.41" },
+  }) do
+    if not manifest_has_named_entry(export, "dependencies", dependency.name) then
+      operations[#operations + 1] = {
+        kind = "add_dependency",
+        dependency = { name = dependency.name, constraint = dependency.constraint, role = "tool" },
+      }
+    end
+  end
+
   for _, script in ipairs(cli_templates.moonstone_scripts(build_mode)) do
-    if not has_script(content, script.key) then
-      missing[#missing + 1] = script.key .. ' = "' .. script.command .. '"'
+    if not manifest_has_named_entry(export, "scripts", script.key) then
+      operations[#operations + 1] = { kind = "set_script", name = script.key, command = script.command }
+    else
+      print("Meteorite left user-owned Moonstone script `" .. script.key .. "` unchanged.")
     end
   end
-  if #missing == 0 then return content end
 
-  local scripts_start, scripts_end = content:find("%[scripts%][^\n]*\n?")
-  if not scripts_start then
-    return content:gsub("%s*$", "\n\n[scripts]\n" .. table.concat(missing, "\n") .. "\n")
-  end
-
-  local next_table = content:find("\n%[", scripts_end)
-  local insert_at = next_table or (#content + 1)
-  local prefix = content:sub(1, insert_at - 1)
-  if not prefix:match("\n$") then prefix = prefix .. "\n" end
-  return prefix .. table.concat(missing, "\n") .. "\n" .. content:sub(insert_at)
-end
-
-local function ensure_project_manifest(path, build_mode)
-  local content = read_file(path)
-  if not content then return false end
-  local deps = {}
-  if not content:find('"moonstone/meteorite"', 1, true) then
-    deps[#deps + 1] = {
-      name = "moonstone/meteorite",
-      constraint = "^0.1.41",
-    }
-  end
-  if not content:find('"moonstone/ballad"', 1, true) then
-    deps[#deps + 1] = {
-      name = "moonstone/ballad",
-      constraint = "^0.2.41",
-    }
-  end
-  local updated = content
-  if #deps > 0 then
-    local blocks = {}
-    for _, dep in ipairs(deps) do
-      blocks[#blocks + 1] = table.concat({
-        "[[dependencies]]",
-        'name = "' .. dep.name .. '"',
-        'constraint = "' .. dep.constraint .. '"',
-        'role = "tool"',
-      }, "\n")
-    end
-    updated = updated:gsub("%s*$", "\n\n" .. table.concat(blocks, "\n\n") .. "\n")
-  end
-  updated = merge_scripts(updated, build_mode)
-  if updated == content then return false end
-  return write_file(path, updated, true)
+  if #operations == 0 then return false end
+  local request_path = os.tmpname()
+  local request = assert(io.open(request_path, "wb"))
+  request:write(json.encode({
+    contract = "moonstone:manifest-edit:v1",
+    expected_revision = revision,
+    operations = operations,
+  }))
+  request:close()
+  local ok, _, code = os.execute(shell_quote(moon_bin) .. " -C " .. shell_quote(target) .. " manifest apply --json --force < " .. shell_quote(request_path))
+  os.remove(request_path)
+  if not (ok == true or ok == 0 or code == 0) then error("Moonstone rejected Meteorite's manifest adoption transaction") end
+  return true
 end
 
 function init.run(argv, config)
@@ -202,7 +199,7 @@ function init.run(argv, config)
   if not read_file(manifest_path) then
     write_file(manifest_path, moonstone_manifest(name), opts.force)
   else
-    ensure_project_manifest(manifest_path, _G.METEORITE_INIT_BUILD_MODE)
+    apply_manifest_operations(target, _G.METEORITE_INIT_BUILD_MODE, config.moon_bin or os.getenv("MOONSTONE_BIN") or "moon")
   end
   local partiture_path = path_join(target, "partiture.lua")
   if not read_file(partiture_path) then

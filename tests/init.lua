@@ -21,6 +21,8 @@ test "meteorite init augments an empty Moonstone host with canonical tools" (fun
   local manifest_path = target .. "/moonstone.toml"
   local manifest = assert(io.open(manifest_path, "wb"))
   manifest:write(table.concat({
+    "manifest_version = 2",
+    "",
     "[package]",
     'name = "service"',
     'version = "0.1.0"',
@@ -40,6 +42,7 @@ test "meteorite init augments an empty Moonstone host with canonical tools" (fun
       install_root = "./",
       module_root = "src/",
     },
+    moon_bin = os.getenv("MOONSTONE_BIN") or "../moonstone/zig-out/bin/moon",
   })
 
   local updated = read_file(manifest_path)
@@ -68,12 +71,15 @@ test "meteorite init preserves existing Moonstone scripts" (function()
   local manifest_path = target .. "/moonstone.toml"
   local manifest = assert(io.open(manifest_path, "wb"))
   manifest:write(table.concat({
+    "manifest_version = 2",
+    "",
     "[package]",
     'name = "service"',
     'version = "0.1.0"',
     'kind = "script"',
     "",
     "[scripts]",
+    "# The user owns this entrypoint and its note.",
     'dev = "echo user-owned-dev"',
     "",
   }, "\n"))
@@ -85,9 +91,11 @@ test "meteorite init preserves existing Moonstone scripts" (function()
       install_root = "./",
       module_root = "src/",
     },
+    moon_bin = os.getenv("MOONSTONE_BIN") or "../moonstone/zig-out/bin/moon",
   })
 
   local updated = read_file(manifest_path)
+  test.assert_true(updated:find("# The user owns this entrypoint and its note.", 1, true) ~= nil)
   test.assert_true(updated:find('dev = "echo user-owned-dev"', 1, true) ~= nil)
   test.assert_true(updated:find('build = "moon exec ballad play Dev_partiture.lua', 1, true) ~= nil)
   test.assert_true(updated:find('check = "moon exec ballad play Check_partiture.lua', 1, true) ~= nil)

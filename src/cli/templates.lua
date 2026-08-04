@@ -417,13 +417,12 @@ function handler_sync.moonstone_scripts(build_mode)
     { key = "graph", command = "meteorite graph src/main.lua .meteorite/graph/current " .. tostring(build_mode or "hybrid") .. " fast_http" },
     { key = "dev", command = "moon exec ballad play Watch_partiture.lua -- --mode hybrid_dev --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
     { key = "build", command = "moon exec ballad play Dev_partiture.lua -- --mode hybrid_dev --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
-    { key = "run", command = "moon run build && ./dist/server" },
     { key = "release", command = "moon exec ballad play partiture.lua -- --mode " .. release_mode .. " --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
     { key = "check", command = "moon exec ballad play Check_partiture.lua -- --mode " .. release_mode .. " --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
-    { key = "check:release", command = "moon exec ballad play Check_partiture.lua -- --mode " .. release_mode .. " --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
-    { key = "check:static", command = "moon exec ballad play Check_partiture.lua -- --mode static --backend fast_http --router-dispatch param_matchers" },
+    { key = "check-release", command = "moon exec ballad play Check_partiture.lua -- --mode " .. release_mode .. " --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
+    { key = "check-static", command = "moon exec ballad play Check_partiture.lua -- --mode static --backend fast_http --router-dispatch param_matchers" },
     { key = "doctor", command = "meteorite doctor" },
-    { key = "invoke:health", command = "meteorite invoke --json src/main.lua GET /health" },
+    { key = "invoke-health", command = "meteorite invoke --json src/main.lua GET /health" },
   }
 end
 
