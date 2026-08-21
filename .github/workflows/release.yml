@@ -26,8 +26,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: moonstone-sh/moonstone
-          # Meteorite uses the formal registry and lockfile contract.
-          ref: 51c0f91a0e431ccf039ada604c49af28a72ffb13
+          # Pinned to the current manifest, lockfile, and projected-environment contract.
+          ref: ad1ef8c03f8d6c32711dc35c9fd4aa1661cc4f07
           path: .ci/moonstone
       - uses: actions/checkout@v4
         with:
@@ -40,21 +40,21 @@ jobs:
       - name: Install release tooling
         run: |
           sudo apt-get update
-          sudo apt-get install -y b3sum file lsof luajit zstd
+          sudo apt-get install -y b3sum file jq libsqlite3-dev lsof luajit pkg-config zstd
       - name: Build Moonstone CLI
         working-directory: .ci/moonstone
         run: |
           zig build
           echo "$GITHUB_WORKSPACE/.ci/moonstone/zig-out/bin" >> "$GITHUB_PATH"
       - name: Synchronize project lockfile
-        run: moon sync --locked
+        run: |
+          export SQLITE_INCDIR="$(pkg-config --variable=includedir sqlite3)"
+          export SQLITE_LIBDIR="$(pkg-config --variable=libdir sqlite3)"
+          test -f "$SQLITE_INCDIR/sqlite3.h"
+          moon sync --locked
       - name: Prepare locked Ballad integration checkout
         run: |
-          ballad_version="$(awk '
-            /^\[\[package\]\]$/ { in_ballad = 0; next }
-            $0 == "name = \"moonstone/ballad\"" { in_ballad = 1; next }
-            in_ballad && /^version = / { value = $0; sub(/^version = "/, "", value); sub(/"$/, "", value); print value; exit }
-          ' moonstone.lock)"
+          ballad_version="$(moon lock package get moonstone/ballad --json | jq -er '.package.version')"
           test -n "$ballad_version"
           git -C .ci/ballad checkout --detach "v$ballad_version"
           ln -s "$GITHUB_WORKSPACE/.ci/ballad" "$GITHUB_WORKSPACE/../ballad"

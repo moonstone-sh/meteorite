@@ -162,6 +162,7 @@ function init.run(argv, config)
   local roots = assert(config.roots, "init command requires roots")
   local target = opts.target or "."
   local name = opts.name or project_name_from_path(target)
+  local moon_bin = config.moon_bin or os.getenv("MOONSTONE_BIN") or "moon"
   local lua_ver = "5.4"
   local template_name = ({ minimal = "project" })[opts.template] or opts.template or "project"
   local known_templates = {
@@ -199,7 +200,7 @@ function init.run(argv, config)
   if not read_file(manifest_path) then
     write_file(manifest_path, moonstone_manifest(name), opts.force)
   else
-    apply_manifest_operations(target, _G.METEORITE_INIT_BUILD_MODE, config.moon_bin or os.getenv("MOONSTONE_BIN") or "moon")
+    apply_manifest_operations(target, _G.METEORITE_INIT_BUILD_MODE, moon_bin)
   end
   local partiture_path = path_join(target, "partiture.lua")
   if not read_file(partiture_path) then
@@ -225,7 +226,12 @@ function init.run(argv, config)
       write_file(path, content, opts.force)
     end
   end
-  if not opts.no_sync then os.execute("cd " .. shell_quote(target) .. " && moon sync") end
+  if not opts.no_sync then
+    local ok, _, code = os.execute(shell_quote(moon_bin) .. " -C " .. shell_quote(target) .. " sync")
+    if not (ok == true or ok == 0 or code == 0) then
+      error("Moonstone synchronization failed after Meteorite initialization")
+    end
+  end
   print("Meteorite project initialized: " .. target .. " (template: " .. template_name .. ")" .. (opts.with_zig and " (with Zig scaffolding)" or ""))
 end
 

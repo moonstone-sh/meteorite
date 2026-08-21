@@ -428,10 +428,12 @@ end
 
 function handler_sync.moonstone_manifest(name, build_mode)
   local lines = {
+    "manifest_version = 2",
+    "",
     "[package]",
     "name = \"" .. tostring(name) .. "\"",
     "version = \"0.1.0\"",
-    "kind = \"app\"",
+    "kind = \"script\"",
     "",
     "[interpreter]",
     "name = \"lua\"",

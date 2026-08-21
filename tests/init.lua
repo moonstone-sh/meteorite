@@ -1,6 +1,7 @@
 package.path = "src/?.lua;src/?/init.lua;tests/?.lua;" .. package.path
 
 local init = require("cli.init")
+local templates = require("cli.templates")
 local test = require("test")
 
 local function read_file(path)
@@ -13,6 +14,15 @@ end
 local function remove_tree(path)
   os.execute("rm -rf " .. string.format("%q", path))
 end
+
+test "meteorite standalone manifest uses Moonstone v2 canonical storage" (function()
+  local manifest = templates.moonstone_manifest("standalone-service", "hybrid")
+
+  test.assert_true(manifest:find("manifest_version = 2", 1, true) ~= nil)
+  test.assert_true(manifest:find('kind = "script"', 1, true) ~= nil)
+  test.assert_true(manifest:find('kind = "app"', 1, true) == nil)
+  test.assert_true(manifest:find('constraint = "^0.2.41"', 1, true) ~= nil)
+end)
 
 test "meteorite init augments an empty Moonstone host with canonical tools" (function()
   local target = os.tmpname()
