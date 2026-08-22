@@ -31,14 +31,18 @@ jobs:
       - name: Install release tooling
         run: |
           sudo apt-get update
-          sudo apt-get install -y b3sum file lsof luajit zstd
+          sudo apt-get install -y b3sum file jq libsqlite3-dev lsof luajit pkg-config zstd
       - name: Build Moonstone CLI
         working-directory: .ci/moonstone
         run: |
           zig build
           echo "$GITHUB_WORKSPACE/.ci/moonstone/zig-out/bin" >> "$GITHUB_PATH"
       - name: Synchronize project lockfile
-        run: moon sync --locked
+        run: |
+          export SQLITE_INCDIR="$(pkg-config --variable=includedir sqlite3)"
+          export SQLITE_LIBDIR="$(pkg-config --variable=libdir sqlite3)"
+          test -f "$SQLITE_INCDIR/sqlite3.h"
+          moon sync --locked
       - name: Prepare locked Ballad integration checkout
         run: |
           ballad_version="$(awk '
