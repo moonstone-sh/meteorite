@@ -1,3 +1,5 @@
+manifest_version = 2
+
 [package]
 name = "bench-pegasus"
 version = "0.1.0"

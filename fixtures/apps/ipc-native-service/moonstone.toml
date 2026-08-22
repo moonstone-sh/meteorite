@@ -1,3 +1,5 @@
+manifest_version = 2
+
 [package]
 name = "meteorite-ipc-native-service"
 version = "0.1.0"
@@ -16,5 +18,5 @@ role = "tool"
 
 [[dependencies]]
 name = "moonstone/ballad"
-constraint = "^0.2.41"
+constraint = "^0.3.0"
 role = "tool"

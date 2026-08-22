@@ -1,0 +1,7 @@
+source=luarocks
+key=luarocks:https://luarocks.org:manifest-5.4.json
+url=https://luarocks.org/manifest-5.4.json
+fetched_at=1787421623
+ttl_seconds=86400
+hash=b3:d7f1cbde95abd0b8d969fda42bcd2b3841b0afa4da990be035d89aade18cd437
+payload_path=/Users/extrordinaire/Workbench/user/meteorite/.moonstone-home/cache/manifests/luarocks/https_3a_2f_2fluarocks.org/manifest-5.4.json

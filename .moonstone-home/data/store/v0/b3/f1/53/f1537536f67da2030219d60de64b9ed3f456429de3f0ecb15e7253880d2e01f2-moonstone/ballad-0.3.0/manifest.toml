@@ -1,0 +1,28 @@
+[artifact]
+name = "moonstone/ballad"
+version = "0.3.0"
+kind = "bin"
+source_hash = "b3:f1537536f67da2030219d60de64b9ed3f456429de3f0ecb15e7253880d2e01f2"
+recipe_hash = "b3:1da91cf0e2c6843ee79c21b79d3243aa8912920fb3ce23d240777abdc9104710"
+artifact_hash = "b3:f1537536f67da2030219d60de64b9ed3f456429de3f0ecb15e7253880d2e01f2"
+target = "any"
+
+[origin]
+resolver = "moonstone"
+source = "https://github.com/moonstone-sh/ballad/releases/download/v0.3.0/ballad-0.3.0-any.tar.gz"
+source_kind = "bin"
+source_payload = "sources/blob.tar.gz"
+
+[compat]
+interpreter_version = "luajit@2.1.0"
+lua_abi = "5.1"
+interpreter_artifact_hash = ""
+
+[provides]
+bin_lua = [{ name = "ballad", path = "bin/ballad", entry_point = "libexec/ballad/src/main.lua" }]
+
+[[dependencies]]
+name = "dkjson"
+constraint = "^2.9-1"
+resolver = "rocks"
+role = "runtime"

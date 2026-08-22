@@ -1,0 +1,26 @@
+[artifact]
+name = "dkjson"
+version = "2.11-1"
+kind = "lib"
+source_hash = "b3:736026c095d0d92f41d668c8bab1c02f58902d677326cbeca0fb592092b214a3"
+recipe_hash = "b3:4ea373890e07a8437000ff8cc95ce1ac2c2e6db3676153eb5846fdab1db4780b"
+artifact_hash = "b3:bd1bdb75d6b3abd7721a3085ec6b11a48d27f0e6d2902866b584f8646eaf0d0a"
+target = "aarch64-macos"
+
+[origin]
+resolver = "rocks"
+source = "https://luarocks.org/dkjson-2.11-1.src.rock"
+source_kind = "luarocks_src_rock"
+source_payload = "sources/dkjson-2.11-1.src.rock"
+rockspec = "https://luarocks.org/dkjson-2.11-1.rockspec"
+rockspec_hash = "b3:f435b6b2f3924979d1a69598935ee7de27f35dbaa5dfa6b36aeda2f5f7356c44"
+rockspec_payload = "sources/dkjson-2.11-1.rockspec"
+
+[compat]
+interpreter_version = ""
+lua_abi = "5.4"
+interpreter_artifact_hash = ""
+
+[provides]
+lua_module = [{ name = "dkjson", path = "share/lua/5.4/dkjson.lua" }]
+asset = [{ name = "doc/readme.md", path = "assets/doc/readme.md" }, { name = "doc/versions.md", path = "assets/doc/versions.md" }]

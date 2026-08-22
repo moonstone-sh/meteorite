@@ -11,6 +11,14 @@ local function read_file(path)
   return content
 end
 
+local function resolve_moon_bin()
+  local env_bin = os.getenv("MOONSTONE_BIN")
+  if env_bin and env_bin ~= "" then return env_bin end
+  local res = os.execute("command -v moon >/dev/null 2>&1")
+  if res == true or res == 0 then return "moon" end
+  return "../moonstone/zig-out/bin/moon"
+end
+
 local function remove_tree(path)
   os.execute("rm -rf " .. string.format("%q", path))
 end
@@ -52,7 +60,7 @@ test "meteorite init augments an empty Moonstone host with canonical tools" (fun
       install_root = "./",
       module_root = "src/",
     },
-    moon_bin = os.getenv("MOONSTONE_BIN") or "../moonstone/zig-out/bin/moon",
+    moon_bin = resolve_moon_bin(),
   })
 
   local updated = read_file(manifest_path)
@@ -101,7 +109,7 @@ test "meteorite init preserves existing Moonstone scripts" (function()
       install_root = "./",
       module_root = "src/",
     },
-    moon_bin = os.getenv("MOONSTONE_BIN") or "../moonstone/zig-out/bin/moon",
+    moon_bin = resolve_moon_bin(),
   })
 
   local updated = read_file(manifest_path)

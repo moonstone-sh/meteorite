@@ -1,0 +1,24 @@
+[artifact]
+name = "moonstone/lua"
+version = "5.4.7"
+kind = "runtime"
+source_hash = "b3:e51c2f347e3185479d5ff95cae8ac77511db486853269443c56bedaa0a6ae629"
+recipe_hash = "b3:d1d80b54ca5882dc885d65536acd15bf98dd1709d9f91e29b2107af45ba5d6be"
+artifact_hash = "b3:c93068e49db579e7b12639eed8bd5706aa84a997601ff776d8a4e7ef8d163077"
+target = "aarch64-macos"
+
+[origin]
+resolver = "moonstone"
+source = "blobs/b3/c9/30/c93068e49db579e7b12639eed8bd5706aa84a997601ff776d8a4e7ef8d163077.tar.zst"
+source_kind = "puc_lua_source"
+source_payload = "sources/source.tar.gz"
+source_url = "blobs/b3/e5/1c/e51c2f347e3185479d5ff95cae8ac77511db486853269443c56bedaa0a6ae629.tar.gz"
+
+[compat]
+interpreter_version = ""
+lua_abi = "lua54"
+interpreter_artifact_hash = ""
+
+[provides]
+runtime = [{ name = "lua", version = "5.4.7", abi = "lua54" }]
+bin = [{ name = "luac", path = "bin/luac" }, { name = "lua", path = "bin/lua" }]

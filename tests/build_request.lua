@@ -33,7 +33,7 @@ end)
 test "generated manifests keep behavior explicit and generate the full partiture suite" (function()
   local manifest = templates.moonstone_manifest("example", "hybrid")
   test.assert_true(manifest:find("--mode hybrid_dev --backend fast_http", 1, true) ~= nil, "dev script")
-  test.assert_true(manifest:find("check:release", 1, true) ~= nil, "release check")
+  test.assert_true(manifest:find("check-release", 1, true) ~= nil, "release check")
   test.assert_false(manifest:find("[server]", 1, true) ~= nil, "no server section")
   test.assert_false(manifest:find("[meteorite]", 1, true) ~= nil, "no hidden Meteorite section")
   for _, factory in ipairs({ "partiture_common", "release_partiture", "dev_partiture", "watch_partiture", "check_partiture" }) do

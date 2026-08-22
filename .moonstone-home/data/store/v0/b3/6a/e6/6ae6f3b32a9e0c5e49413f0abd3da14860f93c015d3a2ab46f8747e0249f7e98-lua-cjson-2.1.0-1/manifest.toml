@@ -1,0 +1,28 @@
+[artifact]
+name = "lua-cjson"
+version = "2.1.0-1"
+kind = "bin"
+source_hash = "b3:1fc27f12350d9d52a04a506c90a2710e904b1b3ca0f6d60a45bd7ff71c766e56"
+recipe_hash = "b3:0a025403f72c05c53611decfbc0c2e0f66c2ea113fd59f3909ab3c51afaaed71"
+artifact_hash = "b3:6ae6f3b32a9e0c5e49413f0abd3da14860f93c015d3a2ab46f8747e0249f7e98"
+target = "aarch64-macos"
+
+[origin]
+resolver = "rocks"
+source = "https://luarocks.org/lua-cjson-2.1.0-1.src.rock"
+source_kind = "luarocks_src_rock"
+source_payload = "sources/lua-cjson-2.1.0-1.src.rock"
+rockspec = "https://luarocks.org/lua-cjson-2.1.0-1.rockspec"
+rockspec_hash = "b3:aa2b302205b3a4e9c4192f5b5d4307e1a660978356ff805a98cca567b951c5c9"
+rockspec_payload = "sources/lua-cjson-2.1.0-1.rockspec"
+
+[compat]
+interpreter_version = ""
+lua_abi = "5.4"
+interpreter_artifact_hash = ""
+
+[provides]
+bin = [{ name = "json2lua", path = "bin/json2lua" }, { name = "lua2json", path = "bin/lua2json" }]
+lua_module = [{ name = "cjson.util", path = "share/lua/5.4/cjson/util.lua" }]
+lua_cmodule = [{ name = "cjson", path = "lib/lua/5.4/cjson.so" }]
+asset = [{ name = "tests/README", path = "assets/tests/README" }, { name = "tests/bench.lua", path = "assets/tests/bench.lua" }, { name = "tests/example1.json", path = "assets/tests/example1.json" }, { name = "tests/example2.json", path = "assets/tests/example2.json" }, { name = "tests/example3.json", path = "assets/tests/example3.json" }, { name = "tests/example4.json", path = "assets/tests/example4.json" }, { name = "tests/example5.json", path = "assets/tests/example5.json" }, { name = "tests/genutf8.pl", path = "assets/tests/genutf8.pl" }, { name = "tests/numbers.json", path = "assets/tests/numbers.json" }, { name = "tests/octets-escaped.dat", path = "assets/tests/octets-escaped.dat" }, { name = "tests/rfc-example1.json", path = "assets/tests/rfc-example1.json" }, { name = "tests/rfc-example2.json", path = "assets/tests/rfc-example2.json" }, { name = "tests/test.lua", path = "assets/tests/test.lua" }, { name = "tests/types.json", path = "assets/tests/types.json" }]

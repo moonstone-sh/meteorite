@@ -1,0 +1,24 @@
+[artifact]
+name = "moonstone/luajit"
+version = "2.1.0"
+kind = "runtime"
+source_hash = "b3:eb0e3baf280c1ae61596f94c85159d83b2ff99d0a2b8573a2605687ac1156b40"
+recipe_hash = "b3:f0d64b5107def3bee5a8cb5c28578995ee6516bd4d1485fb979c4261ba81e7c1"
+artifact_hash = "b3:f4d32a967447c8d87a709c01fa5229748de4054e51dfa073e0ad1e61c2683bbf"
+target = "aarch64-macos"
+
+[origin]
+resolver = "moonstone"
+source = "blobs/b3/f4/d3/f4d32a967447c8d87a709c01fa5229748de4054e51dfa073e0ad1e61c2683bbf.tar.zst"
+source_kind = "runtime"
+source_payload = "sources/blob.tar.zst"
+source_url = "blobs/b3/eb/0e/eb0e3baf280c1ae61596f94c85159d83b2ff99d0a2b8573a2605687ac1156b40.tar.gz"
+
+[compat]
+interpreter_version = ""
+lua_abi = "lua51"
+interpreter_artifact_hash = ""
+
+[provides]
+runtime = [{ name = "luajit", version = "2.1.0", abi = "lua51" }]
+bin = [{ name = "lua", path = "bin/luajit" }, { name = "luajit", path = "bin/luajit" }]

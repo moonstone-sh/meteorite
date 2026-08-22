@@ -1,3 +1,5 @@
+manifest_version = 2
+
 [package]
 name = "bench/openresty"
 version = "0.1.0"

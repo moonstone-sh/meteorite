@@ -1,0 +1,26 @@
+[artifact]
+name = "etlua"
+version = "1.3.0-1"
+kind = "lib"
+source_hash = "b3:2d48b441ec25716ff0c3e663f40219a6623ce7a3e90e4dbcfabf8d3e028576f3"
+recipe_hash = "b3:5525c5ce8f7afe420af725a26759826a2ad24722e00e052cd81d2137cd500dde"
+artifact_hash = "b3:8d2a871a9d3363c9083b1539b9ebd1d73bcdd4ffab0157ffbe8757e4f58d9205"
+target = "aarch64-macos"
+
+[origin]
+resolver = "rocks"
+source = "https://luarocks.org/etlua-1.3.0-1.src.rock"
+source_kind = "luarocks_src_rock"
+source_payload = "sources/etlua-1.3.0-1.src.rock"
+rockspec = "https://luarocks.org/etlua-1.3.0-1.rockspec"
+rockspec_hash = "b3:493a586d7f61cc1fdc7962f894a5faea3760e73573080f3d5df8084b147e2592"
+rockspec_payload = "sources/etlua-1.3.0-1.rockspec"
+
+[compat]
+interpreter_version = ""
+lua_abi = "5.4"
+interpreter_artifact_hash = ""
+
+[provides]
+lua_module = [{ name = "etlua", path = "share/lua/5.4/etlua.lua" }]
+asset = [{ name = "doc/README.md", path = "assets/doc/README.md" }]

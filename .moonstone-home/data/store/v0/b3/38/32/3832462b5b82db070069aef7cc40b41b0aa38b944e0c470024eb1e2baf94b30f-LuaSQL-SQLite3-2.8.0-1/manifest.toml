@@ -1,0 +1,26 @@
+[artifact]
+name = "LuaSQL-SQLite3"
+version = "2.8.0-1"
+kind = "lib"
+source_hash = "b3:e9b180f15e2b5738df47a32ad78ef905333e1114a17c726a0d3078cddf8bc342"
+recipe_hash = "b3:73fbce804ecbbf386a2c8174f8bda2cc54d4e4c3dd6b35cc007aef08b159f847"
+artifact_hash = "b3:3832462b5b82db070069aef7cc40b41b0aa38b944e0c470024eb1e2baf94b30f"
+target = "aarch64-macos"
+
+[origin]
+resolver = "rocks"
+source = "https://luarocks.org/luasql-sqlite3-2.8.0-1.src.rock"
+source_kind = "luarocks_src_rock"
+source_payload = "sources/luasql-sqlite3-2.8.0-1.src.rock"
+rockspec = "https://luarocks.org/luasql-sqlite3-2.8.0-1.rockspec"
+rockspec_hash = "b3:5c78326f7f0306d100d88fc7f99dec6d65027a8e54694adcd2941f38824391f9"
+rockspec_payload = "sources/luasql-sqlite3-2.8.0-1.rockspec"
+
+[compat]
+interpreter_version = ""
+lua_abi = "5.4"
+interpreter_artifact_hash = ""
+
+[provides]
+lua_cmodule = [{ name = "luasql.sqlite3", path = "lib/lua/5.4/luasql/sqlite3.so" }]
+asset = [{ name = "doc/br/examples.html", path = "assets/doc/br/examples.html" }, { name = "doc/br/history.html", path = "assets/doc/br/history.html" }, { name = "doc/br/index.html", path = "assets/doc/br/index.html" }, { name = "doc/br/license.html", path = "assets/doc/br/license.html" }, { name = "doc/br/luasql.png", path = "assets/doc/br/luasql.png" }, { name = "doc/br/manual.html", path = "assets/doc/br/manual.html" }, { name = "doc/fr/doc.css", path = "assets/doc/fr/doc.css" }, { name = "doc/fr/examples.html", path = "assets/doc/fr/examples.html" }, { name = "doc/fr/history.html", path = "assets/doc/fr/history.html" }, { name = "doc/fr/index.html", path = "assets/doc/fr/index.html" }, { name = "doc/fr/license.html", path = "assets/doc/fr/license.html" }, { name = "doc/fr/luasql.png", path = "assets/doc/fr/luasql.png" }, { name = "doc/fr/manual.html", path = "assets/doc/fr/manual.html" }, { name = "doc/us/doc.css", path = "assets/doc/us/doc.css" }, { name = "doc/us/examples.html", path = "assets/doc/us/examples.html" }, { name = "doc/us/history.html", path = "assets/doc/us/history.html" }, { name = "doc/us/index.html", path = "assets/doc/us/index.html" }, { name = "doc/us/license.html", path = "assets/doc/us/license.html" }, { name = "doc/us/luasql.png", path = "assets/doc/us/luasql.png" }, { name = "doc/us/manual.html", path = "assets/doc/us/manual.html" }]
