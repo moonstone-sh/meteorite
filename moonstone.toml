@@ -105,16 +105,19 @@ constraint = "^0.3.0"
 role = "tool"
 
 [[dependencies]]
-name = "etlua"
-constraint = "rocks:etlua@^1.3.0-1"
+name = "lua-cjson"
+constraint = "^2.1.0-1"
+registry = "rocks"
 role = "runtime"
 
 [[dependencies]]
-name = "lua-cjson"
-constraint = "rocks:lua-cjson@^2.1.0.10-1"
+name = "etlua"
+constraint = "^1.3.0-1"
+registry = "rocks"
 role = "runtime"
 
 [[dependencies]]
 name = "luasql-sqlite3"
-constraint = "rocks:luasql-sqlite3@2.8.0-1"
+constraint = "2.8.0-1"
+registry = "rocks"
 role = "runtime"
