@@ -42,7 +42,7 @@ jobs:
           export SQLITE_INCDIR="$(pkg-config --variable=includedir sqlite3)"
           export SQLITE_LIBDIR="$(pkg-config --variable=libdir sqlite3)"
           test -f "$SQLITE_INCDIR/sqlite3.h"
-          moon sync --locked
+          moon sync
       - name: Prepare locked Ballad integration checkout
         run: |
           ballad_version="$(awk '
