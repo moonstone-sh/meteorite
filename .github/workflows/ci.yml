@@ -18,7 +18,7 @@ jobs:
         with:
           repository: moonstone-sh/moonstone
           # Meteorite uses the formal registry and lockfile contract.
-          ref: 51c0f91a0e431ccf039ada604c49af28a72ffb13
+          ref: ad1ef8c03f8d6c32711dc35c9fd4aa1661cc4f07
           path: .ci/moonstone
       - uses: actions/checkout@v4
         with:
