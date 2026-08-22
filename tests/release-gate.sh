@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if command -v pkg-config >/dev/null 2>&1; then
+  export SQLITE_INCDIR="${SQLITE_INCDIR:-$(pkg-config --variable=includedir sqlite3 2>/dev/null || true)}"
+  export SQLITE_LIBDIR="${SQLITE_LIBDIR:-$(pkg-config --variable=libdir sqlite3 2>/dev/null || true)}"
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGETS="${METEORITE_GA_TARGETS:-aarch64-linux-gnu x86_64-linux-gnu}"
 

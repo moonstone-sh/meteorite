@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if command -v pkg-config >/dev/null 2>&1; then
+  export SQLITE_INCDIR="${SQLITE_INCDIR:-$(pkg-config --variable=includedir sqlite3 2>/dev/null || true)}"
+  export SQLITE_LIBDIR="${SQLITE_LIBDIR:-$(pkg-config --variable=libdir sqlite3 2>/dev/null || true)}"
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LUA_PROJECT_PATH="${ROOT}/src/ballad_plugin/?.lua;${ROOT}/src/ballad_plugin/?/init.lua;${ROOT}/src/?.lua;${ROOT}/src/?/init.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?/init.lua;${ROOT}/../ballad/src/?.lua;${ROOT}/../ballad/src/?/init.lua;;"
 TARGET="${METEORITE_CROSS_TARGET:-aarch64-linux-gnu}"
