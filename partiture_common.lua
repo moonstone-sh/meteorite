@@ -34,7 +34,33 @@ end
 ---@return table request Explicit Meteorite behavior transported by Ballad.
 function common.request(p)
   local request = build_request.parse(p.invocation.args)
-  return build_request.require_behavior(request, "Meteorite Ballad partiture")
+  if not p.control then
+    return build_request.require_behavior(request, "Meteorite Ballad partiture")
+  end
+  local mode = p.control.value("meteorite-mode", request.mode, { source = "invocation" })
+  local backend = p.control.value("meteorite-backend", request.backend, { source = "invocation" })
+  p.control.require("meteorite-mode-required", mode:present(), {
+    code = "missing_meteorite_mode",
+    subject = "--mode",
+    message = "Meteorite Ballad partiture requires an explicit mode",
+    expected = "--mode <mode>",
+    actual = request.mode,
+    hint = "Run a generated Moonstone script, or pass --mode after the partiture delimiter.",
+  })
+  p.control.require("meteorite-backend-required", backend:present(), {
+    code = "missing_meteorite_backend",
+    subject = "--backend",
+    message = "Meteorite Ballad partiture requires an explicit backend",
+    expected = "--backend <backend>",
+    actual = request.backend,
+    hint = "Run a generated Moonstone script, or pass --backend after the partiture delimiter.",
+  })
+
+  -- Construction still needs serializable command placeholders. Requirements
+  -- run before actions, so these values can never reach Zig or the dev server.
+  request.mode = request.mode or "__missing_mode__"
+  request.backend = request.backend or "__missing_backend__"
+  return request
 end
 
 ---@return string command Deterministic Zig compilation command for the development server.

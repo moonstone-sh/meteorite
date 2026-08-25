@@ -40,6 +40,9 @@ test "generated manifests keep behavior explicit and generate the full partiture
     local chunk, err = load(templates[factory]())
     test.assert_true(chunk ~= nil, factory .. ": " .. tostring(err))
   end
+  local common = templates.partiture_common()
+  test.assert_true(common:find("p.control.value", 1, true) ~= nil, "generated partiture controls")
+  test.assert_true(common:find("request.require_behavior", 1, true) ~= nil, "older Ballad compatibility")
 end)
 
 test "dev command passes mode and backend to dev supervisor" (function()

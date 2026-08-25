@@ -123,7 +123,7 @@ local function apply_manifest_operations(target, build_mode, moon_bin)
   local operations = {}
   for _, dependency in ipairs({
     { name = "moonstone/meteorite", constraint = "^0.2.0" },
-    { name = "moonstone/ballad", constraint = "^0.2.41" },
+    { name = "moonstone/ballad", constraint = "^0.3.5" },
   }) do
     if not manifest_has_named_entry(export, "dependencies", dependency.name) then
       operations[#operations + 1] = {
