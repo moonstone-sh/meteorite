@@ -1,5 +1,8 @@
 # Meteorite
 
+> Documentation map: [`docs/README.md`](docs/README.md) · contributor guidance:
+> [`AGENTS.md`](AGENTS.md)
+
 Meteorite is a Moonstone-zig service compiler prototype. Visit the official
 site at [meteorite.moonstone.sh](https://meteorite.moonstone.sh) for guided
 documentation and API reference material.

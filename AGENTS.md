@@ -1,5 +1,13 @@
 # Meteorite — Agent Development Guide
 
+> This is the operational guide for contributors and agents. Keep the detailed
+> compiler contracts, deployment procedures, benchmarks, and historical audits
+> in [`docs/`](docs/README.md); this file should contain invariants and links,
+> not duplicate those documents.
+
+Start with [`README.md`](README.md) for the project overview and
+[`docs/README.md`](docs/README.md) for the maintained documentation map.
+
 Meteorite is a Moonstone-zig service compiler prototype. It takes a Lua-declared HTTP application graph, validates it against a release compiler contract, compiles it to a Zig HTTP server, and optionally materializes a target Lua runtime for cross-platform hybrid releases.
 
 ```text
