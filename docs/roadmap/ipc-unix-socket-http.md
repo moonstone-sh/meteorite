@@ -57,7 +57,7 @@ Annotation: build/doctor parsing already accepts `ipc_unixsocket_http` and valid
 
 ## Acceptance Tests
 
-- Existing HTTP fixtures pass through `ipc_unixsocket_http` using `curl --unix-socket`.
-- CORS, cookies, redirects, static files, conditional requests, `HEAD`, `OPTIONS`, and `405 Allow` match `std_http` behavior.
-- Native IPC frames are rejected because the wire protocol is HTTP/1.1.
-- `std_http`, `fast_http`, and `ipc_unixsocket` remain unaffected.
+- [x] Existing HTTP fixtures pass through `ipc_unixsocket_http` using `curl --unix-socket`.
+- [x] CORS, cookies, redirects, static files, conditional requests, `HEAD`, `OPTIONS`, and `405 Allow` match `std_http` behavior.
+- [x] Native IPC frames are rejected because the wire protocol is HTTP/1.1.
+- [x] `std_http`, `fast_http`, and `ipc_unixsocket` remain unaffected.

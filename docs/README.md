@@ -16,11 +16,13 @@ historical archive material.
 - `release-process.md` — tag preparation, source-package verification, checksum, and publishing sequence.
 - `release-notes/` — versioned user-facing release notes.
 
-## Design Notes
+## Architecture And Design Notes
 
+- `architecture/composition-lifecycle-decisions.md` — canonical scope, pipeline, plugin, and lifecycle decisions.
 - `design/route-contract.md` — canonical route contract and pipeline lowering model.
 - `design/openapi.md` — OpenAPI 3.1 generation design.
 - `design/unix-socket-backend-discovery.md` — Unix-socket backend discovery and migration notes.
+- `design/stateful-hmr-supervisor.md` — stateful live-reload supervisor design.
 
 ## Roadmaps
 
@@ -31,6 +33,8 @@ historical archive material.
 
 ## Maintenance And Archive
 
+- `maintenance/composition-lifecycle-implementation-audit.md` — scope and lifecycle implementation audit record.
+- `maintenance/composition-lifecycle-doc-review.md` — public composition guide verification matrix.
 - `maintenance/release-candidate-audit-2026-07-17.md` — current v0.1 GA gate audit.
 - `maintenance/release-candidate-audit-2026-07-14.md` — latest v0.1 service-layer release audit result.
 - `maintenance/docs-stabilization.md` — docs tree stabilization record.

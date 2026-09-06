@@ -5,13 +5,9 @@ local module_root = script_dir:gsub("cli[/\\]$", "")
 local install_root = module_root:gsub("src[/\\]$", ""):gsub("meteorite[/\\]$", "")
 package.path = "src/?.lua;src/?/init.lua;" .. module_root .. "?.lua;" .. module_root .. "?/init.lua;" .. install_root .. "?.lua;" .. install_root .. "?/init.lua;" .. package.path
 
+local c = require("clingy")
+local v = require("valua")
 local cli_deps = require("cli.deps").new(source)
-local command = arg[1] or "graph"
-if command == "--" then
-  table.remove(arg, 1)
-  command = arg[1] or "graph"
-end
-
 local help_text = require("cli.help_text")
 
 local function print_help(topic)
@@ -25,42 +21,168 @@ local function print_help(topic)
   print(page)
 end
 
-if command == "help" or command == "--help" or command == "-h" then
-  print_help(arg[2])
-  return
+local app
+app = c.create({
+  name = "meteorite",
+  version = "0.2.1",
+  description = "Moonstone-zig service compiler prototype",
+
+  c.root(c.node({
+    c.inherit(
+      c.flag("-h", "--help")
+    ),
+
+    c.run(function(ctx)
+      if ctx.args.help then
+        print_help("main")
+        return 0
+      end
+      require("cli.graph").run(arg or {}, cli_deps.graph())
+      return 0
+    end),
+
+    init = c.node({
+      c.repeated(c.optional(c.arg("args", v.string()))),
+      c.passthrough("argv"),
+      c.run(function(ctx)
+        if ctx.args.help then print_help("init"); return 0 end
+        require("cli.init").run(arg or {}, cli_deps.init(print_help))
+        return 0
+      end),
+    }, { description = "Initialize a new Meteorite project" }),
+
+    build = c.node({
+      c.repeated(c.optional(c.arg("args", v.string()))),
+      c.passthrough("argv"),
+      c.run(function(ctx)
+        if ctx.args.help then print_help("build"); return 0 end
+        require("cli.build").run(arg or {}, cli_deps.build(print_help))
+        return 0
+      end),
+    }, { description = "Build a Meteorite service" }),
+
+    check = c.node({
+      c.repeated(c.optional(c.arg("args", v.string()))),
+      c.passthrough("argv"),
+      c.run(function(ctx)
+        if ctx.args.help then print_help("check"); return 0 end
+        require("cli.check").run(arg or {}, cli_deps.check(print_help))
+        return 0
+      end),
+    }, { description = "Check service graph and contracts" }),
+
+    dev = c.node({
+      c.repeated(c.optional(c.arg("args", v.string()))),
+      c.passthrough("argv"),
+      c.run(function(ctx)
+        if ctx.args.help then print_help("dev"); return 0 end
+        require("cli.dev_command").run(arg or {}, cli_deps.dev())
+        return 0
+      end),
+    }, { description = "Run service in development mode" }),
+
+    doctor = c.node({
+      c.repeated(c.optional(c.arg("args", v.string()))),
+      c.passthrough("argv"),
+      c.run(function(ctx)
+        if ctx.args.help then print_help("doctor"); return 0 end
+        require("cli.doctor").run(cli_deps.doctor())
+        return 0
+      end),
+    }, { description = "Diagnose toolchain and environment" }),
+
+    client = c.node({
+      c.repeated(c.optional(c.arg("args", v.string()))),
+      c.passthrough("argv"),
+      c.run(function(ctx)
+        if ctx.args.help then print_help("client"); return 0 end
+        require("cli.client").run(arg or {})
+        return 0
+      end),
+    }, { description = "Generate Lua client" }),
+
+    openapi = c.node({
+      c.repeated(c.optional(c.arg("args", v.string()))),
+      c.passthrough("argv"),
+      c.run(function(ctx)
+        if ctx.args.help then print_help("openapi"); return 0 end
+        require("cli.openapi").run(arg or {})
+        return 0
+      end),
+    }, { description = "Export OpenAPI schema" }),
+
+    ipc = c.node({
+      c.repeated(c.optional(c.arg("args", v.string()))),
+      c.passthrough("argv"),
+      c.run(function(ctx)
+        if ctx.args.help then print_help("ipc"); return 0 end
+        require("cli.ipc").run(arg or {})
+        return 0
+      end),
+    }, { description = "Inspect IPC transports" }),
+
+    routes = c.node({
+      c.repeated(c.optional(c.arg("args", v.string()))),
+      c.passthrough("argv"),
+      c.run(function(ctx)
+        if ctx.args.help then print_help("routes"); return 0 end
+        require("cli.routes").run(arg or {})
+        return 0
+      end),
+    }, { description = "List service routes" }),
+
+    graph = c.node({
+      c.repeated(c.optional(c.arg("args", v.string()))),
+      c.passthrough("argv"),
+      c.run(function(ctx)
+        if ctx.args.help then print_help("graph"); return 0 end
+        require("cli.graph").run(arg or {}, cli_deps.graph())
+        return 0
+      end),
+    }, { description = "Generate service graph" }),
+
+    sync = c.node({
+      c.repeated(c.optional(c.arg("args", v.string()))),
+      c.passthrough("argv"),
+      c.run(function(ctx)
+        if ctx.args.help then print_help("sync"); return 0 end
+        require("cli.sync").run(arg or {}, cli_deps.graph())
+        return 0
+      end),
+    }, { description = "Sync handler interfaces" }),
+
+    invoke = c.node({
+      c.flag("--json"),
+      c.flag("--headers"),
+      c.repeated(c.option("-H", "--header", v.string())),
+      c.option("--body", v.string()),
+      c.repeated(c.optional(c.arg("args", v.string()))),
+      c.passthrough("argv"),
+      c.run(function(ctx)
+        if ctx.args.help then print_help("invoke"); return 0 end
+        require("cli.invoke_command").run(arg or {})
+        return 0
+      end),
+    }, { description = "Invoke a route directly" }),
+
+    help = c.node({
+      c.optional(c.arg("topic", v.string())),
+      c.run(function(ctx)
+        print_help(ctx.args.topic)
+        return 0
+      end),
+    }, { description = "Show help information" }),
+  })),
+})
+
+local argv = {}
+for i, a in ipairs(arg or {}) do argv[i] = a end
+if argv[1] == "--" then
+  table.remove(argv, 1)
 end
 
-local function init_project()
-  return require("cli.init").run(arg, cli_deps.init(print_help))
+local exit_code = app:run(argv)
+if exit_code and exit_code ~= 0 then
+  os.exit(exit_code)
 end
 
-local function build_project()
-  return require("cli.build").run(arg, cli_deps.build(print_help))
-end
-
-local function dev_project()
-  return require("cli.dev_command").run(arg, cli_deps.dev())
-end
-
-local function doctor_project()
-  return require("cli.doctor").run(cli_deps.doctor())
-end
-
-if (command == "graph" or command == "sync" or command == "invoke" or command == "doctor" or command == "dev" or command == "client" or command == "openapi") and (arg[2] == "--help" or arg[2] == "-h") then
-  print_help(command)
-  return
-end
-if command == "init" then init_project(); return end
-if command == "build" then build_project(); return end
-if command == "check" then require("cli.check").run(arg, cli_deps.check(print_help)); return end
-if command == "dev" then dev_project(); return end
-if command == "doctor" then doctor_project(); return end
-if command == "client" then require("cli.client").run(arg); return end
-if command == "openapi" then require("cli.openapi").run(arg); return end
-if command == "ipc" then require("cli.ipc").run(arg); return end
-if command == "routes" then require("cli.routes").run(arg); return end
-if command == "graph" then require("cli.graph").run(arg, cli_deps.graph()); return end
-if command == "sync" then require("cli.sync").run(arg, cli_deps.graph()); return end
-if command == "invoke" then require("cli.invoke_command").run(arg); return end
-
-error("unknown meteorite command: " .. tostring(command) .. "\n\nRun:\n  meteorite help")
