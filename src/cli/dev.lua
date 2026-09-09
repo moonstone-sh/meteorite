@@ -8,7 +8,7 @@ local state_dir = ".meteorite/dev"
 local pid_file = state_dir .. "/server.pid"
 local log_file = state_dir .. "/server.log"
 local guard_script = os.getenv("METEORITE_GUARD_SCRIPT") or "scripts/guard.sh"
-local dev_port = os.getenv("METEORITE_DEV_PORT") or "8080"
+local explicit_dev_port = os.getenv("METEORITE_DEV_PORT")
 local meteorite_cli = os.getenv("METEORITE_CLI") or "src/cli/main.lua"
 local build_command_override = os.getenv("METEORITE_BUILD_COMMAND")
 local once = os.getenv("METEORITE_DEV_ONCE") == "1"
@@ -96,12 +96,29 @@ local function write_file(path, content)
   file:close()
 end
 
+-- The project's real listen port is whatever the generated graph says: the Zig
+-- server binds listen.zon (see src/codegen/emitter.lua and zig/main.zig), which
+-- carries app.options.port. Resolving it here keeps the dev banner, the guard's
+-- port-collision check and the Lua reload endpoint all pointing at the port the
+-- server actually listens on, instead of a literal 8080 that may belong to an
+-- entirely unrelated project.
+local function graph_listen_port()
+  local data = read_file(output .. "/listen.zon")
+  return data and data:match("%.port%s*=%s*(%d+)") or nil
+end
+
+-- METEORITE_DEV_PORT stays an explicit override; the 8080 literal is only a
+-- last resort for the window before the first graph() run produces listen.zon.
+local function resolve_dev_port()
+  return explicit_dev_port or graph_listen_port() or "8080"
+end
+
 local function guard(command)
   if not path_exists(guard_script) then return false end
   local env = table.concat({
     "METEORITE_DEV_STATE_DIR=" .. shell_quote(state_dir),
     "METEORITE_DEV_PID_FILE=" .. shell_quote(pid_file),
-    "METEORITE_DEV_PORT=" .. shell_quote(dev_port),
+    "METEORITE_DEV_PORT=" .. shell_quote(resolve_dev_port()),
     "METEORITE_DEV_SERVER=" .. shell_quote(server),
   }, " ")
   return run(env .. " " .. shell_quote(guard_script) .. " " .. shell_quote(command))
@@ -127,7 +144,7 @@ stop_server = function()
     local env = table.concat({
       "METEORITE_DEV_STATE_DIR=" .. shell_quote(state_dir),
       "METEORITE_DEV_PID_FILE=" .. shell_quote(pid_file),
-      "METEORITE_DEV_PORT=" .. shell_quote(dev_port),
+      "METEORITE_DEV_PORT=" .. shell_quote(resolve_dev_port()),
       "METEORITE_DEV_SERVER=" .. shell_quote(server),
     }, " ")
     os.execute(env .. " " .. shell_quote(guard_script) .. " cleanup >/dev/null 2>&1 || true")
@@ -154,7 +171,7 @@ local function start_server()
   if not is_up then
     io.stderr:write("Meteorite dev server failed to stay running; see " .. log_file .. "\n")
   else
-    io.stderr:write("Meteorite dev server: http://127.0.0.1:" .. dev_port .. " pid=" .. tostring(pid or "?") .. " log=" .. log_file .. "\n")
+    io.stderr:write("Meteorite dev server: http://127.0.0.1:" .. resolve_dev_port() .. " pid=" .. tostring(pid or "?") .. " log=" .. log_file .. "\n")
   end
 end
 
@@ -226,7 +243,7 @@ local function classify_changes(changes, force_build)
 end
 
 local function reload_lua()
-  return run("curl -fsS -X POST http://127.0.0.1:8080/__meteorite/reload-lua >/dev/null")
+  return run("curl -fsS -X POST http://127.0.0.1:" .. resolve_dev_port() .. "/__meteorite/reload-lua >/dev/null")
 end
 
 local function graph()

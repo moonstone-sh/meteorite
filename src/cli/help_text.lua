@@ -14,6 +14,7 @@ Commands:
   build     Build the server with Meteorite's packaged Zig driver
   check     Validate a target without producing a release
   graph     Generate the Meteorite graph
+  routes    List service routes
   sync      Explicitly write generated handler stubs and LuaLS aids
   doctor    Check local project/tool readiness
   invoke    Invoke a route in-process for diagnostics
@@ -120,6 +121,27 @@ Usage:
 Examples:
   meteorite graph src/main.lua .meteorite/graph/current hybrid fast_http
   meteorite graph src/main.lua .meteorite/graph/release release-static fast_http]]
+
+help.routes = [[Meteorite routes
+
+Usage:
+  meteorite routes [input] [--graph|--json]
+
+Lists the routes and messages a Meteorite app defines, straight from its
+normalized route graph -- no build required.
+
+Flags:
+  --graph, --json   Print the full route graph as JSON (meteorite.routes.v0)
+                    instead of the human-readable table
+
+Defaults:
+  input   src/main.lua
+
+Examples:
+  meteorite routes
+  meteorite routes src/main.lua
+  meteorite routes --json
+  meteorite routes fixtures/apps/basic-service/src/main.lua --graph]]
 
 help.sync = [[Meteorite sync
 

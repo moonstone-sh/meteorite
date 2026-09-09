@@ -2,7 +2,7 @@ manifest_version = 2
 
 [package]
 name = "moonstone/meteorite"
-version = "0.2.1"
+version = "0.2.2"
 kind = "bin"
 description = "Moonstone-zig service compiler prototype"
 
@@ -106,7 +106,7 @@ role = "tool"
 
 [[dependencies]]
 name = "moonstone/clingy"
-constraint = "^0.1.0"
+constraint = "^0.3.0"
 role = "runtime"
 
 [[dependencies]]

@@ -24,12 +24,12 @@ end
 local app
 app = c.create({
   name = "meteorite",
-  version = "0.2.1",
+  version = "0.2.2",
   description = "Moonstone-zig service compiler prototype",
 
   c.root(c.node({
     c.inherit(
-      c.flag("-h", "--help")
+      c.flag({ key = "help", aliases = { "-h", "--help" } })
     ),
 
     c.run(function(ctx)
@@ -42,7 +42,7 @@ app = c.create({
     end),
 
     init = c.node({
-      c.repeated(c.optional(c.arg("args", v.string()))),
+      c.arg({ key = "args", schema = v.string(), occurs = { min = 0, max = "many" } }),
       c.passthrough("argv"),
       c.run(function(ctx)
         if ctx.args.help then print_help("init"); return 0 end
@@ -52,7 +52,13 @@ app = c.create({
     }, { description = "Initialize a new Meteorite project" }),
 
     build = c.node({
-      c.repeated(c.optional(c.arg("args", v.string()))),
+      -- These flags are parsed here only so Clingy forwards the original
+      -- argv to build_request below.  Meteorite deliberately owns their
+      -- semantics there rather than duplicating defaults in its CLI schema.
+      c.option({ key = "mode", aliases = { "--mode" }, value = { schema = v.string() } }),
+      c.option({ key = "backend", aliases = { "--backend" }, value = { schema = v.string() } }),
+      c.option({ key = "lua_root", aliases = { "--lua-root" }, value = { schema = v.string() } }),
+      c.arg({ key = "args", schema = v.string(), occurs = { min = 0, max = "many" } }),
       c.passthrough("argv"),
       c.run(function(ctx)
         if ctx.args.help then print_help("build"); return 0 end
@@ -62,7 +68,7 @@ app = c.create({
     }, { description = "Build a Meteorite service" }),
 
     check = c.node({
-      c.repeated(c.optional(c.arg("args", v.string()))),
+      c.arg({ key = "args", schema = v.string(), occurs = { min = 0, max = "many" } }),
       c.passthrough("argv"),
       c.run(function(ctx)
         if ctx.args.help then print_help("check"); return 0 end
@@ -72,7 +78,12 @@ app = c.create({
     }, { description = "Check service graph and contracts" }),
 
     dev = c.node({
-      c.repeated(c.optional(c.arg("args", v.string()))),
+      -- See build above.  Without declaring these, Clingy rejects the
+      -- explicit behavior contract before dev_command can validate it.
+      c.option({ key = "mode", aliases = { "--mode" }, value = { schema = v.string() } }),
+      c.option({ key = "backend", aliases = { "--backend" }, value = { schema = v.string() } }),
+      c.option({ key = "lua_root", aliases = { "--lua-root" }, value = { schema = v.string() } }),
+      c.arg({ key = "args", schema = v.string(), occurs = { min = 0, max = "many" } }),
       c.passthrough("argv"),
       c.run(function(ctx)
         if ctx.args.help then print_help("dev"); return 0 end
@@ -82,7 +93,7 @@ app = c.create({
     }, { description = "Run service in development mode" }),
 
     doctor = c.node({
-      c.repeated(c.optional(c.arg("args", v.string()))),
+      c.arg({ key = "args", schema = v.string(), occurs = { min = 0, max = "many" } }),
       c.passthrough("argv"),
       c.run(function(ctx)
         if ctx.args.help then print_help("doctor"); return 0 end
@@ -92,7 +103,7 @@ app = c.create({
     }, { description = "Diagnose toolchain and environment" }),
 
     client = c.node({
-      c.repeated(c.optional(c.arg("args", v.string()))),
+      c.arg({ key = "args", schema = v.string(), occurs = { min = 0, max = "many" } }),
       c.passthrough("argv"),
       c.run(function(ctx)
         if ctx.args.help then print_help("client"); return 0 end
@@ -102,7 +113,7 @@ app = c.create({
     }, { description = "Generate Lua client" }),
 
     openapi = c.node({
-      c.repeated(c.optional(c.arg("args", v.string()))),
+      c.arg({ key = "args", schema = v.string(), occurs = { min = 0, max = "many" } }),
       c.passthrough("argv"),
       c.run(function(ctx)
         if ctx.args.help then print_help("openapi"); return 0 end
@@ -112,7 +123,7 @@ app = c.create({
     }, { description = "Export OpenAPI schema" }),
 
     ipc = c.node({
-      c.repeated(c.optional(c.arg("args", v.string()))),
+      c.arg({ key = "args", schema = v.string(), occurs = { min = 0, max = "many" } }),
       c.passthrough("argv"),
       c.run(function(ctx)
         if ctx.args.help then print_help("ipc"); return 0 end
@@ -122,7 +133,7 @@ app = c.create({
     }, { description = "Inspect IPC transports" }),
 
     routes = c.node({
-      c.repeated(c.optional(c.arg("args", v.string()))),
+      c.arg({ key = "args", schema = v.string(), occurs = { min = 0, max = "many" } }),
       c.passthrough("argv"),
       c.run(function(ctx)
         if ctx.args.help then print_help("routes"); return 0 end
@@ -132,7 +143,7 @@ app = c.create({
     }, { description = "List service routes" }),
 
     graph = c.node({
-      c.repeated(c.optional(c.arg("args", v.string()))),
+      c.arg({ key = "args", schema = v.string(), occurs = { min = 0, max = "many" } }),
       c.passthrough("argv"),
       c.run(function(ctx)
         if ctx.args.help then print_help("graph"); return 0 end
@@ -142,7 +153,7 @@ app = c.create({
     }, { description = "Generate service graph" }),
 
     sync = c.node({
-      c.repeated(c.optional(c.arg("args", v.string()))),
+      c.arg({ key = "args", schema = v.string(), occurs = { min = 0, max = "many" } }),
       c.passthrough("argv"),
       c.run(function(ctx)
         if ctx.args.help then print_help("sync"); return 0 end
@@ -152,11 +163,11 @@ app = c.create({
     }, { description = "Sync handler interfaces" }),
 
     invoke = c.node({
-      c.flag("--json"),
-      c.flag("--headers"),
-      c.repeated(c.option("-H", "--header", v.string())),
-      c.option("--body", v.string()),
-      c.repeated(c.optional(c.arg("args", v.string()))),
+      c.flag({ key = "json", aliases = { "--json" } }),
+      c.flag({ key = "headers", aliases = { "--headers" } }),
+      c.option({ key = "header", aliases = { "-H", "--header" }, value = { schema = v.string() }, occurs = { min = 0, max = "many" } }),
+      c.option({ key = "body", aliases = { "--body" }, value = { schema = v.string() } }),
+      c.arg({ key = "args", schema = v.string(), occurs = { min = 0, max = "many" } }),
       c.passthrough("argv"),
       c.run(function(ctx)
         if ctx.args.help then print_help("invoke"); return 0 end
@@ -166,7 +177,7 @@ app = c.create({
     }, { description = "Invoke a route directly" }),
 
     help = c.node({
-      c.optional(c.arg("topic", v.string())),
+      c.arg({ key = "topic", schema = v.string(), occurs = { min = 0, max = 1 } }),
       c.run(function(ctx)
         print_help(ctx.args.topic)
         return 0
@@ -185,4 +196,3 @@ local exit_code = app:run(argv)
 if exit_code and exit_code ~= 0 then
   os.exit(exit_code)
 end
-

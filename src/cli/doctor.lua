@@ -94,7 +94,14 @@ function doctor.run(deps)
   end
   add(exists("partiture.lua") and "ok" or "warn", "release partiture", exists("partiture.lua") and "partiture.lua" or "add partiture.lua for Ballad release exports")
   add("ok", "build behavior", "provided explicitly by Moonstone scripts or command arguments")
-  local port = os.getenv("METEORITE_DEV_PORT") or "8080"
+  -- Same resolution order as src/cli/dev.lua: explicit override, then the
+  -- project's real configured listen port from the generated graph's
+  -- listen.zon, then the 8080 literal only when no graph has been generated.
+  local function configured_listen_port()
+    local data = read_file(path_join(".meteorite/graph/current", "listen.zon"))
+    return data and data:match("%.port%s*=%s*(%d+)") or nil
+  end
+  local port = os.getenv("METEORITE_DEV_PORT") or configured_listen_port() or "8080"
   local listener = capture_command("lsof -tiTCP:" .. port .. " -sTCP:LISTEN 2>/dev/null | head -n 1")
   add(listener ~= "" and "warn" or "ok", "dev port " .. port, listener ~= "" and ("listener pid " .. listener:gsub("%s+$", "")) or "free")
 
