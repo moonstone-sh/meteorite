@@ -54,6 +54,10 @@ moon run build     # build the local server at dist/server
 moon run release   # materialize a deployable closure at dist/release
 ```
 
+The dev command stays in the foreground. Ctrl-C or Ctrl-D stops its compiler
+and server process group before returning the terminal; it does not leave the
+HTTP listener running in the background.
+
 ## Lua declares, Meteorite compiles
 
 The Lua surface is not the deployed service. It declares facts that Meteorite

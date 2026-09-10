@@ -7,7 +7,7 @@ local server = arg[6] or "dist/server"
 local state_dir = ".meteorite/dev"
 local pid_file = state_dir .. "/server.pid"
 local log_file = state_dir .. "/server.log"
-local guard_script = os.getenv("METEORITE_GUARD_SCRIPT") or "scripts/guard.sh"
+local session_id = os.getenv("CLINGY_SUPERVISOR_PID")
 local explicit_dev_port = os.getenv("METEORITE_DEV_PORT")
 local meteorite_cli = os.getenv("METEORITE_CLI") or "src/cli/main.lua"
 local build_command_override = os.getenv("METEORITE_BUILD_COMMAND")
@@ -113,24 +113,15 @@ local function resolve_dev_port()
   return explicit_dev_port or graph_listen_port() or "8080"
 end
 
-local function guard(command)
-  if not path_exists(guard_script) then return false end
-  local env = table.concat({
-    "METEORITE_DEV_STATE_DIR=" .. shell_quote(state_dir),
-    "METEORITE_DEV_PID_FILE=" .. shell_quote(pid_file),
-    "METEORITE_DEV_PORT=" .. shell_quote(resolve_dev_port()),
-    "METEORITE_DEV_SERVER=" .. shell_quote(server),
-  }, " ")
-  return run(env .. " " .. shell_quote(guard_script) .. " " .. shell_quote(command))
-end
-
 local function pid_running(pid)
   return pid ~= nil and quiet_run("kill -0 " .. tostring(pid) .. " >/dev/null 2>&1")
 end
 
 local function current_server_pid()
-  local pid = read_file(pid_file)
-  return pid and pid:match("%d+") or nil
+  local record = read_file(pid_file) or ""
+  local pid, owner = record:match("^(%d+)\n(%d+)\n$")
+  if owner == session_id then return pid end
+  return nil
 end
 
 local function server_running()
@@ -138,16 +129,15 @@ local function server_running()
 end
 
 stop_server = function()
-  -- Capture PID before guard cleanup removes the PID file
+  -- Only this active Clingy session may stop its recorded server. Stale PID
+  -- files and listeners belonging to another project confer no ownership.
   local pid = current_server_pid()
-  if path_exists(guard_script) then
-    local env = table.concat({
-      "METEORITE_DEV_STATE_DIR=" .. shell_quote(state_dir),
-      "METEORITE_DEV_PID_FILE=" .. shell_quote(pid_file),
-      "METEORITE_DEV_PORT=" .. shell_quote(resolve_dev_port()),
-      "METEORITE_DEV_SERVER=" .. shell_quote(server),
-    }, " ")
-    os.execute(env .. " " .. shell_quote(guard_script) .. " cleanup >/dev/null 2>&1 || true")
+  if pid and pid_running(pid) then
+    os.execute("kill -TERM " .. pid .. " >/dev/null 2>&1")
+    for _ = 1, 20 do
+      if not pid_running(pid) then break end
+      os.execute("sleep 0.1")
+    end
   end
   if pid and pid_running(pid) then
     os.execute("kill -9 " .. tostring(pid) .. " >/dev/null 2>&1 || true")
@@ -156,10 +146,10 @@ stop_server = function()
 end
 
 local function start_server()
-  if not guard("assert-free") then stop_server() end
+  stop_server()
   local command = "(trap - INT TERM HUP; exec " .. shell_quote(server) .. ") >" .. shell_quote(log_file) .. " 2>&1 & echo $!"
   local pid = capture(command):match("%d+")
-  if pid then write_file(pid_file, pid .. "\n") end
+  if pid then write_file(pid_file, pid .. "\n" .. session_id .. "\n") end
   local is_up = false
   for _ = 1, 5 do
     os.execute("sleep 0.1")
@@ -169,7 +159,7 @@ local function start_server()
     end
   end
   if not is_up then
-    io.stderr:write("Meteorite dev server failed to stay running; see " .. log_file .. "\n")
+    error("Meteorite dev server failed to stay running; see " .. log_file)
   else
     io.stderr:write("Meteorite dev server: http://127.0.0.1:" .. resolve_dev_port() .. " pid=" .. tostring(pid or "?") .. " log=" .. log_file .. "\n")
   end
@@ -283,6 +273,9 @@ if input == "--classify-partitions" then
   return
 end
 
+assert(os.getenv("CLINGY_SUPERVISED") == "1" and session_id,
+  "dev.lua requires a Clingy-owned session; use meteorite dev or scripts/watch.sh")
+
 mkdir_p(state_dir)
 
 if prebuilt then
@@ -293,7 +286,7 @@ else
   io.stderr:write("Meteorite dev: watching src/, zig/, build.zig, moonstone.toml\n")
 end
 io.stderr:write("Meteorite dev: mode=" .. mode .. " build_args=" .. build_args .. "\n")
-io.stderr:write("Press Ctrl-C to stop.\n")
+io.stderr:write("Press Ctrl-C or Ctrl-D to stop.\n")
 
 if prebuilt then
   stop_server()

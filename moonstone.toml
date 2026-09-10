@@ -2,7 +2,7 @@ manifest_version = 2
 
 [package]
 name = "moonstone/meteorite"
-version = "0.2.2"
+version = "0.2.3"
 kind = "bin"
 description = "Moonstone-zig service compiler prototype"
 
@@ -26,7 +26,7 @@ test-release-smoke = "bash fixtures/tests/release-smoke.sh"
 test-ipc-backends = "bash fixtures/tests/ipc-backends.sh"
 build-examples = "moon exec ballad -- play examples_partiture.lua"
 bench-public = "bash bench/run.sh --mode=public \"$@\""
-dev = "moon exec ballad -- play Watch_partiture.lua -- --mode hybrid_dev --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers"
+dev = "sh scripts/watch.sh --mode hybrid_dev --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers"
 run = "zig build -Dgraph-input=fixtures/apps/showcase-service/src/main.lua -Dgraph-output=.meteorite/graph/current run"
 build-dev = "moon exec ballad -- play Dev_partiture.lua -- --mode hybrid_dev --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers"
 test-all = "bash tests/run-all.sh && bash tests/build-api-native.sh && bash fixtures/tests/ipc-backends.sh"
@@ -106,7 +106,7 @@ role = "tool"
 
 [[dependencies]]
 name = "moonstone/clingy"
-constraint = "^0.3.0"
+constraint = "^0.5.0"
 role = "runtime"
 
 [[dependencies]]
@@ -126,4 +126,3 @@ name = "luasql-sqlite3"
 constraint = "2.8.0-1"
 registry = "rocks"
 role = "runtime"
-

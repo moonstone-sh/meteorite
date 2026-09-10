@@ -25,15 +25,24 @@ else
 fi
 
 if [ "${1:-}" = "dev" ]; then
-  METEORITE_DEV_PREPARE_ONLY=1 "${LUA_BIN:-lua}" "$entry" "$@"
+  dev_help=0
+  for arg in "$@"; do
+    case "$arg" in
+      -h|--help) dev_help=1 ;;
+    esac
+  done
 
-  supervisor="$PWD/.meteorite/dev/supervisor.sh"
-  if [ ! -f "$supervisor" ]; then
-    echo "meteorite: dev supervisor was not created: $supervisor" >&2
-    exit 1
+  if [ "$dev_help" -eq 0 ]; then
+    METEORITE_DEV_PREPARE_ONLY=1 "${LUA_BIN:-lua}" "$entry" "$@"
+
+    supervisor="$PWD/.meteorite/dev/supervisor.sh"
+    if [ ! -f "$supervisor" ]; then
+      echo "meteorite: dev supervisor was not created: $supervisor" >&2
+      exit 1
+    fi
+
+    exec bash "$supervisor"
   fi
-
-  exec sh "$supervisor"
 fi
 
 LUA_PATH="$meteorite_src/?.lua;$meteorite_src/?/init.lua;${LUA_PATH:-;;}" exec "${LUA_BIN:-lua}" "$entry" "$@"

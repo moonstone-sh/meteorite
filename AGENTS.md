@@ -139,7 +139,8 @@ meteorite/
 ├── scripts/
 │   ├── build-target-lua.sh    ← Cross-compile PUC Lua from source with zig cc
 │   ├── build-lua-cmodule.sh   ← Cross-compile Lua C modules with zig cc + luarocks
-│   └── guard.sh               ← Dev supervisor port/process cleanup
+│   ├── watch.sh               ← Clingy-owned Ballad watcher launcher
+│   └── guard.sh               ← Explicit manual process-recovery utility
 │
 ├── templates/
 │   ├── project/               ← Default minimal hybrid app template
@@ -335,12 +336,15 @@ The dev supervisor (`src/cli/dev.lua`) is partition-aware:
 - **Route shape / Zig / build-affecting changes** → rebuild graph + server, restart
 - **Graph/build failure** → keep previous server alive
 
-`scripts/guard.sh` manages port cleanup and stale process termination:
+Clingy owns the dev process group and handles Ctrl-C, Ctrl-D, TERM, HUP,
+parent loss, and bounded shutdown. Automatic startup and shutdown never scan
+process names or ports. `scripts/guard.sh` is reserved for deliberate manual
+recovery after inspecting the affected session:
 
 ```bash
 scripts/guard.sh status      # Show tracked and port-listening processes
-scripts/guard.sh handoff     # Cleanup old supervisors, assert port is free
-scripts/guard.sh cleanup     # Terminate stale dev servers
+scripts/guard.sh handoff     # Explicitly clean stale sessions and assert the port
+scripts/guard.sh cleanup     # Explicitly terminate tracked/listening dev servers
 ```
 
 ### Smoke Test

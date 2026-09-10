@@ -24,7 +24,7 @@ end
 local app
 app = c.create({
   name = "meteorite",
-  version = "0.2.2",
+  version = "0.2.3",
   description = "Moonstone-zig service compiler prototype",
 
   c.root(c.node({

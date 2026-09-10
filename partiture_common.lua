@@ -92,6 +92,7 @@ function common.dev_server_command(request)
     .. " "
     .. common.dev.graph_output
     .. " " .. request.mode
+    .. " " .. request.backend
     .. " " .. shell_quote(build_args)
 end
 
@@ -137,7 +138,6 @@ end
 ---@return WatcherOptions options Polling, debounce, cleanup, and CI once-mode configuration.
 function common.dev_watch_options()
   return {
-    cleanup = "scripts/guard.sh cleanup >/dev/null 2>&1 || true; scripts/guard.sh cleanup-sessions >/dev/null 2>&1 || true",
     interval = 0.5,
     debounce = 0.15,
     once = os.getenv("BALLAD_WATCH_ONCE") == "1",
@@ -146,7 +146,7 @@ end
 
 ---@return string command Guard handoff performed before the initial declared action.
 function common.dev_bootstrap_command()
-  return "METEORITE_GUARD_EXCLUDE_PID=$PPID scripts/guard.sh handoff"
+  return "test -n \"$CLINGY_SUPERVISOR_PID\""
 end
 
 return common

@@ -3,69 +3,33 @@ package.path = "src/?.lua;src/?/init.lua;tests/?.lua;" .. package.path
 local test = require("test")
 local dev_command = require("cli.dev_command")
 
-test("dev_command prepares supervisor script for the package launcher", function()
-  local ran_command = nil
-  local written_file = nil
-  local written_content = nil
-  local mock_deps = {
+test("dev command gives Clingy the complete session ownership contract", function()
+  local prepared, written, ran
+  dev_command.run({ "dev", "--mode", "hybrid", "--backend", "fast_http" }, {
     shell_quote = function(v) return "'" .. tostring(v) .. "'" end,
     current_dir = function() return "/tmp/mock-project" end,
-    package_cli_file = function() return "/tmp/mock-meteorite/cli/main.lua" end,
-    package_build_file = function() return "/tmp/mock-meteorite/build.zig" end,
-    package_dev_file = function() return "/tmp/mock-meteorite/cli/dev.lua" end,
-    package_guard_file = function() return "/tmp/mock-meteorite/scripts/guard.sh" end,
-    read_file = function() return "lua" end,
+    package_cli_file = function() return "/pkg/cli/main.lua" end,
+    package_build_file = function() return "/pkg/build.zig" end,
+    package_dev_file = function() return "/pkg/cli/dev.lua" end,
+    read_file = function() return true end,
     prepare_only = true,
-    write_file = function(path, content)
-      written_file = path
-      written_content = content
-    end,
-    run_command = function(cmd)
-      ran_command = cmd
-      return true
-    end,
-    build_request = {
-      parse = function() return { mode = "hybrid", backend = "fast_http" } end,
-      require_behavior = function() end,
-      to_build_flags = function() return {} end,
-    },
-  }
-
-  dev_command.run({ "dev" }, mock_deps)
-
-  -- Assert script was written to file
-  test.assert_true(written_file ~= nil, "write_file should have been called")
-  test.assert_true(written_file:find("supervisor%.sh") ~= nil, "script file should be supervisor.sh")
-  test.assert_true(written_content ~= nil, "script content should not be nil")
-
-  -- The package launcher execs this script after Lua preflight so the shell,
-  -- rather than os.execute(), owns terminal signals.
-  test.assert_true(ran_command == nil, "preflight should not invoke the supervisor through Lua")
-
-  -- Assert trap structure in script content
-  local script = written_content
-  test.assert_true(script:find("trap 'on_signal SIGINT 130' INT") ~= nil, "should trap INT with 130")
-  test.assert_true(script:find("trap 'on_signal SIGTERM 143' TERM") ~= nil, "should trap TERM with 143")
-  test.assert_true(script:find("trap 'on_signal SIGHUP 129' HUP") ~= nil, "should trap HUP with 129")
-  test.assert_true(script:find("trap 'cleanup' EXIT") ~= nil, "should trap EXIT")
-
-  -- Assert signal logging
-  test.assert_true(script:find("caught $sig_name; shutting down") ~= nil, "should log caught signal")
-  test.assert_true(script:find("trap %- INT TERM HUP") ~= nil, "should disable signals on trap entry")
-
-  -- Assert idempotency guard
-  test.assert_true(script:find("cleanup_done=0") ~= nil, "should initialize cleanup_done guard")
-  test.assert_true(script:find("cleanup_done=1") ~= nil, "should set cleanup_done inside cleanup")
-
-  -- Assert ordered cleanup logging and guard invocations
-  test.assert_true(script:find("stopping supervisor") ~= nil, "should log stopping supervisor")
-  test.assert_true(script:find("shutting down Meteorite dev server PID=") ~= nil, "should log the server PID during shutdown")
-  test.assert_true(script:find("cleaning up server processes") ~= nil, "should log cleaning server processes")
-  test.assert_true(script:find("cleaning up stale sessions") ~= nil, "should log cleaning stale sessions")
-  test.assert_true(script:find('"$GUARD" cleanup') ~= nil, "should run guard cleanup")
-  test.assert_true(script:find('"$GUARD" cleanup%-sessions') ~= nil, "should run guard cleanup-sessions")
-  test.assert_true(script:find('"$GUARD" assert%-stopped') ~= nil, "should run guard assert-stopped")
-  test.assert_true(script:find("cleanup complete") ~= nil, "should log cleanup complete")
+    process = { supervisor_script = function(opts) prepared = opts; return "generated supervisor" end },
+    write_file = function(path, content) written = { path, content } end,
+    run_command = function(cmd) ran = cmd; return true end,
+    build_request = require("meteorite.build_request"),
+  })
+  test.assert_true(prepared ~= nil, "Clingy receives the session")
+  test.assert_eq(prepared.cwd, "/tmp/mock-project")
+  test.assert_eq(prepared.argv[2], "/pkg/cli/dev.lua")
+  test.assert_eq(prepared.argv[5], "hybrid")
+  test.assert_eq(prepared.argv[6], "fast_http")
+  test.assert_true(prepared.stdin_eof, "terminal EOF requests shutdown")
+  test.assert_eq(prepared.lock_dir, "/tmp/mock-project/.meteorite/dev/session.lock")
+  test.assert_table_eq(prepared.cleanup_files, { "/tmp/mock-project/.meteorite/dev/server.pid" })
+  test.assert_eq(prepared.env.METEORITE_CLI, "/pkg/cli/main.lua")
+  test.assert_eq(prepared.env.METEORITE_BUILD_COMMAND, prepared.argv[7])
+  test.assert_table_eq(written, { "/tmp/mock-project/.meteorite/dev/supervisor.sh", "generated supervisor" })
+  test.assert_eq(ran, nil, "preflight must allow the package launcher to exec the owner")
 end)
 
 test.run()

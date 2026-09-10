@@ -1,6 +1,9 @@
 local ballad = require("ballad")
 local common = require("partiture_common")
 
+assert(os.getenv("CLINGY_SUPERVISED") == "1",
+  "Watch_partiture.lua requires session ownership; use moon run dev or sh scripts/watch.sh")
+
 return ballad.partiture(function(p)
   local watcher = p:use(ballad.plugins.watcher)
   local request = common.request(p)

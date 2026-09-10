@@ -49,6 +49,7 @@ test "dev command passes mode and backend to dev supervisor" (function()
   local dev_command = require("cli.dev_command")
   local captured_command = nil
   local written_content = nil
+  local supervisor_argv = nil
   dev_command.run({ "dev", "--mode", "hybrid", "--backend", "fast_http" }, {
     shell_quote = function(val) return "'" .. tostring(val) .. "'" end,
     build_request = request,
@@ -58,12 +59,14 @@ test "dev command passes mode and backend to dev supervisor" (function()
     package_build_file = function() return "build.zig" end,
     package_dev_file = function() return "src/cli/dev.lua" end,
     read_file = function() return nil end,
+    process = { supervisor_script = function(opts) supervisor_argv = opts.argv; return "supervisor" end },
     write_file = function(_, content) written_content = content end,
     run_command = function(cmd) captured_command = cmd; return true end,
   })
   test.assert_true(captured_command ~= nil, "command captured")
   test.assert_true(written_content ~= nil, "script written")
-  test.assert_true(written_content:find("'src/cli/dev.lua' '/app/src/main.lua' '/app/.meteorite/graph/current' 'hybrid' 'fast_http'", 1, true) ~= nil, "passes backend to dev.lua")
+  test.assert_eq(supervisor_argv[5], "hybrid")
+  test.assert_eq(supervisor_argv[6], "fast_http")
 end)
 
 test.run()
