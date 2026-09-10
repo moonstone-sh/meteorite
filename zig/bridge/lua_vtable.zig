@@ -12,6 +12,9 @@ pub const VTable = struct {
     json: *const fn (ctx: *anyopaque, status: u16, body: []const u8) anyerror!void,
     bytes: *const fn (ctx: *anyopaque, status: u16, content_type: []const u8, body: []const u8) anyerror!void,
     bytes_with_headers: *const fn (ctx: *anyopaque, status: u16, content_type: []const u8, body: []const u8, headers: []const Header) anyerror!void,
+    begin_stream: *const fn (ctx: *anyopaque, status: u16, content_type: []const u8) anyerror!void,
+    write_chunk: *const fn (ctx: *anyopaque, chunk: []const u8) anyerror!void,
+    end_stream: *const fn (ctx: *anyopaque) anyerror!void,
     body: *const fn (ctx: *anyopaque) anyerror![]const u8,
     param: *const fn (ctx: *anyopaque, name: []const u8) ?[]const u8,
     param_at: *const fn (ctx: *anyopaque, index: usize) ?[]const u8,
@@ -54,6 +57,24 @@ pub fn makeVTable(comptime Ctx: type) VTable {
             fn f(ptr: *anyopaque, status: u16, content_type: []const u8, body: []const u8, headers: []const Header) !void {
                 const typed: *Ctx = @ptrCast(@alignCast(ptr));
                 return typed.bytesWithHeaders(status, content_type, body, headers);
+            }
+        }.f,
+        .begin_stream = struct {
+            fn f(ptr: *anyopaque, status: u16, content_type: []const u8) !void {
+                const typed: *Ctx = @ptrCast(@alignCast(ptr));
+                return typed.beginStream(status, content_type);
+            }
+        }.f,
+        .write_chunk = struct {
+            fn f(ptr: *anyopaque, chunk: []const u8) !void {
+                const typed: *Ctx = @ptrCast(@alignCast(ptr));
+                return typed.writeChunk(chunk);
+            }
+        }.f,
+        .end_stream = struct {
+            fn f(ptr: *anyopaque) !void {
+                const typed: *Ctx = @ptrCast(@alignCast(ptr));
+                return typed.endStream();
             }
         }.f,
         .body = struct {

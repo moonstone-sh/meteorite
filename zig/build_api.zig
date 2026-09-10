@@ -23,7 +23,7 @@ pub const Options = struct {
     meteorite_cli: ?[]const u8 = null,
     graph_input: []const u8 = "src/main.lua",
     graph_output: []const u8 = ".meteorite/graph/current",
-    lua_root: []const u8 = ".moonstone/env/libexec/lua/files",
+    lua_root: []const u8 = ".moonstone/env/libexec/lua",
     hybrid_profile: []const u8 = "default",
     backend: []const u8 = "fast_http",
     fast_http_strategy: []const u8 = "threaded_probe",
@@ -111,11 +111,6 @@ pub fn addService(b: *std.Build, options: Options) Service {
     const mode = options.mode;
     const project_root = options.project_root;
     const meteorite_root = options.meteorite_root;
-    const default_meteorite_cli = if (cwdFileExists(b, join(b, &.{ meteorite_root, "cli/main.lua" })))
-        join(b, &.{ meteorite_root, "cli/main.lua" })
-    else
-        join(b, &.{ meteorite_root, "src/cli/main.lua" });
-    const meteorite_cli = options.meteorite_cli orelse default_meteorite_cli;
     const graph_input = options.graph_input;
     const graph_output = options.graph_output;
     const lua_root = options.lua_root;
@@ -154,7 +149,23 @@ pub fn addService(b: *std.Build, options: Options) Service {
     const project_graph_input = projectPath(b, project_root, graph_input);
     const project_graph_output = projectPath(b, project_root, graph_output);
     const project_lua_root = projectPath(b, project_root, lua_root);
-    const graph_step = b.addSystemCommand(&.{ join(b, &.{ project_root, ".moonstone/env/bin/lua" }), meteorite_cli, "graph", project_graph_input, project_graph_output, mode, backend });
+    const default_meteorite_cli = if (cwdFileExists(b, join(b, &.{ meteorite_root, "cli/main.lua" })))
+        join(b, &.{ meteorite_root, "cli/main.lua" })
+    else if (cwdFileExists(b, join(b, &.{ meteorite_root, "src/cli/main.lua" })))
+        join(b, &.{ meteorite_root, "src/cli/main.lua" })
+    else
+        null;
+    const meteorite_cli = options.meteorite_cli orelse default_meteorite_cli;
+
+    // A consumer's Lua runtime is for its application graph, not for the
+    // Meteorite CLI itself. Invoke the declared development tool so Moonstone
+    // selects Meteorite's own scoped runtime and tool dependencies (clingy,
+    // etc.). An explicit CLI path remains available for standalone/custom
+    // embedding callers that deliberately manage that environment themselves.
+    const graph_step = if (meteorite_cli) |cli|
+        b.addSystemCommand(&.{ join(b, &.{ project_root, ".moonstone/env/bin/lua" }), cli, "graph", project_graph_input, project_graph_output, mode, backend })
+    else
+        b.addSystemCommand(&.{ "moon", "exec", "--dev", "meteorite", "graph", graph_input, graph_output, mode, backend });
 
     // Generated build metadata so the server can report exactly what was compiled.
     const build_info_content = std.fmt.allocPrint(b.allocator,
@@ -345,7 +356,14 @@ pub fn addService(b: *std.Build, options: Options) Service {
     if (lua_runtime) {
         bridge_module.addIncludePath(cwdPath(join(b, &.{ project_lua_root, "include" })));
         bridge_module.addLibraryPath(cwdPath(join(b, &.{ project_lua_root, "lib" })));
-        bridge_module.linkSystemLibrary("lua", .{});
+        // Moonstone names the LuaJIT archive libluajit-5.1.a while PUC Lua
+        // is liblua.a. The project runtime is explicit, so choose the
+        // corresponding link name from its materialized root.
+        const lua_library = if (std.mem.indexOf(u8, lua_root, "luajit") != null) "luajit-5.1" else "lua";
+        if (std.mem.indexOf(u8, lua_root, "luajit") != null) {
+            bridge_module.addIncludePath(cwdPath(join(b, &.{ project_lua_root, "include", "luajit-2.1" })));
+        }
+        bridge_module.linkSystemLibrary(lua_library, .{});
         bridge_module.linkSystemLibrary("m", .{});
     }
 

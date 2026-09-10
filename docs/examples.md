@@ -155,20 +155,47 @@ inline Lua handler:
 
 | First param | `arg_mode`         | Context shape                                   |
 |-------------|--------------------|-------------------------------------------------|
-| `ctx` / `c` | `lazy_context`     | Methods only: `ctx:query()`, `ctx:param()`, etc. |
-| `req`       | `request_table`    | Pre-populated tables: `req.query.name`, `req.params.name` |
+| `ctx` / `c` / `context` | `lazy_context` | Methods **and** declared tables: `ctx:param("id")`, `ctx.params.id`, `ctx.query.page` |
+| `req` / `request` | `request_table` | Methods and tables, plus `req.scope`            |
 | (none)      | `no_args`          | No context passed                               |
 | other       | `direct_params`    | Positional path-param arguments                 |
 
-**Recommended**: use `ctx` or `c` as the first parameter. The `lazy_context`
-mode gives you method-based access that works identically in compiled runtime
-and local `meteorite invoke`:
+Only the first parameter's *name* is inspected, never its use, so a handler
+whose first parameter is named anything outside the lists above and whose
+arity equals the route's path-param count receives **positional params**, not a
+context. Any context-shaped name (`c`, `ctx`, `context`) is always safe.
+
+**Recommended**: use `ctx` or `c` as the first parameter — it is what the
+generated LuaLS types (`.meteorite/aids/lua/`) annotate, so it is the form that
+gets per-route param and query typing in the editor:
 
 ```lua
 app:get("/users/:id", { params = { id = m.u64() } }, function(ctx)
-  return ctx:json({ id = ctx:param("id") })
+  -- ctx.params.id is a real Lua number, typed `integer` by the generated aids
+  return ctx:json({ id = ctx.params.id, next = ctx.params.id + 1 })
 end)
 ```
+
+### Declared Values Arrive Schema-Typed
+
+A path param or query field that a route **declares** in its schema is
+validated and then converted to the Lua type that schema implies, so it
+matches the generated LuaCATS annotation:
+
+| Schema type | Lua type in `c.params` / `c.query` |
+|-------------|------------------------------------|
+| `m.u64()`, `m.i32()` | `number` (a real integer, so `c.params.id == 42` holds) |
+| `m.bool()`  | `boolean` (`true` for `"true"`/`"1"`, `false` for `"false"`/`"0"`) |
+| everything else | `string` |
+
+An **optional** query field that the request omits is left unset, so it reads
+back as a real `nil` — matching the `|nil` in its generated type.
+
+The method accessors return the **raw, unconverted** string instead:
+`c:param("id")` is `"42"` while `c.params.id` is `42`. Use the table form when
+you want the declared type, the method form when you want the raw text or the
+route did not declare the field. A `u64` too large to fit a Lua integer stays a
+string rather than silently wrapping to a negative number.
 
 ### String Return Sugar
 

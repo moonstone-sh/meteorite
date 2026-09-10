@@ -1,7 +1,0 @@
-source=registry
-key=registry:https://registry.moonstone.sh/registry/v0:index.toml
-url=https://registry.moonstone.sh/registry/v0/index.toml
-fetched_at=1787421618
-ttl_seconds=86400
-hash=b3:cb62f47d47c68357de0591c1442ca6eb3a6883866411dd73354976f2d874e73f
-payload_path=/Users/extrordinaire/Workbench/user/meteorite/.moonstone-home/cache/manifests/registry/https_3a_2f_2fregistry.moonstone.sh_2fregistry_2fv0/index.toml

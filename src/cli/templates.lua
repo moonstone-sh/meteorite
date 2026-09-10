@@ -514,7 +514,7 @@ function handler_sync.project_build_zig()
     "        .backend = backend,",
     "        .graph_input = b.option([]const u8, \"graph-input\", \"Meteorite app entry\") orelse \"src/main.lua\",",
     "        .graph_output = b.option([]const u8, \"graph-output\", \"Meteorite graph output\") orelse \".meteorite/graph/current\",",
-    "        .lua_root = b.option([]const u8, \"lua-root\", \"Lua runtime root\") orelse \".moonstone/env/libexec/lua/files\",",
+    "        .lua_root = b.option([]const u8, \"lua-root\", \"Lua runtime root\") orelse \".moonstone/env/libexec/lua\",",
     "        .hybrid_profile = b.option([]const u8, \"hybrid-profile\", \"Meteorite hybrid profile\") orelse \"default\",",
     "        .router_dispatch = b.option([]const u8, \"router-dispatch\", \"Meteorite router dispatch\") orelse \"method_buckets\",",
     "        .unix_socket_path = b.option([]const u8, \"unix-socket-path\", \"Unix socket path\") orelse \"/tmp/meteorite.sock\",",

@@ -63,6 +63,7 @@ pub fn build(b: *std.Build) void {
     const answer = b.dependency("answer", .{ .target = target, .optimize = optimize });
     const service = meteorite.addService(b, .{
         .meteorite_root = ".moonstone/env/libexec/meteorite/files/meteorite",
+        .meteorite_cli = ".moonstone/env/libexec/meteorite/files/meteorite/src/cli/main.lua",
         .target = target,
         .optimize = optimize,
         .mode = b.option([]const u8, "mode", "Meteorite build mode") orelse "release-static",

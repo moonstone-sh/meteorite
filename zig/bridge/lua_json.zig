@@ -1,6 +1,7 @@
 const std = @import("std");
 const c_imports = @import("c_imports.zig");
 const c = c_imports.c;
+const lua_abi = @import("lua_abi.zig");
 
 /// Encode a Lua value at the given stack index as JSON into an ArrayList.
 pub fn encodeLuaValue(L: ?*c.lua_State, idx: c_int, list: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator) !void {
@@ -12,10 +13,10 @@ pub fn encodeLuaValue(L: ?*c.lua_State, idx: c_int, list: *std.ArrayListUnmanage
         c.LUA_TNIL => try list.appendSlice(allocator, "null"),
         c.LUA_TBOOLEAN => try list.appendSlice(allocator, if (c.lua_toboolean(L, abs_idx) != 0) "true" else "false"),
         c.LUA_TNUMBER => {
-            const buf = if (c.lua_isinteger(L, abs_idx) != 0)
-                try std.fmt.allocPrint(allocator, "{d}", .{c.lua_tointegerx(L, abs_idx, @as([*c]c_int, null))})
+            const buf = if (lua_abi.isInteger(L, abs_idx))
+                try std.fmt.allocPrint(allocator, "{d}", .{lua_abi.toInteger(L, abs_idx)})
             else
-                try std.fmt.allocPrint(allocator, "{d}", .{c.lua_tonumberx(L, abs_idx, @as([*c]c_int, null))});
+                try std.fmt.allocPrint(allocator, "{d}", .{lua_abi.toNumber(L, abs_idx)});
             defer allocator.free(buf);
             try list.appendSlice(allocator, buf);
         },
@@ -27,7 +28,7 @@ pub fn encodeLuaValue(L: ?*c.lua_State, idx: c_int, list: *std.ArrayListUnmanage
             try list.appendSlice(allocator, "\"");
         },
         c.LUA_TTABLE => {
-            const len = c.lua_rawlen(L, abs_idx);
+            const len = lua_abi.rawLen(L, abs_idx);
             if (len > 0) {
                 try list.appendSlice(allocator, "[");
                 var i: usize = 1;

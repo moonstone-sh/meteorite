@@ -13,7 +13,7 @@ pub fn build(b: *std.Build) void {
         .meteorite_cli = b.option([]const u8, "meteorite-cli", "Meteorite CLI Lua entrypoint"),
         .graph_input = b.option([]const u8, "graph-input", "Meteorite app entry Lua file") orelse "src/main.lua",
         .graph_output = b.option([]const u8, "graph-output", "Generated Meteorite graph directory") orelse ".meteorite/graph/current",
-        .lua_root = b.option([]const u8, "lua-root", "Lua runtime root with include/ and lib/") orelse ".moonstone/env/libexec/lua/files",
+        .lua_root = b.option([]const u8, "lua-root", "Lua runtime root with include/ and lib/") orelse ".moonstone/env/libexec/lua",
         .hybrid_profile = b.option([]const u8, "hybrid-profile", "Hybrid profile") orelse "default",
         .backend = b.option([]const u8, "backend", "Meteorite backend: ipc_unixsocket, ipc_unixsocket_http, std_http, or fast_http") orelse "fast_http",
         .fast_http_strategy = b.option([]const u8, "fast-http-strategy", "fast_http strategy: threaded_probe or pool") orelse "threaded_probe",

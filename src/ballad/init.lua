@@ -208,6 +208,7 @@ return {
       asset.kind = "meteorite_server"
       asset.metadata = asset.metadata or {}
       asset.metadata.mode = release_mode
+      asset.metadata.executable = true
       assets:add(asset)
     end
     assets:add(ctx.graph:add_asset({

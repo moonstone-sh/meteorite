@@ -315,6 +315,42 @@ pub fn respondBytesWithHeaders(req: *Request, status: u16, content_type: []const
     req.close_after_response = !req.keep_alive;
 }
 
+// --- Minimal streaming response primitive -----------------------------
+// See std_http.zig's copy of this comment for the full rationale: chunked
+// transfer-encoding, no coroutines needed, backpressure comes from the
+// same blocking req.writer.interface.flush() every buffered response here
+// already uses.
+pub fn beginStream(req: *Request, status: u16, content_type: []const u8) !void {
+    const reason = proto.reasonPhrase(status);
+    const connection = if (req.keep_alive) "keep-alive" else "close";
+    const date = http_date.formatHttpDate(req.date_seconds);
+    var header_buffer: [4096]u8 = undefined;
+    var stream = std.Io.Writer.fixed(&header_buffer);
+    try stream.print("HTTP/1.1 {d} {s}\r\ncontent-type: {s}\r\ntransfer-encoding: chunked\r\nconnection: {s}\r\ndate: {s}\r\n\r\n", .{ status, reason, content_type, connection, date });
+    const headers = stream.buffered();
+    try req.writer.interface.writeAll(headers);
+    try req.writer.interface.flush();
+    proto.add(&counters.bytes_written, headers.len);
+}
+
+pub fn writeChunk(req: *Request, chunk: []const u8) !void {
+    if (chunk.len == 0) return;
+    var size_buffer: [18]u8 = undefined;
+    const size_line = try std.fmt.bufPrint(&size_buffer, "{x}\r\n", .{chunk.len});
+    try req.writer.interface.writeAll(size_line);
+    try req.writer.interface.writeAll(chunk);
+    try req.writer.interface.writeAll("\r\n");
+    try req.writer.interface.flush();
+    proto.add(&counters.bytes_written, size_line.len + chunk.len + 2);
+}
+
+pub fn endStream(req: *Request) !void {
+    try req.writer.interface.writeAll("0\r\n\r\n");
+    try req.writer.interface.flush();
+    proto.inc(&counters.requests_served);
+    req.close_after_response = !req.keep_alive;
+}
+
 pub fn respondStatic(req: *Request, status: u16, content_type: []const u8, content_length: u64, cache_control: []const u8, etag: []const u8, content_encoding: ?[]const u8, body: []const u8, head_only: bool) !void {
     const reason = proto.reasonPhrase(status);
     var response_buffer: [16384]u8 = undefined;

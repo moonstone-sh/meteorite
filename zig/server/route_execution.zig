@@ -11,8 +11,8 @@ pub fn Execution(comptime graph: anytype, comptime lua_runtime: anytype, comptim
                     graph.LuaFileHandler => handler.path,
                     else => @compileError("unsupported Lua handler type"),
                 },
-                .nparams = if (@TypeOf(handler) == graph.InlineLuaHandler) handler.nparams else 1,
-                .arg_mode = if (@TypeOf(handler) == graph.InlineLuaHandler) handler.arg_mode else .request_table,
+                .nparams = handler.nparams,
+                .arg_mode = handler.arg_mode,
             }, ctx);
         }
 

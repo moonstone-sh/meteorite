@@ -39,3 +39,35 @@ pub inline fn getStatusInt(L: *c.lua_State, idx: c_int, default: u16) u16 {
     }
     return default;
 }
+
+pub inline fn isInteger(L: ?*c.lua_State, idx: c_int) bool {
+    return switch (comptime lua_abi) {
+        .lua_5_4 => c.lua_isinteger(L, idx) != 0,
+        .lua_5_1 => c.lua_isnumber(L, idx) != 0,
+        else => @compileError("Undefined ABI layout: " ++ @tagName(lua_abi)),
+    };
+}
+
+pub inline fn toInteger(L: ?*c.lua_State, idx: c_int) c.lua_Integer {
+    return switch (comptime lua_abi) {
+        .lua_5_4 => c.lua_tointegerx(L, idx, null),
+        .lua_5_1 => c.lua_tointeger(L, idx),
+        else => @compileError("Undefined ABI layout: " ++ @tagName(lua_abi)),
+    };
+}
+
+pub inline fn toNumber(L: ?*c.lua_State, idx: c_int) c.lua_Number {
+    return switch (comptime lua_abi) {
+        .lua_5_4 => c.lua_tonumberx(L, idx, null),
+        .lua_5_1 => c.lua_tonumber(L, idx),
+        else => @compileError("Undefined ABI layout: " ++ @tagName(lua_abi)),
+    };
+}
+
+pub inline fn rawLen(L: ?*c.lua_State, idx: c_int) usize {
+    return switch (comptime lua_abi) {
+        .lua_5_4 => c.lua_rawlen(L, idx),
+        .lua_5_1 => @intCast(c.lua_objlen(L, idx)),
+        else => @compileError("Undefined ABI layout: " ++ @tagName(lua_abi)),
+    };
+}

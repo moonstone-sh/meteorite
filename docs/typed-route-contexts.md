@@ -64,6 +64,59 @@ Corroborated by `--check` diagnostics on the same sources:
   `Cannot assign 'string|number|true' to 'integer'` — i.e. the generic
   union. Unknown routes degrade correctly instead of getting a wrong type.
 
+## Do the types match the runtime?
+
+Everything above is **editor-side evidence only** — it shows what LuaLS
+infers, which is a separate question from what a handler actually receives.
+When that second question was finally asked against a running binary
+(2026-09-10), the answer was no, in two independent ways. Both are now fixed;
+this section records the mechanism and the real evidence.
+
+1. **Values were not coerced.** `luals_aids.lua` annotated a `u64` param as
+   `integer`, but `zig/bridge/lua_context.zig` pushed every request value with
+   `lua_pushlstring`. `request_validation.zig` proved the bytes parsed as a
+   `u64` and then threw that knowledge away, so handlers got `"42"` and
+   `c.params.id == 42` was false. `pushSchemaValue` now converts a validated
+   value to the Lua type its declared schema implies, on the path-param, query,
+   and positional paths alike.
+2. **`c.params` did not exist.** A first parameter named `c` or `ctx` selects
+   the `lazy_context` calling convention, which pushed context *methods* only
+   and no `params` table — while every typed overload this document describes
+   is generated as `fun(c: MeteoriteContext_<id>)`, i.e. for exactly that name.
+   A handler written the way these types instruct returned **HTTP 500**,
+   `attempt to index field 'params' (a nil value)`. `lazy_context` now carries
+   the declared `params` and `query` tables.
+
+Evidence — real `curl` against a real `zig build` hybrid binary, handlers
+reporting `type()` from inside the running Lua:
+
+| Request | Response |
+| :--- | :--- |
+| `GET /typed/42`, handler `function(c)`, `id = m.u64()` | `200` — `{"id_type":"number","id_value":42,"eq_number_42":true}` |
+| `GET /flag/true`, `active = m.bool()` | `200` — `{"active_type":"boolean","active_value":true}` |
+| `GET /q?n=123&on=1`, `n = m.i32()`, `on = m.bool()`, `opt` optional | `200` — `{"n_type":"number","on_type":"boolean","opt_type":"nil","opt_is_nil":true}` |
+| `GET /noparams`, route declares no params | `200` — `{"params_type":"table","is_nil":false}` |
+
+So the annotations in `routes.meta.lua` are now honest: `integer` means a Lua
+number, `boolean` means a Lua boolean, and `|nil` on an optional query field
+means a real `nil`. A route that declares no params still gets an empty
+`params` **table**, so indexing it can never raise.
+
+Two consequences worth knowing:
+
+- **The method accessors are deliberately not coerced.** `c:param("id")` is
+  `"42"` (a string) while `c.params.id` is `42` (a number) — verified on the
+  same request. `l_param` receives an opaque context pointer with no route
+  schema attached, so it cannot know the declared type. Use the table form for
+  the declared type, the method form for raw text.
+- **A `u64` larger than a Lua integer stays a string** rather than wrapping to
+  a negative number.
+
+`tests/typed_route_contexts.lua` pins both fixes, including a test that reads
+the context parameter name back out of real generated output and asserts that
+name still selects a params-bearing calling convention — the exact coupling
+that broke.
+
 ## The prerequisite everyone was missing
 
 **The aids must be on LuaLS's path**, and in every real scaffolded project
@@ -104,7 +157,10 @@ type conflict) is the reference implementation for fixing it.
 ## Limitations
 
 These are honest and mostly structural — do not read the above as "route
-typing always works".
+typing always works". They are **editor-side**; the runtime contract is
+covered in "Do the types match the runtime?" above. Note that this list was
+previously presented as complete while both runtime bugs described there were
+live, so an editor-side audit is not evidence about runtime behaviour.
 
 1. **The path must be a string literal at the call site.** A path built
    from a variable, a concatenation, or a loop matches only the generic

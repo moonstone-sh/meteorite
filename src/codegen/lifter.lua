@@ -83,10 +83,27 @@ local function parse_function_params(literal)
   return params
 end
 
+-- Names that mean "this parameter is the request context", not "this parameter
+-- is a positional path param". `luals_aids.lua` generates every typed route
+-- overload as `fun(c: MeteoriteContext_<route>)`, so `c` in particular is the
+-- name the framework itself tells users to write; it must never fall through to
+-- `direct_params`, where a context-shaped handler would be handed a bare string.
+local context_param_names = {
+  c = true,
+  ctx = true,
+  context = true,
+}
+
+-- The calling convention is chosen from the handler's first parameter name.
+-- This is a documented, public contract (see docs/examples.md) and is
+-- load-bearing: `direct_params` exists so `function(id)` on `/users/:id` gets
+-- the param positionally with no table built at all, and the runtime has a
+-- dedicated benchmark tier per mode. It is kept, but every context-ish name
+-- resolves to `lazy_context`, which now carries real `params`/`query` tables.
 local function arg_mode_for(route, params)
   if #params == 0 then return "no_args" end
   local first = params[1]
-  if first == "ctx" or first == "c" then return "lazy_context" end
+  if context_param_names[first] then return "lazy_context" end
   if first == "req" or first == "request" then return "request_table" end
   if #(route.params or {}) > 0 and #params == #(route.params or {}) then return "direct_params" end
   return "request_table"

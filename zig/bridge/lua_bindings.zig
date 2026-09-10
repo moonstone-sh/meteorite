@@ -6,6 +6,7 @@ const lua_stats = @import("lua_stats.zig");
 const lua_vtable = @import("lua_vtable.zig");
 const lua_json = @import("lua_json.zig");
 const lua_http = @import("lua_http.zig");
+const lua_abi = @import("lua_abi.zig");
 const protocol = @import("meteorite_protocol");
 const Header = protocol.Header;
 
@@ -76,8 +77,8 @@ fn intField(L: ?*c.lua_State, table_index: c_int, field: [:0]const u8) ?i64 {
     _ = c.lua_getfield(L, table_index, field.ptr);
     defer c.lua_pop(L, 1);
     if (c.lua_isnil(L, -1)) return null;
-    if (c.lua_isinteger(L, -1) == 0) return null;
-    return @intCast(c.lua_tointegerx(L, -1, @as([*c]c_int, null)));
+    if (!lua_abi.isInteger(L, -1)) return null;
+    return @intCast(lua_abi.toInteger(L, -1));
 }
 
 fn parseSameSite(value: []const u8) ?protocol.SameSite {
@@ -130,7 +131,7 @@ pub fn setupLuaPackagePaths(L: ?*c.lua_State) !void {
         incLua(&lua_stats.stats.lua_errors);
         return error.LuaLoadFailed;
     }
-    if (c.lua_pcallk(L, 0, 0, 0, 0, @as(c.lua_KFunction, null)) != c.LUA_OK) {
+    if (lua_abi.pcall(L.?, 0, 0, 0) != lua_abi.LUA_OK) {
         const err = c.lua_tolstring(L, -1, null);
         std.log.err("lua package setup failed: {s}", .{err});
         incLua(&lua_stats.stats.lua_errors);
@@ -152,6 +153,48 @@ pub fn installGlobalResponseHelpers(L: ?*c.lua_State) void {
     c.lua_setglobal(L, "bytes");
     c.lua_pushcfunction(L, l_set_cookie);
     c.lua_setglobal(L, "set_cookie");
+    c.lua_pushcfunction(L, l_stream_begin);
+    c.lua_setglobal(L, "stream_begin");
+    c.lua_pushcfunction(L, l_stream_write);
+    c.lua_setglobal(L, "stream_write");
+    c.lua_pushcfunction(L, l_stream_end);
+    c.lua_setglobal(L, "stream_end");
+}
+
+// --- Minimal streaming Lua bindings ------------------------------------
+// Deliberately plain positional args (no self-call/table-options
+// convention like l_text/l_json/l_bytes have) -- this is a bounded proof
+// of the underlying primitive, not the final public API surface.
+//   stream_begin(status, content_type)
+//   stream_write(chunk)  -- may be called any number of times
+//   stream_end()
+pub fn l_stream_begin(L: ?*c.lua_State) callconv(.c) c_int {
+    const rt = lua_vtable.current_vtable orelse return luaError(L, "stream_begin: no active context", .{});
+    const ctx = lua_vtable.current_ctx orelse return luaError(L, "stream_begin: no active context", .{});
+    const status: u16 = @intCast(c.lua_tointegerx(L, 1, @as([*c]c_int, null)));
+    var ct_len: usize = 0;
+    const ct_ptr = c.lua_tolstring(L, 2, &ct_len);
+    const content_type = if (ct_ptr != null) ct_ptr[0..ct_len] else "text/plain; charset=utf-8";
+    rt.begin_stream(ctx, status, content_type) catch |err| return luaError(L, "stream_begin failed: {s}", .{@errorName(err)});
+    lua_vtable.markResponded();
+    return 0;
+}
+
+pub fn l_stream_write(L: ?*c.lua_State) callconv(.c) c_int {
+    const rt = lua_vtable.current_vtable orelse return luaError(L, "stream_write: no active context", .{});
+    const ctx = lua_vtable.current_ctx orelse return luaError(L, "stream_write: no active context", .{});
+    var chunk_len: usize = 0;
+    const chunk_ptr = c.lua_tolstring(L, 1, &chunk_len);
+    if (chunk_ptr == null) return luaError(L, "stream_write: expected a string chunk", .{});
+    rt.write_chunk(ctx, chunk_ptr[0..chunk_len]) catch |err| return luaError(L, "stream_write failed: {s}", .{@errorName(err)});
+    return 0;
+}
+
+pub fn l_stream_end(L: ?*c.lua_State) callconv(.c) c_int {
+    const rt = lua_vtable.current_vtable orelse return luaError(L, "stream_end: no active context", .{});
+    const ctx = lua_vtable.current_ctx orelse return luaError(L, "stream_end: no active context", .{});
+    rt.end_stream(ctx) catch |err| return luaError(L, "stream_end failed: {s}", .{@errorName(err)});
+    return 0;
 }
 
 pub fn l_text(L: ?*c.lua_State) callconv(.c) c_int {
@@ -160,8 +203,8 @@ pub fn l_text(L: ?*c.lua_State) callconv(.c) c_int {
     const offset: c_int = if (nargs >= 2 and c.lua_istable(L, 1)) @as(c_int, 1) else @as(c_int, 0);
     var body_arg: c_int = offset + 1;
     var options_arg: c_int = 0;
-    if (nargs >= offset + 2 and c.lua_isinteger(L, offset + 1) != 0) {
-        status = @intCast(c.lua_tointegerx(L, offset + 1, @as([*c]c_int, null)));
+    if (nargs >= offset + 2 and lua_abi.isInteger(L, offset + 1)) {
+        status = @intCast(lua_abi.toInteger(L, offset + 1));
         body_arg = offset + 2;
         if (nargs >= offset + 3) options_arg = offset + 3;
     } else if (nargs < offset + 1) {
@@ -182,8 +225,8 @@ pub fn l_json(L: ?*c.lua_State) callconv(.c) c_int {
     const offset: c_int = if (nargs >= 2 and c.lua_istable(L, 1)) @as(c_int, 1) else @as(c_int, 0);
     var value_idx: c_int = offset + 1;
     var options_arg: c_int = 0;
-    if (nargs >= offset + 2 and c.lua_isinteger(L, offset + 1) != 0) {
-        status = @intCast(c.lua_tointegerx(L, offset + 1, @as([*c]c_int, null)));
+    if (nargs >= offset + 2 and lua_abi.isInteger(L, offset + 1)) {
+        status = @intCast(lua_abi.toInteger(L, offset + 1));
         value_idx = offset + 2;
         if (nargs >= offset + 3) options_arg = offset + 3;
     } else if (nargs < offset + 1) {
@@ -210,8 +253,8 @@ pub fn l_bytes(L: ?*c.lua_State) callconv(.c) c_int {
     var content_type_arg: c_int = offset + 1;
     var body_arg: c_int = offset + 2;
     var options_arg: c_int = 0;
-    if (nargs >= offset + 3 and c.lua_isinteger(L, offset + 1) != 0) {
-        status = @intCast(c.lua_tointegerx(L, offset + 1, @as([*c]c_int, null)));
+    if (nargs >= offset + 3 and lua_abi.isInteger(L, offset + 1)) {
+        status = @intCast(lua_abi.toInteger(L, offset + 1));
         content_type_arg = offset + 2;
         body_arg = offset + 3;
         if (nargs >= offset + 4) options_arg = offset + 4;
@@ -307,12 +350,22 @@ pub fn l_param(L: ?*c.lua_State) callconv(.c) c_int {
 }
 
 pub fn l_query(L: ?*c.lua_State) callconv(.c) c_int {
-    const name = c.lua_tolstring(L, 2, null);
-    if (lua_vtable.current_vtable.?.query(lua_vtable.current_ctx.?, std.mem.span(name))) |value| {
-        _ = c.lua_pushlstring(L, @ptrCast(value.ptr), value.len);
-    } else {
-        c.lua_pushnil(L);
+    const top = c.lua_gettop(L);
+    const name = if (top >= 1 and c.lua_isstring(L, top) != 0)
+        c.lua_tolstring(L, top, null)
+    else
+        null;
+    if (name) |n| {
+        if (lua_vtable.current_vtable) |vt| {
+            if (lua_vtable.current_ctx) |ctx| {
+                if (vt.query(ctx, std.mem.span(n))) |value| {
+                    _ = c.lua_pushlstring(L, @ptrCast(value.ptr), value.len);
+                    return 1;
+                }
+            }
+        }
     }
+    c.lua_pushnil(L);
     return 1;
 }
 

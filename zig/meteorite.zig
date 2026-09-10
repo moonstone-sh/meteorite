@@ -561,6 +561,18 @@ pub fn compile(comptime spec: anytype) type {
                 try context_response.commitResponse(self);
             }
 
+            pub fn beginStream(self: *Context, status: u16, content_type: []const u8) !void {
+                try context_response.beginStream(self, status, content_type);
+            }
+
+            pub fn writeChunk(self: *Context, chunk: []const u8) !void {
+                try context_response.writeChunk(self, chunk);
+            }
+
+            pub fn endStream(self: *Context) !void {
+                try context_response.endStream(self);
+            }
+
             pub fn meteoriteResponse(self: *Context) protocol.MeteoriteResponse {
                 return context_response.meteoriteResponse(self);
             }

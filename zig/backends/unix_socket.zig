@@ -337,6 +337,24 @@ fn respondResult(req: *Request, result: proto.ResultCode, content_type: []const 
     proto.add(&counters.bytes_written, encoded.len);
 }
 
+pub fn beginStream(req: *Request, status: u16, content_type: []const u8) !void {
+    _ = req;
+    _ = status;
+    _ = content_type;
+    return error.StreamingUnsupported;
+}
+
+pub fn writeChunk(req: *Request, chunk: []const u8) !void {
+    _ = req;
+    _ = chunk;
+    return error.StreamingUnsupported;
+}
+
+pub fn endStream(req: *Request) !void {
+    _ = req;
+    return error.StreamingUnsupported;
+}
+
 fn readPeerCredentials(stream: Io.net.Stream) !?proto.Peer {
     if (!supports_peer_credentials) return null;
     if (!builtin.link_libc) return null;

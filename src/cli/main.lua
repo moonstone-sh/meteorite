@@ -2,8 +2,10 @@ local source = debug.getinfo(1, "S").source
 if source:sub(1, 1) == "@" then source = source:sub(2) end
 local script_dir = source:match("^(.*[/\\])") or "src/cli/"
 local module_root = script_dir:gsub("cli[/\\]$", "")
-local install_root = module_root:gsub("src[/\\]$", ""):gsub("meteorite[/\\]$", "")
-package.path = "src/?.lua;src/?/init.lua;" .. module_root .. "?.lua;" .. module_root .. "?/init.lua;" .. install_root .. "?.lua;" .. install_root .. "?/init.lua;" .. package.path
+local package_root = module_root:gsub("src[/\\]$", "")
+local install_root = package_root:gsub("meteorite[/\\]$", "")
+local lua_v = _VERSION:match("%d+%.%d+") or "5.4"
+package.path = "src/?.lua;src/?/init.lua;" .. module_root .. "?.lua;" .. module_root .. "?/init.lua;" .. package_root .. ".moonstone/env/share/lua/" .. lua_v .. "/?.lua;" .. package_root .. ".moonstone/env/share/lua/" .. lua_v .. "/?/init.lua;" .. package_root .. "?.lua;" .. package_root .. "?/init.lua;" .. install_root .. "?.lua;" .. install_root .. "?/init.lua;" .. install_root .. ".moonstone/env/share/lua/" .. lua_v .. "/?.lua;" .. install_root .. ".moonstone/env/share/lua/" .. lua_v .. "/?/init.lua;" .. package.path
 
 local c = require("clingy")
 local v = require("valua")
@@ -27,7 +29,7 @@ app = c.create({
   version = "0.2.3",
   description = "Moonstone-zig service compiler prototype",
 
-  c.root(c.node({
+  root = c.node({
     c.inherit(
       c.flag({ key = "help", aliases = { "-h", "--help" } })
     ),
@@ -42,6 +44,15 @@ app = c.create({
     end),
 
     init = c.node({
+      c.flag({ key = "force", aliases = { "--force" } }),
+      c.flag({ key = "with_zig", aliases = { "--with-zig" } }),
+      c.flag({ key = "minimal", aliases = { "--minimal" } }),
+      c.flag({ key = "crud", aliases = { "--crud" } }),
+      c.flag({ key = "static", aliases = { "--static" } }),
+      c.flag({ key = "hybrid", aliases = { "--hybrid" } }),
+      c.flag({ key = "no_sync", aliases = { "--no-sync" } }),
+      c.option({ key = "template", aliases = { "--template" }, value = { schema = v.string() } }),
+      c.option({ key = "name", aliases = { "--name" }, value = { schema = v.string() } }),
       c.arg({ key = "args", schema = v.string(), occurs = { min = 0, max = "many" } }),
       c.passthrough("argv"),
       c.run(function(ctx)
@@ -123,6 +134,16 @@ app = c.create({
     }, { description = "Export OpenAPI schema" }),
 
     ipc = c.node({
+      c.flag({ key = "json", aliases = { "--json" } }),
+      c.option({ key = "socket", aliases = { "--socket" }, value = { schema = v.string() } }),
+      c.option({ key = "message", aliases = { "--message" }, value = { schema = v.string() } }),
+      c.option({ key = "route", aliases = { "--route" }, value = { schema = v.string() } }),
+      c.option({ key = "method", aliases = { "--method" }, value = { schema = v.string() } }),
+      c.option({ key = "path", aliases = { "--path" }, value = { schema = v.string() } }),
+      c.option({ key = "body", aliases = { "--body" }, value = { schema = v.string() } }),
+      c.option({ key = "body_file", aliases = { "--body-file" }, value = { schema = v.string() } }),
+      c.option({ key = "content_type", aliases = { "--content-type" }, value = { schema = v.string() } }),
+      c.option({ key = "metadata", aliases = { "--metadata" }, value = { schema = v.string() }, occurs = { min = 0, max = "many" } }),
       c.arg({ key = "args", schema = v.string(), occurs = { min = 0, max = "many" } }),
       c.passthrough("argv"),
       c.run(function(ctx)
@@ -133,6 +154,8 @@ app = c.create({
     }, { description = "Inspect IPC transports" }),
 
     routes = c.node({
+      c.flag({ key = "graph", aliases = { "--graph" } }),
+      c.flag({ key = "json", aliases = { "--json" } }),
       c.arg({ key = "args", schema = v.string(), occurs = { min = 0, max = "many" } }),
       c.passthrough("argv"),
       c.run(function(ctx)
@@ -183,7 +206,7 @@ app = c.create({
         return 0
       end),
     }, { description = "Show help information" }),
-  })),
+  }),
 })
 
 local argv = {}
@@ -192,7 +215,7 @@ if argv[1] == "--" then
   table.remove(argv, 1)
 end
 
-local exit_code = app:run(argv)
+local exit_code = app:run(argv, { composer_mode = "plain" })
 if exit_code and exit_code ~= 0 then
   os.exit(exit_code)
 end

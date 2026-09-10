@@ -12,7 +12,6 @@ function dev_command.run(argv, deps)
   local root = deps.current_dir()
   local build_command = table.concat({
     "zig build --build-file", quote(deps.package_build_file()),
-    "-Dmeteorite-cli=" .. quote(cli),
     "-Dproject-root=" .. quote(root),
     "-Dgraph-input=src/main.lua -Dgraph-output=.meteorite/graph/current",
     table.concat(deps.build_request.to_build_flags(request, quote), " "),

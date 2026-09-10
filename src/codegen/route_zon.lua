@@ -43,7 +43,7 @@ function route_zon.route_to_zon(route)
   local handler
   if route.handler.kind == "zig" then handler = { zig_symbol = { id = route.handler.symbol, symbol = route.handler.import or route.handler.symbol } }
   elseif route.handler.kind == "zig_file" then handler = { zig_file = { id = route.handler.symbol, path = route.handler.path, decl = route.handler.decl or "handle" } }
-  elseif route.handler.kind == "lua" then handler = { lua_file = { id = route.id, path = route.handler.path or route.handler.module } }
+  elseif route.handler.kind == "lua" then handler = { lua_file = { id = route.id, path = route.handler.path or route.handler.module, nparams = route.handler.nparams or 1, arg_mode = route.handler.arg_mode or "request_table" } }
   elseif route.handler.kind == "file" then handler = { file = { artifact_path = route.handler.artifact_path, content_type = route.handler.content_type, content_length = route.handler.content_length, etag = route.handler.etag, cache_control = route.handler.cache_control, only_accept = route.handler.only_accept } }
   elseif route.handler.kind == "dir" then handler = { dir = { param = route.handler.param, cache_control = route.handler.cache_control, immutable = route.handler.immutable, manifest = route.handler.manifest or {} } }
   else

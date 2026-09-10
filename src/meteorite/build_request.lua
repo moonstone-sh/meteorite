@@ -48,6 +48,10 @@ function request.parse(argv)
       parsed.target = value_after(argv, index, argument); index = index + 1
     elseif argument:match("^%-%-target=") then
       parsed.target = argument:match("^%-%-target=(.*)$")
+    elseif argument == "--lua-root" then
+      parsed.lua_root = value_after(argv, index, argument); index = index + 1
+    elseif argument:match("^%-%-lua%-root=") then
+      parsed.lua_root = argument:match("^%-%-lua%-root=(.*)$")
     elseif argument == "--unix-socket-path" then
       parsed.unix_socket.path = value_after(argv, index, argument); index = index + 1
     elseif argument:match("^%-%-unix%-socket%-path=") then
@@ -89,6 +93,7 @@ function request.to_options(parsed)
   request.require_behavior(parsed)
   return {
     mode = parsed.mode, backend = parsed.backend, hybrid_profile = parsed.hybrid_profile,
+    lua_root = parsed.lua_root,
     router_dispatch = parsed.router_dispatch, target = parsed.target,
     unix_socket_path = parsed.unix_socket.path, unix_socket_mode = parsed.unix_socket.mode,
     unix_socket_unlink_stale = parsed.unix_socket.unlink_stale,
@@ -107,6 +112,7 @@ function request.to_build_flags(parsed, quote)
   append("hybrid-profile", parsed.hybrid_profile)
   append("router-dispatch", parsed.router_dispatch)
   append("target", parsed.target)
+  append("lua-root", parsed.lua_root)
   append("unix-socket-path", parsed.unix_socket.path)
   append("unix-socket-mode", parsed.unix_socket.mode)
   append("unix-socket-unlink-stale", parsed.unix_socket.unlink_stale)

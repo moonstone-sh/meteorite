@@ -5,6 +5,15 @@ local fs = require("utils.fs")
 
 local luals_aids = {}
 
+--- Lua type a declared schema kind actually arrives as at runtime.
+--- This mirrors `pushSchemaValue` in `zig/bridge/lua_context.zig`, which coerces
+--- validated path params and query values identically; keep the two in sync.
+function luals_aids.lua_type_for(schema_type)
+  if schema_type == "u64" or schema_type == "i32" then return "integer" end
+  if schema_type == "bool" then return "boolean" end
+  return "string"
+end
+
 function luals_aids.emit(graph, output)
   local aid_dir = output .. "/../../aids/lua"
   fs.mkdir_p(aid_dir)
@@ -197,7 +206,7 @@ function luals_aids.emit(graph, output)
     "function Context:query_all(name) end",
     "",
     "---@param name string",
-    "---@return string|integer|nil",
+    "---@return string|nil raw undecoded value; use `c.params.<name>` for the schema-typed value",
     "function Context:param(name) end",
     "",
     "---@return string",
@@ -258,7 +267,7 @@ function luals_aids.emit(graph, output)
       local class_name = "MeteoriteParams_" .. helpers.zig_ident(route.id)
       lines[#lines + 1] = "---@class " .. class_name
       for _, param in ipairs(route.params) do
-        local lua_type = (param.type == "u64" or param.type == "i32") and "integer" or "string"
+        local lua_type = luals_aids.lua_type_for(param.type)
         lines[#lines + 1] = "---@field " .. param.name .. " " .. lua_type
       end
       lines[#lines + 1] = ""
@@ -270,7 +279,7 @@ function luals_aids.emit(graph, output)
       local class_name = "MeteoriteQuery_" .. helpers.zig_ident(route.id)
       lines[#lines + 1] = "---@class " .. class_name
       for _, item in ipairs(route.query) do
-        local lua_type = (item.type == "u64" or item.type == "i32") and "integer" or (item.type == "bool" and "boolean" or "string")
+        local lua_type = luals_aids.lua_type_for(item.type)
         if item.optional then lua_type = lua_type .. "|nil" end
         lines[#lines + 1] = "---@field " .. item.name .. " " .. lua_type
       end
@@ -296,7 +305,7 @@ function luals_aids.emit(graph, output)
     if #route.params > 0 then
       route_lines[#route_lines + 1] = "---@class MeteoriteParams_" .. route_id
       for _, param in ipairs(route.params) do
-        local lua_type = (param.type == "u64" or param.type == "i32") and "integer" or "string"
+        local lua_type = luals_aids.lua_type_for(param.type)
         route_lines[#route_lines + 1] = "---@field " .. param.name .. " " .. lua_type
       end
       route_lines[#route_lines + 1] = ""
@@ -304,7 +313,7 @@ function luals_aids.emit(graph, output)
     if #(route.query or {}) > 0 then
       route_lines[#route_lines + 1] = "---@class MeteoriteQuery_" .. route_id
       for _, item in ipairs(route.query) do
-        local lua_type = (item.type == "u64" or item.type == "i32") and "integer" or (item.type == "bool" and "boolean" or "string")
+        local lua_type = luals_aids.lua_type_for(item.type)
         if item.optional then lua_type = lua_type .. "|nil" end
         route_lines[#route_lines + 1] = "---@field " .. item.name .. " " .. lua_type
       end

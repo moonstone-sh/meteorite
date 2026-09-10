@@ -63,6 +63,31 @@ pub fn Response(comptime backend: anytype, comptime protocol: anytype, comptime 
             ctx.response_staged = true;
         }
 
+        // --- Minimal streaming response primitive ---------------------
+        // Buffered (stageBytes/commitResponse above) remains the default
+        // and unaffected. This is a parallel, opt-in path: once
+        // beginStream() is called, headers are sent immediately (no
+        // content-length; chunked instead) and are no longer mutable --
+        // matches the "headers commit on first write" contract that
+        // buffered responses already have implicitly via commitResponse.
+        pub fn beginStream(ctx: anytype, status: u16, content_type: []const u8) !void {
+            if (ctx.response_committed or ctx.response_staged) return error.ResponseAlreadyStaged;
+            try backend.beginStream(ctx.request, status, content_type);
+            ctx.response_status = status;
+            ctx.responded = true;
+            ctx.response_committed = true; // headers are now on the wire; no further mutation
+        }
+
+        pub fn writeChunk(ctx: anytype, chunk: []const u8) !void {
+            if (!ctx.response_committed) return error.StreamNotStarted;
+            try backend.writeChunk(ctx.request, chunk);
+        }
+
+        pub fn endStream(ctx: anytype) !void {
+            if (!ctx.response_committed) return error.StreamNotStarted;
+            try backend.endStream(ctx.request);
+        }
+
         pub fn commitResponse(ctx: anytype) !void {
             if (!ctx.response_staged) return;
             const response = meteoriteResponse(ctx);

@@ -13,8 +13,15 @@ function factories.zig(path_or_symbol, opts)
   return { kind = "zig", symbol = path_or_symbol }
 end
 
-function factories.lua(module_ref)
-  return { kind = "lua", module = module_ref, path = lua_handler_path(module_ref) }
+function factories.lua(module_ref, opts)
+  opts = opts or {}
+  return {
+    kind = "lua",
+    module = module_ref,
+    path = opts.path or lua_handler_path(module_ref),
+    nparams = opts.nparams or 1,
+    arg_mode = opts.arg_mode or "request_table",
+  }
 end
 
 function factories.file(path, opts)
@@ -52,7 +59,15 @@ function factories.handler(kind, ref, opts)
   opts = opts or {}
   if kind == "zig" then return { kind = "zig", symbol = ref } end
   if kind == "zig_file" then return { kind = "zig_file", path = ref, decl = opts.decl or "handle" } end
-  if kind == "lua" then return { kind = "lua", module = ref, path = opts.path or lua_handler_path(ref) } end
+  if kind == "lua" then
+    return {
+      kind = "lua",
+      module = ref,
+      path = opts.path or lua_handler_path(ref),
+      nparams = opts.nparams or 1,
+      arg_mode = opts.arg_mode or "request_table",
+    }
+  end
   error("unsupported handler kind: " .. tostring(kind))
 end
 

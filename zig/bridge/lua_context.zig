@@ -1,3 +1,4 @@
+const std = @import("std");
 const c_imports = @import("c_imports.zig");
 const c = c_imports.c;
 const lua_abi = @import("lua_abi.zig");
@@ -134,32 +135,102 @@ fn pushCoreContextMethods(L: *c.lua_State) void {
     pushMethod(L, "worker_counter", l_worker_counter);
 }
 
+/// Push a validated request value using the Lua type its declared schema kind
+/// implies, so a handler observes what the generated LuaCATS types promise
+/// (`---@field id integer`, `---@field active boolean`) instead of a string.
+///
+/// Validation (`request_validation.zig`) has already proven the raw bytes parse
+/// for this kind, so the parses below are expected to succeed. They are still
+/// written to fall back to the raw string rather than fabricate a value: a
+/// coercion bug must never silently invent a number a request did not contain.
+fn pushSchemaValue(L: *c.lua_State, kind: anytype, value: []const u8) void {
+    switch (kind) {
+        .u64 => {
+            const parsed = std.fmt.parseInt(u64, value, 10) catch {
+                _ = c.lua_pushlstring(L, @ptrCast(value.ptr), value.len);
+                return;
+            };
+            // lua_Integer is i64; a u64 above that range would wrap to a
+            // negative number, so keep the exact string instead of lying.
+            if (parsed > std.math.maxInt(i64)) {
+                _ = c.lua_pushlstring(L, @ptrCast(value.ptr), value.len);
+                return;
+            }
+            c.lua_pushinteger(L, @intCast(parsed));
+        },
+        .i32 => {
+            const parsed = std.fmt.parseInt(i32, value, 10) catch {
+                _ = c.lua_pushlstring(L, @ptrCast(value.ptr), value.len);
+                return;
+            };
+            c.lua_pushinteger(L, @intCast(parsed));
+        },
+        .bool => {
+            // request_validation.zig accepts exactly these four spellings.
+            const truthy = std.mem.eql(u8, value, "true") or std.mem.eql(u8, value, "1");
+            c.lua_pushboolean(L, if (truthy) 1 else 0);
+        },
+        else => {
+            _ = c.lua_pushlstring(L, @ptrCast(value.ptr), value.len);
+        },
+    }
+}
+
+/// Look up the declared schema kind for a path param by name and push the
+/// capture coerced to it. Falls back to a plain string when the route declares
+/// no schema for that capture (e.g. an undeclared wildcard segment).
+fn pushParamValue(L: *c.lua_State, ctx: anytype, name: []const u8, value: []const u8) void {
+    if (@hasField(@TypeOf(ctx.*), "route") and @hasField(@TypeOf(ctx.route), "params")) {
+        for (ctx.route.params) |spec| {
+            if (std.mem.eql(u8, spec.name, name)) {
+                pushSchemaValue(L, spec.kind, value);
+                return;
+            }
+        }
+    }
+    _ = c.lua_pushlstring(L, @ptrCast(value.ptr), value.len);
+}
+
+/// Build the `params` table from the matched path captures. Always emitted
+/// (empty when the route declares no params) so `c.params.x` can never raise
+/// "attempt to index field 'params' (a nil value)".
+fn pushParamsTable(L: *c.lua_State, ctx: anytype) void {
+    if (!@hasField(@TypeOf(ctx.*), "captures")) return;
+    c.lua_newtable(L);
+    const captures = ctx.captures;
+    for (captures.items[0..captures.len]) |item| {
+        pushParamValue(L, ctx, item.name, item.value);
+        c.lua_setfield(L, -2, @ptrCast(item.name.ptr));
+    }
+    c.lua_setfield(L, -2, "params");
+}
+
+/// Build the `query` table from the route's declared query schema. A missing
+/// optional query param is deliberately left unset so it reads back as a real
+/// Lua `nil`, matching the `|nil` in the generated types.
+fn pushQueryTable(L: *c.lua_State, ctx: anytype, vtable: *const VTable) void {
+    if (!(@hasField(@TypeOf(ctx.*), "route") and @hasField(@TypeOf(ctx.route), "query"))) return;
+    c.lua_newtable(L);
+    for (ctx.route.query) |spec| {
+        if (vtable.query(ctx, spec.name)) |value| {
+            pushSchemaValue(L, spec.kind, value);
+            c.lua_setfield(L, -2, @ptrCast(spec.name.ptr));
+        }
+    }
+    c.lua_newtable(L);
+    c.lua_pushcfunction(L, l_query);
+    c.lua_setfield(L, -2, "__call");
+    _ = c.lua_setmetatable(L, -2);
+    c.lua_setfield(L, -2, "query");
+}
+
 pub fn pushFullRequestTable(comptime handler: anytype, L: *c.lua_State, ctx: anytype, vtable: *const VTable) c_int {
     _ = handler;
     c.lua_newtable(L);
     pushCoreContextMethods(L);
 
-    if (@hasField(@TypeOf(ctx.*), "captures")) {
-        c.lua_newtable(L);
-        const captures = ctx.captures;
-        for (captures.items[0..captures.len]) |item| {
-            _ = c.lua_pushlstring(L, @ptrCast(item.value.ptr), item.value.len);
-            c.lua_setfield(L, -2, @ptrCast(item.name.ptr));
-        }
-        c.lua_setfield(L, -2, "params");
-    }
-
-    if (@hasField(@TypeOf(ctx.*), "route") and @hasField(@TypeOf(ctx.route), "query")) {
-        c.lua_newtable(L);
-        const query_specs = ctx.route.query;
-        for (query_specs) |spec| {
-            if (vtable.query(ctx, spec.name)) |value| {
-                _ = c.lua_pushlstring(L, @ptrCast(value.ptr), value.len);
-                c.lua_setfield(L, -2, @ptrCast(spec.name.ptr));
-            }
-        }
-        c.lua_setfield(L, -2, "query");
-    }
+    pushParamsTable(L, ctx);
+    pushQueryTable(L, ctx, vtable);
 
     c.lua_newtable(L);
     c.lua_setfield(L, -2, "state");
@@ -176,12 +247,21 @@ pub fn pushFullRequestTable(comptime handler: anytype, L: *c.lua_State, ctx: any
     return 1;
 }
 
+/// Context for handlers whose first parameter is named `ctx`/`c`/`context`.
+///
+/// This mode is what `luals_aids.lua` generates every typed route overload
+/// for, so it must satisfy the generated types: those declare
+/// `---@field params MeteoriteParams_<route>` on the context class, i.e. field
+/// access. It previously pushed methods only, which made the framework's own
+/// generated pattern fail at runtime with a 500. It now carries the same
+/// `params`/`query` tables as the full request table while keeping every
+/// method, so both documented access styles work.
 fn pushLazyContextTable(comptime handler: anytype, L: *c.lua_State, ctx: anytype, vtable: *const VTable) c_int {
     _ = handler;
-    _ = ctx;
-    _ = vtable;
     c.lua_newtable(L);
     pushCoreContextMethods(L);
+    pushParamsTable(L, ctx);
+    pushQueryTable(L, ctx, vtable);
     c.lua_newtable(L);
     c.lua_setfield(L, -2, "state");
     return 1;
@@ -192,7 +272,13 @@ fn pushDirectParamArgs(comptime handler: anytype, L: *c.lua_State, ctx: anytype,
     var index: usize = 0;
     while (index < handler.nparams) : (index += 1) {
         if (vtable.param_at(ctx, index)) |value| {
-            _ = c.lua_pushlstring(L, @ptrCast(value.ptr), value.len);
+            // param_at resolves positionally against route.params, so the
+            // declared kind for this position is the matching spec.
+            if (@hasField(@TypeOf(ctx.*), "route") and @hasField(@TypeOf(ctx.route), "params") and index < ctx.route.params.len) {
+                pushSchemaValue(L, ctx.route.params[index].kind, value);
+            } else {
+                _ = c.lua_pushlstring(L, @ptrCast(value.ptr), value.len);
+            }
         } else {
             c.lua_pushnil(L);
         }
