@@ -75,7 +75,7 @@ jobs:
           RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
         run: |
           set -eu
-          asset="$(find dist/registry/meteorite -maxdepth 1 -type f -name '*.tar.zst' -print -quit)"
+          asset="$(find dist/registry/meteorite -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.tar.zst' \) -print -quit)"
           test -n "$asset"
           gh release view "$RELEASE_TAG" >/dev/null 2>&1 || gh release create "$RELEASE_TAG" --title "Meteorite $RELEASE_TAG" --generate-notes
           gh release upload "$RELEASE_TAG" "$asset"

@@ -13,13 +13,17 @@ if ! LUA_PATH="$LUA_PROJECT_PATH" luajit ../ballad/src/main.lua play partiture.l
 fi
 
 test -f "$REGISTRY_ROOT/package.toml"
-archive="$(find "$REGISTRY_ROOT" -maxdepth 1 -type f -name '*.tar.zst' -print -quit)"
+archive="$(find "$REGISTRY_ROOT" -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.tar.zst' \) -print -quit)"
 if [[ -z "$archive" ]]; then
   echo "registry export: source archive not found" >&2
   exit 1
 fi
 
-contents="$(zstd -dc "$archive" | tar -tf -)"
+if [[ "$archive" == *.tar.zst ]]; then
+  contents="$(zstd -dc "$archive" | tar -tf -)"
+else
+  contents="$(gzip -dc "$archive" | tar -tf -)"
+fi
 for required_path in README.md docs/roadmap/v0.1-ga.md; do
   if ! grep -Fqx "./$required_path" <<<"$contents" && ! grep -Fqx "$required_path" <<<"$contents"; then
     echo "registry export: source archive missing $required_path" >&2

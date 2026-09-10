@@ -14,9 +14,9 @@ end
 
 function build_report.format_bytes(bytes)
   bytes = tonumber(bytes or 0) or 0
-  if bytes >= 1024 * 1024 and bytes % (1024 * 1024) == 0 then return tostring(bytes / (1024 * 1024)) .. "mb" end
-  if bytes >= 1024 and bytes % 1024 == 0 then return tostring(bytes / 1024) .. "kb" end
-  return tostring(bytes) .. "b"
+  if bytes >= 1024 * 1024 and bytes % (1024 * 1024) == 0 then return tostring(math.floor(bytes / (1024 * 1024))) .. "mb" end
+  if bytes >= 1024 and bytes % 1024 == 0 then return tostring(math.floor(bytes / 1024)) .. "kb" end
+  return tostring(math.floor(bytes)) .. "b"
 end
 
 function build_report.memory_report(graph, routes_text)
