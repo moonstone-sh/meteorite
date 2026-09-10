@@ -27,11 +27,13 @@ local function parse_path(path)
   assert(type(path) == "string" and path ~= "", "route path must be a non-empty string")
   assert(path:sub(1, 1) == "/", "route path must start with /")
   if path == "/" then return {} end
+  local raw_segments = {}
+  for segment in path:gmatch("[^/]+") do raw_segments[#raw_segments + 1] = segment end
   local segments = {}
-  for segment in path:gmatch("[^/]+") do
+  for index, segment in ipairs(raw_segments) do
     assert(segment ~= "", "empty route segment in " .. path)
     if segment == "*" then
-      assert(segment == path:match("[^/]+$"), "wildcard * must be the final route segment: " .. path)
+      assert(index == #raw_segments, "wildcard * must be the final route segment: " .. path)
       segments[#segments + 1] = { kind = "wildcard" }
     elseif segment:sub(1, 1) == ":" then
       local catch_all = false
@@ -39,7 +41,7 @@ local function parse_path(path)
       if name:sub(-1) == "*" then
         catch_all = true
         name = name:sub(1, -2)
-        assert(segment == path:match("[^/]+$"), "catch-all path param must be the final route segment: " .. path)
+        assert(index == #raw_segments, "catch-all path param must be the final route segment: " .. path)
       end
       assert(name:match("^[%a_][%w_]*$"), "invalid path param name: " .. name)
       segments[#segments + 1] = { kind = "param", name = name, catch_all = catch_all }
