@@ -17,8 +17,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: moonstone-sh/moonstone
-          # Meteorite uses the formal registry and lockfile contract.
-          ref: ad1ef8c03f8d6c32711dc35c9fd4aa1661cc4f07
+          # Includes `moon artifact create`, required by Ballad registry export.
+          ref: 8594a61de69798fd534d7d9e9c595f7f25ddb3f5
           path: .ci/moonstone
       - uses: actions/checkout@v4
         with:
@@ -37,6 +37,8 @@ jobs:
         run: |
           zig build
           echo "$GITHUB_WORKSPACE/.ci/moonstone/zig-out/bin" >> "$GITHUB_PATH"
+      - name: Verify Moonstone artifact export support
+        run: moon artifact create --help
       - name: Synchronize project lockfile
         run: |
           export SQLITE_INCDIR="$(pkg-config --variable=includedir sqlite3)"
