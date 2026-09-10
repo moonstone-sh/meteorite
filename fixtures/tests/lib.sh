@@ -5,6 +5,11 @@ meteorite_test_setup() {
   LUA_PROJECT_PATH="${ROOT}/src/ballad_plugin/?.lua;${ROOT}/src/ballad_plugin/?/init.lua;${ROOT}/src/?.lua;${ROOT}/src/?/init.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?.lua;${ROOT}/../ballad/.moonstone/env/share/lua/5.1/?/init.lua;${ROOT}/../ballad/src/?.lua;${ROOT}/../ballad/src/?/init.lua;;"
   cd "$ROOT"
   export MOONSTONE_HOME="$ROOT/.moonstone-home"
+  mkdir -p fixtures/apps/basic-service/.moonstone/env/libexec
+  ln -sfn "$ROOT" fixtures/apps/basic-service/.moonstone/env/libexec/meteorite
+  if [[ -d "$ROOT/.moonstone/env/bin" ]]; then
+    ln -sfn "$ROOT/.moonstone/env/bin" fixtures/apps/basic-service/.moonstone/env/bin
+  fi
 }
 
 meteorite_test_trap() {
