@@ -12,6 +12,7 @@ historical archive material.
 - `deployment.md` — release layout, deployment model, and non-goals.
 - `benchmarks.md` — benchmark methodology, scripts, and result interpretation.
 - `ipc-unix-socket.md` — Unix-socket IPC status and usage notes.
+- `typed-route-contexts.md` — how route handlers get a specific `c` type in the editor, the `.luarc.json` prerequisite, and why no LuaLS plugin is needed.
 - `release-compiler-contract.md` — release compiler contract, validation gates, and implementation checklist.
 - `release-process.md` — tag preparation, source-package verification, checksum, and publishing sequence.
 - `release-notes/` — versioned user-facing release notes.
