@@ -4,7 +4,7 @@ local dev_command = {}
 function dev_command.run(argv, deps)
   deps = deps or {}
   local process = deps.process or require("clingy.process")
-  assert(process.supervisor_script, "meteorite dev requires Clingy >= 0.5.0; run moon sync")
+  assert(process.supervisor_script, "meteorite dev requires Clingy >= 0.6.2; run moon sync")
   local quote = deps.shell_quote
   local request = deps.build_request.parse({ table.unpack(argv, 2) })
   deps.build_request.require_behavior(request, "meteorite dev")

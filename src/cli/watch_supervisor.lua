@@ -1,6 +1,6 @@
 -- Preflight for the repository's Ballad watcher, which owns rebuild decisions.
 local process = require("clingy.process")
-assert(process.supervisor_script, "Meteorite watch requires Clingy >= 0.5.0; run moon sync")
+assert(process.supervisor_script, "Meteorite watch requires Clingy >= 0.6.2; run moon sync")
 local argv = { "moon", "exec", "ballad", "--", "play", "Watch_partiture.lua", "--" }
 for _, value in ipairs(arg) do argv[#argv + 1] = value end
 local script = process.supervisor_script({

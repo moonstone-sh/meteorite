@@ -13,6 +13,10 @@ if ! LUA_PATH="$LUA_PROJECT_PATH" luajit ../ballad/src/main.lua play partiture.l
 fi
 
 test -f "$REGISTRY_ROOT/package.toml"
+if ! grep -Fq 'constraint = "^0.6.2"' "$REGISTRY_ROOT/package.toml"; then
+  echo "registry export: Meteorite must require the fixed Clingy supervisor (>= 0.6.2)" >&2
+  exit 1
+fi
 archive="$(find "$REGISTRY_ROOT" -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.tar.zst' \) -print -quit)"
 if [[ -z "$archive" ]]; then
   echo "registry export: source archive not found" >&2
