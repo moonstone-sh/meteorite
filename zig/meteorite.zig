@@ -30,6 +30,7 @@ pub fn compile(comptime spec: anytype) type {
         const backend = spec.backend;
         const build_info = @import("build_options");
         const cached_time = @import("server/cached_time.zig");
+        const dev_events = @import("server/dev_events.zig");
         const signals = @import("server/signals.zig");
         const http_date = @import("server/http_date.zig");
         const server_static = @import("server/static_files.zig");
@@ -40,7 +41,7 @@ pub fn compile(comptime spec: anytype) type {
         const route_match = @import("server/route_match.zig").Matcher(graph, backend, protocol, request_validation.validateParam);
         const lua_runtime = if (@hasField(@TypeOf(spec), "lua_runtime")) spec.lua_runtime else lua_unavailable.Runtime;
         const dev_reload_enabled = std.mem.eql(u8, build_info.meteorite_mode, "dev") or std.mem.eql(u8, build_info.meteorite_mode, "hybrid_dev");
-        const startup_log = @import("server/startup_log.zig").StartupLog(graph, backend, build_info);
+        const startup_log = @import("server/startup_log.zig").StartupLog(graph, backend, build_info, lua_runtime);
         const graph_requires_lua = graphRequiresLua();
         const inline_lua_handlers = countHandlers(.inline_lua);
         const zig_handlers = countZigHandlers();
@@ -230,6 +231,11 @@ pub fn compile(comptime spec: anytype) type {
                     request.date_seconds = cached_time.seconds();
                 }
                 backend.requestStarted();
+                // Dev event timing. `dev_events.enabled` is a comptime constant
+                // derived from the -Ddev-events= build option, so a build that
+                // did not ask for the stream compiles none of this away-branch.
+                if (comptime dev_events.enabled) request.status_code = 0;
+                const dev_started = if (comptime dev_events.enabled) Io.Timestamp.now(io, .awake) else {};
                 serveRequest(arena, io, request) catch |err| {
                     std.debug.print("request failed for {s}: {s}\n", .{ backend.path(request), @errorName(err) });
                     request.close_after_response = true;
@@ -237,6 +243,17 @@ pub fn compile(comptime spec: anytype) type {
                         std.debug.print("error response failed for {s}: {s}\n", .{ backend.path(request), @errorName(respond_err) });
                     };
                 };
+                if (comptime dev_events.enabled) {
+                    const elapsed = dev_started.durationTo(Io.Timestamp.now(io, .awake)).toNanoseconds();
+                    dev_events.logRequest(
+                        io,
+                        @tagName(backend.method(request)),
+                        backend.path(request),
+                        request.status_code,
+                        elapsed,
+                        if (comptime @hasDecl(backend, "remoteAddr")) backend.remoteAddr(request) else null,
+                    );
+                }
                 // Drain unread body before next keep-alive request.
                 // If the handler didn't call body(), unread bytes would corrupt the next request.
                 if (@hasDecl(backend, "drainBody")) backend.drainBody(request);
@@ -479,6 +496,14 @@ pub fn compile(comptime spec: anytype) type {
 
             pub fn path(self: *Context) []const u8 {
                 return context_request.path(self);
+            }
+
+            pub fn target(self: *Context) []const u8 {
+                return context_request.target(self);
+            }
+
+            pub fn routeId(self: *Context) []const u8 {
+                return context_request.routeId(self);
             }
 
             pub fn message(self: *Context) []const u8 {

@@ -13,6 +13,7 @@ local meteorite_cli = os.getenv("METEORITE_CLI") or "src/cli/main.lua"
 local build_command_override = os.getenv("METEORITE_BUILD_COMMAND")
 local once = os.getenv("METEORITE_DEV_ONCE") == "1"
 local prebuilt = os.getenv("METEORITE_DEV_PREBUILT") == "1"
+local dev_watch = require("core.dev_watch")
 
 local function path_exists(path)
   local file = io.open(path, "rb")
@@ -96,6 +97,42 @@ local function write_file(path, content)
   file:close()
 end
 
+-- Structured dev events. Purely additive: every plain-text status line below is
+-- unchanged. Each one additionally appends an equivalent JSON line to the very
+-- file the Zig server appends its "source":"server" request lines to (see
+-- zig/server/dev_events.zig and cli/dev_command.lua's events_log_path), so an
+-- external consumer gets one interleaved, tailable stream. Encoding reuses
+-- utils.json the way cli/hybrid.lua does, defensively: a dev loop must never
+-- fail because an observability side-channel could not load.
+local events_file = state_dir .. "/events.log"
+local json_encode = (function()
+  local ok, json = pcall(require, "utils.json")
+  if ok and json and json.encode then return json.encode end
+  return nil
+end)()
+
+local function emit_event(kind, fields)
+  if not json_encode then return end
+  local event = { v = 1, ts = os.time() * 1000, source = "supervisor", kind = kind }
+  for key, value in pairs(fields or {}) do event[key] = value end
+  local ok, encoded = pcall(json_encode, event)
+  if not ok then return end
+  local file = io.open(events_file, "a")
+  if not file then return end
+  file:write(encoded, "\n")
+  file:close()
+end
+
+-- Route count for the startup event, read from the same generated graph the
+-- server itself was compiled from rather than re-deriving it.
+local function graph_route_count()
+  local data = read_file(output .. "/routes.zon")
+  if not data then return 0 end
+  local count = 0
+  for _ in data:gmatch("%.raw_path%s*=") do count = count + 1 end
+  return count
+end
+
 -- The project's real listen port is whatever the generated graph says: the Zig
 -- server binds listen.zon (see src/codegen/emitter.lua and zig/main.zig), which
 -- carries app.options.port. Resolving it here keeps the dev banner, the guard's
@@ -128,7 +165,12 @@ local function server_running()
   return pid_running(current_server_pid())
 end
 
+-- Server PID this supervisor believes it currently owns, used only to tell a
+-- crash (emit server_exit) apart from a stop we performed ourselves (silent).
+local supervised_pid = nil
+
 stop_server = function()
+  supervised_pid = nil
   -- Only this active Clingy session may stop its recorded server. Stale PID
   -- files and listeners belonging to another project confer no ownership.
   local pid = current_server_pid()
@@ -151,23 +193,44 @@ local function start_server()
   local pid = capture(command):match("%d+")
   if pid then write_file(pid_file, pid .. "\n" .. session_id .. "\n") end
   local is_up = false
+  -- Readiness at the supervisor's own polling resolution (100ms steps).
+  local ready_ms = 0
   for _ = 1, 5 do
     os.execute("sleep 0.1")
+    ready_ms = ready_ms + 100
     if pid_running(pid) then
       is_up = true
       break
     end
   end
   if not is_up then
+    emit_event("build_error", { stage = "server_start", detail = "server failed to stay running; see " .. log_file })
     error("Meteorite dev server failed to stay running; see " .. log_file)
   else
     io.stderr:write("Meteorite dev server: http://127.0.0.1:" .. resolve_dev_port() .. " pid=" .. tostring(pid or "?") .. " log=" .. log_file .. "\n")
+    supervised_pid = pid
+    emit_event("startup", {
+      routes = graph_route_count(),
+      mode = mode,
+      backend = backend,
+      ready_ms = ready_ms,
+    })
   end
 end
 
-local function source_fingerprint()
+local function watch_paths()
+  local policy = dev_watch.decode(read_file(output .. "/dev-watch.paths"))
+  local graph = { input, "zig", "build.zig", "moonstone.toml" }
+  for _, path in ipairs(policy.graph) do graph[#graph + 1] = path end
+  return graph, policy.runtime
+end
+
+local function source_fingerprint(paths)
+  if #paths == 0 then return "" end
+  local quoted = {}
+  for _, path in ipairs(paths) do quoted[#quoted + 1] = shell_quote(path) end
   local command = table.concat({
-    "{ find src zig public static site assets -type f 2>/dev/null; test -f build.zig && echo build.zig; test -f moonstone.toml && echo moonstone.toml; }",
+    "find " .. table.concat(quoted, " ") .. " -type f 2>/dev/null",
     "| sort",
     "| while IFS= read -r f; do stat -f '%m %z %N' \"$f\" 2>/dev/null || stat -c '%Y %s %n' \"$f\" 2>/dev/null; done"
   }, " ")
@@ -283,7 +346,7 @@ if prebuilt then
 elseif once then
   io.stderr:write("Meteorite dev: running one graph-aware refresh cycle\n")
 else
-  io.stderr:write("Meteorite dev: watching src/, zig/, build.zig, moonstone.toml\n")
+  io.stderr:write("Meteorite dev: watching app graph and runtime inputs\n")
 end
 io.stderr:write("Meteorite dev: mode=" .. mode .. " build_args=" .. build_args .. "\n")
 io.stderr:write("Press Ctrl-C or Ctrl-D to stop.\n")
@@ -294,21 +357,26 @@ if prebuilt then
   if once then return end
 end
 
-local last = nil
+local last_graph, last_runtime = nil, nil
 while running do
-  local current = source_fingerprint()
-  if current ~= last then
-    local force_build = changed_zig_or_build(last, current) or not file_exists(server)
+  local graph_paths, runtime_paths = watch_paths()
+  local current_graph = source_fingerprint(graph_paths)
+  local current_runtime = source_fingerprint(runtime_paths)
+  if current_graph ~= last_graph then
+    local force_build = changed_zig_or_build(last_graph, current_graph) or not file_exists(server)
     io.stderr:write("\nMeteorite dev: change detected; regenerating graph...\n")
     if graph() then
       local changes = parse_partition_changes()
       io.stderr:write("Meteorite dev: partitions " .. summarize_changes(changes) .. "\n")
       local action, reason = classify_changes(changes, force_build)
       io.stderr:write("Meteorite dev: action=" .. action .. " reason=" .. reason .. "\n")
+      emit_event("rebuild", { reason = reason, action = action, partitions = summarize_changes(changes) })
       if action == "none" then
         if not server_running() then start_server() end
       elseif action == "reload" then
-        if reload_lua() then
+        local reloaded = reload_lua()
+        emit_event("reload", { ok = reloaded })
+        if reloaded then
           io.stderr:write("Meteorite dev: Lua handlers reloaded in-process.\n")
         else
           io.stderr:write("Meteorite dev: Lua reload failed; restarting server.\n")
@@ -318,11 +386,25 @@ while running do
         start_server()
       else
         io.stderr:write("Meteorite dev: build failed; keeping previous server state.\n")
+        emit_event("build_error", { stage = "build", detail = "build failed; keeping previous server state" })
       end
     else
       io.stderr:write("Meteorite dev: graph failed; keeping previous server state.\n")
+      emit_event("build_error", { stage = "graph", detail = "graph failed; keeping previous server state" })
     end
-    last = source_fingerprint()
+    graph_paths, runtime_paths = watch_paths()
+    last_graph = source_fingerprint(graph_paths)
+    last_runtime = source_fingerprint(runtime_paths)
+  elseif current_runtime ~= last_runtime then
+    io.stderr:write("\nMeteorite dev: runtime input changed; restarting server without graph regeneration.\n")
+    start_server()
+    last_runtime = current_runtime
+  end
+  -- A server we started that is gone without us stopping it is a crash: report
+  -- it so a consumer can show a definite down-state instead of a stuck spinner.
+  if supervised_pid and not pid_running(supervised_pid) then
+    emit_event("server_exit", { pid = tonumber(supervised_pid), reason = "unexpected_exit" })
+    supervised_pid = nil
   end
   if once then break end
   local ok, exit_type, code = os.execute("sleep 1")

@@ -27,5 +27,6 @@ pub fn build(b: *std.Build) void {
         .peer_allow_uid = b.option([]const u8, "peer-allow-uid", "allowed peer uid for Unix peer credential policy") orelse "",
         .peer_allow_gid = b.option([]const u8, "peer-allow-gid", "allowed peer gid for Unix peer credential policy") orelse "",
         .router_dispatch = b.option([]const u8, "router-dispatch", "Router dispatch strategy: method_buckets, static_fast_path, param_matchers, or legacy_scan") orelse "method_buckets",
+        .dev_events_path = b.option([]const u8, "dev-events", "Append dev request events as JSON lines to this path; empty disables the emitter entirely") orelse "",
     });
 }

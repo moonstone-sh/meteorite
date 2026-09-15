@@ -96,6 +96,11 @@ pub const Request = struct {
     target_value: []const u8 = "",
     request_count: u64 = 0,
     peer: ?proto.Peer = null,
+    /// Status last written to the wire for this request; 0 until a respond*
+    /// call sets it. Observability only — nothing in the response path reads it.
+    /// No remote_addr counterpart: a Unix socket peer has no IP to report. Peer
+    /// identity here stays the existing `peer` credentials field.
+    status_code: u16 = 0,
 
     pub fn close(self: *Request, io: Io) void {
         if (self.frame_buffer.len > 0) {
@@ -287,6 +292,7 @@ pub fn readBody(req: *Request, allocator: std.mem.Allocator, max_bytes: usize) R
 }
 
 pub fn respondParseError(req: *Request, status: u16, body: []const u8) void {
+    req.status_code = status;
     respondText(req, status, body) catch {
         proto.inc(&counters.connection_errors);
     };
@@ -305,6 +311,7 @@ pub fn respondBytes(req: *Request, status: u16, content_type: []const u8, body: 
 }
 
 pub fn respondBytesWithHeaders(req: *Request, status: u16, content_type: []const u8, body: []const u8, extra_headers: []const Header) !void {
+    req.status_code = status;
     var metadata_buffer: [4096]u8 = undefined;
     var metadata_writer = std.Io.Writer.fixed(&metadata_buffer);
     var has_validation_metadata = false;
@@ -337,6 +344,8 @@ fn respondResult(req: *Request, result: proto.ResultCode, content_type: []const 
     proto.add(&counters.bytes_written, encoded.len);
 }
 
+// Streaming is unsupported over the native IPC framing, so no status ever
+// reaches the wire here and status_code is deliberately left untouched.
 pub fn beginStream(req: *Request, status: u16, content_type: []const u8) !void {
     _ = req;
     _ = status;
@@ -432,6 +441,7 @@ test "IPC metadata content_type aliases content-type" {
 }
 
 pub fn respondStatic(req: *Request, status: u16, content_type: []const u8, content_length: u64, cache_control: []const u8, etag: []const u8, content_encoding: ?[]const u8, body: []const u8, head_only: bool) !void {
+    req.status_code = status;
     _ = content_length;
     _ = cache_control;
     _ = etag;
@@ -441,5 +451,6 @@ pub fn respondStatic(req: *Request, status: u16, content_type: []const u8, conte
 }
 
 pub fn respondRawOk(req: *Request) !void {
+    req.status_code = 200;
     try respondText(req, 200, "ok");
 }

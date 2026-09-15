@@ -37,6 +37,7 @@ pub const Options = struct {
     peer_allow_uid: []const u8 = "",
     peer_allow_gid: []const u8 = "",
     router_dispatch: []const u8 = "method_buckets",
+    dev_events_path: []const u8 = "",
     native: NativeOptions = .{},
 };
 
@@ -127,6 +128,7 @@ pub fn addService(b: *std.Build, options: Options) Service {
     const peer_allow_uid = options.peer_allow_uid;
     const peer_allow_gid = options.peer_allow_gid;
     const router_dispatch = options.router_dispatch;
+    const dev_events_path = options.dev_events_path;
     if (!std.mem.eql(u8, backend, "ipc_unixsocket") and !std.mem.eql(u8, backend, "ipc_unixsocket_http") and !std.mem.eql(u8, backend, "std_http") and !std.mem.eql(u8, backend, "fast_http")) {
         std.debug.panic("unsupported -Dbackend={s}; expected ipc_unixsocket, ipc_unixsocket_http, std_http, or fast_http", .{backend});
     }
@@ -195,6 +197,7 @@ pub fn addService(b: *std.Build, options: Options) Service {
         \\pub const hybrid_profile = "{s}";
         \\pub const lua_state_strategy = "{s}";
         \\pub const router_dispatch = "{s}";
+        \\pub const dev_events_path = "{s}";
         \\
         \\pub const zig_optimize = @tagName(builtin.mode);
         \\pub const cpu_arch = @tagName(builtin.cpu.arch);
@@ -227,6 +230,7 @@ pub fn addService(b: *std.Build, options: Options) Service {
         hybrid_profile,
         lua_state_strategy,
         router_dispatch,
+        dev_events_path,
     }) catch @panic("OOM");
     const write_build_info = b.addWriteFiles();
     const build_info_file = write_build_info.add("build_info.zig", build_info_content);

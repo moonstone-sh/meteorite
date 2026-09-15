@@ -2,6 +2,7 @@ const std = @import("std");
 const Io = std.Io;
 const proto = @import("meteorite_protocol");
 const http_date = @import("../server/http_date.zig");
+const peer_addr = @import("peer_addr.zig");
 
 pub const name = "std_http";
 pub const connection_strategy = "std_http_single_connection_loop";
@@ -83,6 +84,13 @@ pub const Request = struct {
     date_seconds: i64 = 0,
     target_value: []const u8 = "",
     target_storage: [4096]u8 = undefined,
+    /// Status last written to the wire for this request; 0 until a respond*
+    /// call sets it. Observability only — nothing in the response path reads it.
+    status_code: u16 = 0,
+    /// Peer address, rendered once at accept() time. Inline storage keeps a
+    /// Request copyable (it is moved into the thread box / pool queue).
+    remote_addr_storage: peer_addr.Storage = undefined,
+    remote_addr_len: u8 = 0,
 
     pub fn close(self: *Request, io: Io) void {
         if (!self.closed) {
@@ -104,9 +112,16 @@ pub fn listen(config: ListenConfig) !Server {
 pub fn accept(server: *Server, req: *Request) !void {
     req.* = Request{ .stream = try server.inner.accept(server.io) };
     proto.inc(&counters.total_connections);
+    peer_addr.capture(req.stream, &req.remote_addr_storage, &req.remote_addr_len);
     req.reader = req.stream.reader(server.io, &req.recv_buffer);
     req.writer = req.stream.writer(server.io, &req.send_buffer);
     req.server = std.http.Server.init(&req.reader.interface, &req.writer.interface);
+}
+
+/// Connected peer's address, or null when it could not be determined.
+pub fn remoteAddr(req: *Request) ?[]const u8 {
+    if (req.remote_addr_len == 0) return null;
+    return req.remote_addr_storage[0..req.remote_addr_len];
 }
 
 pub fn rebind(req: *Request, io: Io) void {
@@ -146,6 +161,7 @@ pub fn method(req: *Request) Method {
 }
 
 pub fn respondParseError(req: *Request, status: u16, body: []const u8) void {
+    req.status_code = status;
     const reason = proto.reasonPhrase(status);
     var response_buffer: [512]u8 = undefined;
     const bytes = std.fmt.bufPrint(&response_buffer, "HTTP/1.1 {s}\r\ncontent-type: text/plain; charset=utf-8\r\ncontent-length: {d}\r\nconnection: close\r\n\r\n{s}", .{ reason, body.len, body }) catch return;
@@ -208,6 +224,7 @@ pub fn respondBytes(req: *Request, status: u16, content_type: []const u8, body: 
 }
 
 pub fn respondBytesWithHeaders(req: *Request, status: u16, content_type: []const u8, body: []const u8, extra_headers: []const proto.Header) !void {
+    req.status_code = status;
     if (std.mem.eql(u8, content_type, "text/plain; charset=utf-8") and body.len <= 4096) {
         if (extra_headers.len == 0) return respondSmall(req, reasonFromCode(status), content_type, body);
     }
@@ -241,6 +258,7 @@ pub fn respondBytesWithHeaders(req: *Request, status: u16, content_type: []const
 // blocking socket write until the OS accepts the bytes, same as any
 // buffered respondBytesWithHeaders call today.
 pub fn beginStream(req: *Request, status: u16, content_type: []const u8) !void {
+    req.status_code = status;
     const reason = reasonFromCode(status);
     const connection = if (req.inner.head.keep_alive) "keep-alive" else "close";
     const date = http_date.formatHttpDate(req.date_seconds);
@@ -272,6 +290,7 @@ pub fn endStream(req: *Request) !void {
 }
 
 pub fn respondStatic(req: *Request, status: u16, content_type: []const u8, content_length: u64, cache_control: []const u8, etag: []const u8, content_encoding: ?[]const u8, body: []const u8, head_only: bool) !void {
+    req.status_code = status;
     var response_buffer: [16384]u8 = undefined;
     const encoding = content_encoding orelse "";
     const reason = reasonFromCode(status);
@@ -293,6 +312,7 @@ pub fn respondStatic(req: *Request, status: u16, content_type: []const u8, conte
 }
 
 pub fn respondRawOk(req: *Request) !void {
+    req.status_code = 200;
     var response_buffer: [256]u8 = undefined;
     const connection = if (req.inner.head.keep_alive) "keep-alive" else "close";
     const date = http_date.formatHttpDate(req.date_seconds);
