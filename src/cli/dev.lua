@@ -13,6 +13,17 @@ local meteorite_cli = os.getenv("METEORITE_CLI") or "src/cli/main.lua"
 local build_command_override = os.getenv("METEORITE_BUILD_COMMAND")
 local once = os.getenv("METEORITE_DEV_ONCE") == "1"
 local prebuilt = os.getenv("METEORITE_DEV_PREBUILT") == "1"
+-- The dev supervisor spawns this script directly (`lua <.../cli/dev.lua>`, see
+-- cli/dev_command.lua), bypassing the launcher line in bin/meteorite that
+-- exports LUA_PATH for the ordinary CLI entry. So, exactly like cli/main.lua,
+-- dev.lua has to locate its own sibling modules from its own script path --
+-- which resolves for the repo layout (src/cli/dev.lua -> src/core/) and for
+-- installed layouts (<root>/meteorite/cli/dev.lua -> <root>/meteorite/core/).
+local script_source = debug.getinfo(1, "S").source
+if script_source:sub(1, 1) == "@" then script_source = script_source:sub(2) end
+local module_root = (script_source:match("^(.*[/\\])") or "src/cli/"):gsub("cli[/\\]$", "")
+package.path = module_root .. "?.lua;" .. module_root .. "?/init.lua;" .. package.path
+
 local dev_watch = require("core.dev_watch")
 
 local function path_exists(path)
