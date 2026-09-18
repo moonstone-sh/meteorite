@@ -39,7 +39,7 @@ pub fn contentTypeIs(content_type: []const u8, expected: []const u8) bool {
     return std.ascii.eqlIgnoreCase(media_type, expected);
 }
 
-pub fn formComponentValid(value: []const u8) bool {
+pub fn formComponentValid(value: []const u8, allow_newlines: bool) bool {
     var index: usize = 0;
     while (index < value.len) {
         const ch = value[index];
@@ -49,7 +49,7 @@ pub fn formComponentValid(value: []const u8) bool {
             _ = std.fmt.charToDigit(value[index + 2], 16) catch return false;
             index += 3;
         } else {
-            if (ch == 0 or ch == '\r' or ch == '\n') return false;
+            if (ch == 0 or (!allow_newlines and (ch == '\r' or ch == '\n'))) return false;
             index += 1;
         }
     }
@@ -64,10 +64,15 @@ pub fn formValue(body: []const u8, wanted: []const u8) Lookup {
         const eq = std.mem.indexOfScalar(u8, pair, '=') orelse pair.len;
         const name = pair[0..eq];
         const value = if (eq < pair.len) pair[eq + 1 ..] else "";
-        if (!formComponentValid(name) or !formComponentValid(value) or name.len == 0) return .invalid;
+        // Names stay single-line identifiers; values deliberately permit raw
+        // CR/LF because browsers submit textarea line endings in both raw and
+        // percent-encoded forms.
+        if (!formComponentValid(name, false) or !formComponentValid(value, true) or name.len == 0) return .invalid;
         if (std.mem.eql(u8, name, wanted)) {
-            if (found != null) return .invalid;
-            found = value;
+            // Validation is scalar today.  Its deterministic projection of a
+            // repeated control is first-wins; ctx:form_body() retains all
+            // values as an array for handlers that need them.
+            if (found == null) found = value;
         }
     }
     if (found) |value| return .{ .value = value };

@@ -10,6 +10,7 @@
 local profiles = require("core.profile")
 local contract = require("core.contract")
 local scope_model = require("core.scope")
+local dev_watch = require("core.dev_watch")
 
 local route = {}
 
@@ -58,7 +59,19 @@ local function handler_shape(handler)
   local kind = type(handler)
   if kind == "string" then return { kind = "zig", symbol = handler } end
   if kind == "function" then return { kind = "inline_lua", value = handler } end
-  if kind == "table" and handler.kind == "lua" then return { kind = "lua", module = handler.module, path = handler.path } end
+  if kind == "table" and handler.kind == "lua" then
+    -- Keep the calling convention as part of the handler contract.  Lua-file
+    -- handlers do not go through the lifter, so dropping this here silently
+    -- changed an explicit m.lua(..., { arg_mode = ... }) declaration back to
+    -- request_table during graph normalization.
+    return {
+      kind = "lua",
+      module = handler.module,
+      path = handler.path,
+      nparams = handler.nparams,
+      arg_mode = handler.arg_mode,
+    }
+  end
   if kind == "table" and handler.kind == "zig" then return { kind = "zig", symbol = handler.symbol } end
   if kind == "table" and handler.kind == "zig_file" then return { kind = "zig_file", path = handler.path, decl = handler.decl or "handle" } end
   if kind == "table" and handler.kind == "file" then return handler end
@@ -83,6 +96,7 @@ function route.declare(method, path, options, handler)
     memory.max_body = options.body.max
   end
   return {
+    id = options.id,
     method = method,
     raw_path = path,
     path = { segments = parse_path(path) },
@@ -255,7 +269,15 @@ end
 local function normalize_handler(handler)
   if handler.kind == "zig" then return { kind = "zig", symbol = symbol_id(handler.symbol), import = handler.symbol } end
   if handler.kind == "zig_file" then return { kind = "zig_file", symbol = path_symbol_id(handler.path), path = handler.path, decl = handler.decl or "handle" } end
-  if handler.kind == "lua" then return { kind = "lua", module = handler.module, path = handler.path } end
+  if handler.kind == "lua" then
+    return {
+      kind = "lua",
+      module = handler.module,
+      path = handler.path,
+      nparams = handler.nparams or 1,
+      arg_mode = handler.arg_mode or "request_table",
+    }
+  end
   if handler.kind == "file" then return handler end
   if handler.kind == "dir" then return handler end
   return { kind = "inline_lua", value = handler.value }
@@ -660,6 +682,7 @@ function route.normalize_app(app, opts)
     profile = resolved_profile,
     mode = mode,
     listen = listen,
+    dev_watch = dev_watch.normalize(app.options and app.options.dev_watch),
     trailing_slash = trailing_slash,
     routes = routes,
     messages = messages,

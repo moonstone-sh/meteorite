@@ -26,7 +26,7 @@ end
 local app
 app = c.create({
   name = "meteorite",
-  version = "0.2.5",
+  version = "0.2.8",
   description = "Moonstone-zig service compiler prototype",
 
   root = c.node({
@@ -79,6 +79,8 @@ app = c.create({
     }, { description = "Build a Meteorite service" }),
 
     check = c.node({
+      c.option({ key = "mode", aliases = { "--mode" }, value = { schema = v.string() } }),
+      c.option({ key = "backend", aliases = { "--backend" }, value = { schema = v.string() } }),
       c.arg({ key = "args", schema = v.string(), occurs = { min = 0, max = "many" } }),
       c.passthrough("argv"),
       c.run(function(ctx)

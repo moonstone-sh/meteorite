@@ -161,6 +161,14 @@ test "path params and query fields share one type mapping" (function()
   test.assert_true(aids.routes:find("---@field n integer", 1, true) ~= nil, "i32 query is integer")
 end)
 
+test "directory handlers require their catch-all parameter in LuaLS aids" (function()
+  local aids = emit_aids({ routes = {} })
+  test.assert_true(aids.meteorite:find("---@field dir fun(root: string, opts: MeteoriteDirOptions): MeteoriteDirHandler", 1, true) ~= nil,
+    "dir options are required and typed")
+  test.assert_true(aids.meteorite:find("---@field param string name of the final catch-all route parameter", 1, true) ~= nil,
+    "directory param option is required")
+end)
+
 test "optional query fields stay nilable in the generated types" (function()
   local aids = emit_aids({
     routes = {

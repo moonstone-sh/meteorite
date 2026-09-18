@@ -463,6 +463,11 @@ end)
 
 app:get("/cookies/helper-zig", "handlers.response_zig_set_cookie")
 
+app:get("/runtime/sleep", function()
+	meteorite_sleep(0.001)
+	return "slept"
+end)
+
 app:get("/query/typed", {
 	query = {
 		q = m.string({ max = 16 }),
@@ -541,6 +546,33 @@ app:post("/body/form", {
 		return ctx:text(400, err or "invalid form body")
 	end
 	return "form:" .. tostring(form.name or "") .. ":" .. tostring(form.city or "") .. ":" .. tostring(form.empty or "")
+end)
+
+app:post("/body/form-repeat", function(ctx)
+	local form, err = ctx:form_body()
+	if not form then return ctx:text(400, err or "invalid form body") end
+	return ctx:text(table.concat(form.tag or {}, ","))
+end)
+
+-- Request-location primitives are a router seam: the target retains query
+-- state, path is suitable for matching, and id is the app-owned route key.
+-- `ctx` intentionally selects lazy_context so this also pins that compiled
+-- calling convention rather than only the full request-table path.
+app:get("/context/:id", {
+	id = "page.context.show",
+	params = { id = m.u64() },
+}, function(ctx)
+	return ctx:text(table.concat({
+		ctx:target(),
+		ctx:path(),
+		ctx:route_id(),
+		tostring(ctx.params.id),
+		ctx:query("tab") or "",
+	}, "|"))
+end)
+
+app:post("/body/redirect", function(ctx)
+	ctx:redirect(303, "/context/1")
 end)
 
 app:delete("/body/no-body", function()

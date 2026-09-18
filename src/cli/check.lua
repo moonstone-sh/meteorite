@@ -3,7 +3,7 @@ local check = {}
 
 function check.run(argv, deps)
   if argv[2] == "--help" or argv[2] == "-h" then deps.print_help("check"); return end
-  local request = deps.build_request.parse({ table.unpack(argv, 2) })
+  local request = deps.build_request.parse({ (table.unpack or unpack)(argv, 2) })
   deps.build_request.require_behavior(request, "meteorite check")
   local root = deps.current_dir()
   local quote = deps.shell_quote

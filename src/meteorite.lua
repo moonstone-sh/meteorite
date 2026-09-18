@@ -21,6 +21,7 @@ local utility_exports = require("core.utility_exports")
 ---@field profile? string|MeteoriteProfile
 ---@field host? string bind address (default "127.0.0.1")
 ---@field port? integer bind port (default 8080)
+---@field dev_watch? {graph: string[], runtime?: string[]} Project-relative inputs for the direct dev supervisor
 ---@field trusted_proxy? nil unsupported in the current release; proxy-derived IP headers remain untrusted
 ---@field trust_proxy? nil unsupported alias
 ---@field trusted_proxies? nil unsupported alias
@@ -36,6 +37,21 @@ local utility_exports = require("core.utility_exports")
 ---@field plugins? table
 ---@field context? table
 ---@field id? string
+
+---@class MeteoriteDirOptions
+---@field param string Name of the final catch-all route parameter
+---@field cache? string
+---@field cache_control? string
+---@field immutable? boolean
+---@field types? table<string, string>
+---@field compressed? {br?: boolean, gz?: boolean}
+---@field index? false
+---@field name? string
+
+---@class MeteoriteDirHandler
+---@field kind "dir"
+---@field root string
+---@field param string
 
 ---@class MeteoriteCanonicalRouteSpec
 ---@field route string Route path pattern (e.g. "/users/:id")
@@ -61,6 +77,10 @@ local utility_exports = require("core.utility_exports")
 ---@field scope table<string, string|integer|number|boolean|table> Read-only effective mounted-scope context
 ---@field query table<string, string|integer|number|boolean|nil> Validated query values (table access in request_table mode)
 ---@field param fun(self: MeteoriteContext, name: string): string|integer|nil Look up a route parameter by name
+---@field target fun(self: MeteoriteContext): string Original request target, including its query string
+---@field path fun(self: MeteoriteContext): string Request path without its query string
+---@field route_id fun(self: MeteoriteContext): string Stable id of the matched route
+---@field redirect fun(self: MeteoriteContext, status: integer, location: string): nil Send a validated redirect response
 ---@field query fun(self: MeteoriteContext, name: string): string|nil Look up a percent-decoded query value (first-wins for repeated keys)
 ---@field query_all fun(self: MeteoriteContext, name: string): string[]|nil Look up all values for a repeated query parameter
 ---@field message fun(self: MeteoriteContext): string Native message name for ipc_unixsocket requests
@@ -97,7 +117,7 @@ local utility_exports = require("core.utility_exports")
 ---@field set fun(self: MeteoriteContext, key: string, value: any): any Set request-local state value
 ---@field scope fun(self: MeteoriteContext, name: string): any Get scope context value
 
----@alias MeteoriteHandler string|fun(c: MeteoriteContext): string|table|nil|{kind: "lua", module: string, path?: string}|{kind: "zig", symbol: string}|{kind: "zig_file", path: string, decl?: string}
+---@alias MeteoriteHandler string|fun(c: MeteoriteContext): string|table|nil|MeteoriteDirHandler|{kind: "lua", module: string, path?: string}|{kind: "zig", symbol: string}|{kind: "zig_file", path: string, decl?: string}
 --- A bare string return is sugar for 200 text/plain; charset=utf-8.
 --- A table return provides {status?, content_type?, body?, headers?}.
 --- nil means no response (204 if no response helper was called).
@@ -163,9 +183,9 @@ end
 ---@field bool fun(opts?: {optional?: boolean, decode?: boolean}): MeteoriteSchemaValue
 ---@field pattern fun(name_or_source: string, source_or_opts?: string|table, opts?: table): MeteoritePattern
 ---@field zig fun(path_or_symbol: string, opts?: {decl?: string}): table
----@field lua fun(module_ref: string): table
+---@field lua fun(module_ref: string, opts?: {path?: string, nparams?: integer, arg_mode?: "request_table"|"lazy_context"|"direct_params"|"no_args"}): table
 ---@field file fun(path: string, opts?: table): table
----@field dir fun(root: string, opts?: table): table
+---@field dir fun(root: string, opts: MeteoriteDirOptions): MeteoriteDirHandler
 ---@field site fun(app: MeteoriteApp, opts: table): MeteoriteApp
 local MDoc = {}
 

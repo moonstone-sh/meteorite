@@ -2,7 +2,7 @@ manifest_version = 2
 
 [package]
 name = "moonstone/meteorite"
-version = "0.2.5"
+version = "0.2.8"
 kind = "bin"
 description = "Moonstone-zig service compiler prototype"
 
@@ -101,7 +101,7 @@ path = "fixtures/apps/web-standards"
 
 [[dependencies]]
 name = "moonstone/ballad"
-constraint = "^0.3.5"
+constraint = "^0.3.8"
 role = "tool"
 
 [[dependencies]]

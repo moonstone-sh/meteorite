@@ -7,10 +7,10 @@ trap 'rm -rf "$tmp"' EXIT
 
 (
   cd "$ROOT"
-  TARGET="$tmp" moon exec lua -e 'package.path = "src/?.lua;src/?/init.lua;" .. package.path; require("cli.init").run({"init", os.getenv("TARGET"), "--no-sync"}, { print_help = function() end, roots = { install_root = "./", module_root = "src/" } })'
+  TARGET="$tmp" moon exec -- lua -e 'package.path = "src/?.lua;src/?/init.lua;" .. package.path; require("cli.init").run({"init", os.getenv("TARGET"), "--no-sync"}, { print_help = function() end, roots = { install_root = "./", module_root = "src/" } })'
 )
 
-lua_bin="$(cd "$ROOT" && moon exec sh -c 'command -v lua')"
+lua_bin="$(cd "$ROOT" && moon exec -- sh -c 'command -v lua')"
 if [[ -z "$lua_bin" || ! -x "$lua_bin" ]]; then
   echo "build API native test could not resolve Moonstone's Lua runtime" >&2
   exit 1

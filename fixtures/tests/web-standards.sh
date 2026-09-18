@@ -885,6 +885,7 @@ fi
 rm -rf "$symlink_fixture"
 
 expect_body table-headers /headers/table
+expect_body slept /runtime/sleep
 expect_header /headers/table X-Meteorite-Test table
 expect_header /headers/table Access-Control-Allow-Origin '*'
 
@@ -1148,8 +1149,13 @@ expect_method_body json:meteorite:123:true POST /body/json -H 'Content-Type: app
 expect_method_status_body 400 'invalid json body' POST /body/json -H 'Content-Type: application/json' --data-binary '{bad json'
 expect_method_body 'form:Meteorite:Buenos Aires:' POST /body/form -H 'Content-Type: application/x-www-form-urlencoded' --data-binary 'name=Meteorite&city=Buenos+Aires&empty='
 expect_method_body 'form:Meteorite:São Paulo:' POST /body/form -H 'Content-Type: application/x-www-form-urlencoded; charset=utf-8' --data-binary 'name=Meteorite&city=S%C3%A3o+Paulo'
+expect_method_body $'form:Meteorite:one\ntwo:' POST /body/form -H 'Content-Type: application/x-www-form-urlencoded' --data-binary 'name=Meteorite&city=one%0Atwo'
+expect_method_body 'lua,zig' POST /body/form-repeat -H 'Content-Type: application/x-www-form-urlencoded' --data-binary 'tag=lua&tag=zig'
 expect_method_status_body 400 'invalid form body' POST /body/form -H 'Content-Type: application/x-www-form-urlencoded' --data-binary 'name=%zz'
 expect_method_status_body 400 'unsupported form content type' POST /body/form -H 'Content-Type: text/plain' --data-binary 'name=Meteorite'
+expect_body '/context/42?tab=activity|/context/42|page.context.show|42|activity' '/context/42?tab=activity'
+expect_method_status 303 POST /body/redirect
+expect_method_header POST /body/redirect Location /context/1
 expect_method_body delete:no-body DELETE /body/no-body
 expect_method_status 413 DELETE /body/no-body --data-binary unexpected
 expect_method_status_body 413 'payload too large' DELETE /body/no-body --data-binary unexpected

@@ -11,12 +11,28 @@ const lua_abi: LuaAbi = if (@hasDecl(c, "lua_pcallk")) .lua_5_4 else if (@hasDec
 
 pub const LUA_OK = if (lua_abi == .lua_5_4) c.LUA_OK else 0;
 
+pub inline fn upvalueIndex(i: c_int) c_int {
+    return switch (comptime lua_abi) {
+        .lua_5_4 => c.LUA_REGISTRYINDEX - i,
+        .lua_5_1 => c.LUA_GLOBALSINDEX - i,
+        else => @compileError("Undefined ABI layout: " ++ @tagName(lua_abi)),
+    };
+}
+
 pub inline fn pcall(L: *c.lua_State, nargs: c_int, nresults: c_int, errfunc: c_int) c_int {
     switch (comptime lua_abi) {
         .lua_5_4 => return c.lua_pcallk(L, nargs, nresults, errfunc, 0, null),
         .lua_5_1 => return c.lua_pcall(L, nargs, nresults, errfunc),
         else => @compileError("Undefined ABI layout: " ++ @tagName(lua_abi)),
     }
+}
+
+pub inline fn newUserdata(L: *c.lua_State, size: usize) ?*anyopaque {
+    return switch (comptime lua_abi) {
+        .lua_5_4 => c.lua_newuserdatauv(L, size, 0),
+        .lua_5_1 => c.lua_newuserdata(L, size),
+        else => @compileError("Undefined ABI layout: " ++ @tagName(lua_abi)),
+    };
 }
 
 pub inline fn loadfile(L: *c.lua_State, filename: [*c]const u8) c_int {

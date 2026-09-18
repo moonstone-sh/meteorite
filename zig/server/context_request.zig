@@ -73,6 +73,18 @@ pub fn RequestContext(comptime backend: anytype, comptime protocol: anytype, com
             return backend.path(ctx.request);
         }
 
+        /// The unmodified request target is deliberately distinct from path:
+        /// a router needs the query string to seed browser/SSR state, while
+        /// matcher and file-serving code must operate on the path alone.
+        pub fn target(ctx: anytype) []const u8 {
+            if (comptime @hasDecl(backend, "target")) return backend.target(ctx.request);
+            return backend.path(ctx.request);
+        }
+
+        pub fn routeId(ctx: anytype) []const u8 {
+            return ctx.route.id;
+        }
+
         pub fn message(ctx: anytype) []const u8 {
             return ctx.route.message.name;
         }
@@ -80,6 +92,11 @@ pub fn RequestContext(comptime backend: anytype, comptime protocol: anytype, com
         pub fn run(ctx: anytype, allocator: std.mem.Allocator, argv: []const []const u8) ![]const u8 {
             const result = try process.run(allocator, ctx.io, .{ .argv = argv });
             defer allocator.free(result.stderr);
+            errdefer allocator.free(result.stdout);
+            switch (result.term) {
+                .exited => |code| if (code != 0) return error.SubprocessFailed,
+                else => return error.SubprocessFailed,
+            }
             return result.stdout;
         }
 

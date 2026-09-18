@@ -171,9 +171,11 @@ local function parse_form_values(body)
       local name = eq and pair:sub(1, eq - 1) or pair
       local value = eq and pair:sub(eq + 1) or ""
       if name == "" or not name:match("^[^%%\r\n%z]+$") then out.__invalid = true end
-      if value:find("%%[^%x]?") or value:find("[\r\n%z]") then out.__invalid = true end
-      if out[name] ~= nil then out.__invalid = true end
-      out[name] = value
+      -- Textareas legitimately carry CR/LF, raw or percent encoded.  The
+      -- validation path is scalar and therefore projects repeated controls
+      -- first-wins, matching request_parse.formValue in the compiled server.
+      if value:find("%%[^%x]?") or value:find("%z") then out.__invalid = true end
+      if out[name] == nil then out[name] = value end
     end
   end
   return out
@@ -380,6 +382,39 @@ function Context:body()
   return self.request.body or ""
 end
 
+--- Original request target, including its query string.
+function Context:target()
+  return self._target or self.request.path or "/"
+end
+
+--- Request path without its query string.
+function Context:path()
+  return self._path or split_target(self:target())
+end
+
+--- Stable id assigned to the matched Meteorite route.
+function Context:route_id()
+  return self._route_id
+end
+
+function Context:redirect(status, location)
+  status = tonumber(status)
+  location = tostring(location or "")
+  if status ~= 301 and status ~= 302 and status ~= 303 and status ~= 307 and status ~= 308 then
+    error("redirect: invalid redirect status " .. tostring(status), 2)
+  end
+  if location == "" or location:find("[\r\n%z]") then
+    error("redirect: invalid location", 2)
+  end
+  self.response = {
+    status = status,
+    content_type = "text/plain; charset=utf-8",
+    body = "",
+    headers = { Location = location },
+  }
+  return nil
+end
+
 function Context:json_body()
   local ok, json = pcall(require, "cjson")
   if not ok then return nil, "json body parser unavailable" end
@@ -400,12 +435,12 @@ local function decode_form_component(value)
       local hex = value:sub(index + 1, index + 2)
       if not hex:match("^%x%x$") then return nil end
       local byte = tonumber(hex, 16)
-      if byte == 0 or byte == 10 or byte == 13 then return nil end
+      if byte == 0 then return nil end
       out[#out + 1] = string.char(byte)
       index = index + 3
     else
       local byte = ch:byte()
-      if byte == 0 or byte == 10 or byte == 13 then return nil end
+      if byte == 0 then return nil end
       out[#out + 1] = ch
       index = index + 1
     end
@@ -428,7 +463,14 @@ function Context:form_body()
     local name = decode_form_component(raw_name)
     local value = decode_form_component(raw_value)
     if not name or not value or name == "" then return nil, "invalid form body" end
-    if result[name] == nil then result[name] = value end
+    local previous = result[name]
+    if previous == nil then
+      result[name] = value
+    elseif type(previous) == "table" then
+      previous[#previous + 1] = value
+    else
+      result[name] = { previous, value }
+    end
   end
   return result, nil
 end
@@ -1004,6 +1046,9 @@ local function new_context(opts)
     _validated_query = opts.query or {},
     _raw_query_values = opts.raw_query_values or {},
     _raw_query_all = opts.raw_query_all or {},
+    _target = opts.target,
+    _path = opts.path,
+    _route_id = opts.route_id,
     state = {},
     scope = readonly_scope,
     worker_cache = opts.worker_cache or {},
@@ -1084,7 +1129,7 @@ function hybrid.invoke(app, request, opts)
       if query_error then return query_error end
       local validation_error = validate_request_domains(route, request)
       if validation_error then return validation_error end
-      local ctx = new_context({ request = request, params = params, query = query, raw_query_values = query_values, raw_query_all = query_all, scope = route.scope.context or {}, capabilities = graph.capabilities, zig_helpers = opts.zig_helpers, http_request = opts.http_request, worker_cache = app.cache, capability_store = store.capabilities })
+      local ctx = new_context({ request = request, params = params, query = query, raw_query_values = query_values, raw_query_all = query_all, target = request.path or "/", path = path, route_id = route.id, scope = route.scope.context or {}, capabilities = graph.capabilities, zig_helpers = opts.zig_helpers, http_request = opts.http_request, worker_cache = app.cache, capability_store = store.capabilities })
       local plugin_response = execute_scope_plugins(route, ctx, plugin_map)
       if plugin_response then return plugin_response end
       if route.handler.kind == "inline_lua" then

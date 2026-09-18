@@ -16,6 +16,10 @@ pub const VTable = struct {
     write_chunk: *const fn (ctx: *anyopaque, chunk: []const u8) anyerror!void,
     end_stream: *const fn (ctx: *anyopaque) anyerror!void,
     body: *const fn (ctx: *anyopaque) anyerror![]const u8,
+    target: *const fn (ctx: *anyopaque) []const u8,
+    path: *const fn (ctx: *anyopaque) []const u8,
+    route_id: *const fn (ctx: *anyopaque) []const u8,
+    redirect: *const fn (ctx: *anyopaque, status: u16, location: []const u8) anyerror!void,
     param: *const fn (ctx: *anyopaque, name: []const u8) ?[]const u8,
     param_at: *const fn (ctx: *anyopaque, index: usize) ?[]const u8,
     message: *const fn (ctx: *anyopaque) []const u8,
@@ -81,6 +85,30 @@ pub fn makeVTable(comptime Ctx: type) VTable {
             fn f(ptr: *anyopaque) ![]const u8 {
                 const typed: *Ctx = @ptrCast(@alignCast(ptr));
                 return typed.body();
+            }
+        }.f,
+        .target = struct {
+            fn f(ptr: *anyopaque) []const u8 {
+                const typed: *Ctx = @ptrCast(@alignCast(ptr));
+                return typed.target();
+            }
+        }.f,
+        .path = struct {
+            fn f(ptr: *anyopaque) []const u8 {
+                const typed: *Ctx = @ptrCast(@alignCast(ptr));
+                return typed.path();
+            }
+        }.f,
+        .route_id = struct {
+            fn f(ptr: *anyopaque) []const u8 {
+                const typed: *Ctx = @ptrCast(@alignCast(ptr));
+                return typed.routeId();
+            }
+        }.f,
+        .redirect = struct {
+            fn f(ptr: *anyopaque, status: u16, location: []const u8) !void {
+                const typed: *Ctx = @ptrCast(@alignCast(ptr));
+                return typed.redirect(status, location);
             }
         }.f,
         .param = struct {

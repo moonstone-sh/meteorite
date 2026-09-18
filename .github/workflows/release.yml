@@ -64,7 +64,7 @@ jobs:
           moon sync --locked
       - name: Export tagged project
         run: |
-          moon exec ballad play partiture.lua
+          moon exec -- ballad play partiture.lua
       - name: Verify tag version
         env:
           RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}

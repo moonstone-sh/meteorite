@@ -379,6 +379,8 @@ local function lower_handler_to_stage(handler)
         strat = "lua",
         path = handler.path,
         module = handler.module,
+        nparams = handler.nparams,
+        arg_mode = handler.arg_mode,
         source = source_info(5),
         _legacy = true,
       }

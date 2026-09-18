@@ -9,6 +9,7 @@ local graph_emit = require("codegen.graph_emit")
 local openapi = require("codegen.openapi")
 local fs = require("utils.fs")
 local json = require("utils.json")
+local dev_watch = require("core.dev_watch")
 
 local emitter = {}
 
@@ -368,6 +369,7 @@ function emitter.emit(app, opts)
   helpers.write_file(output .. "/runtime.zon", zon.encode({ mode = helpers.mode_enum(mode), lua_runtime = mode ~= "release-static", backend = { __meteorite_enum = true, value = backend }, transport = backend_transport(backend), protocol = backend_protocol(backend), capabilities = backend_capabilities(backend), workers = { strategy = { __meteorite_enum = true, value = "auto" }, lua_state = { __meteorite_enum = true, value = "single_locked" } }, memory = graph.memory_report }))
   helpers.write_file(output .. "/capabilities.zon", zon.encode({ backend = backend, transport = backend_transport(backend), protocol = backend_protocol(backend), backend_capabilities = backend_capabilities(backend), methods = { "GET", "POST", "PUT", "PATCH", "DELETE" }, declared = graph.capabilities or {} }))
   helpers.write_file(output .. "/listen.zon", zon.encode(graph.listen or { host = "127.0.0.1", port = 8080 }))
+  helpers.write_file(output .. "/dev-watch.paths", dev_watch.encode(graph.dev_watch))
   emit_scopes(graph, output)
     helpers.write_file(output .. "/listen_config.zig", "pub const listen_zon = @embedFile(\"listen.zon\");\n")
   helpers.write_file(output .. "/graph_hash.txt", graph_hash .. "\n")

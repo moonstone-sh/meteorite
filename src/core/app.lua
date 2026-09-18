@@ -45,7 +45,13 @@ local function add_route(self, method, path_or_table, options_or_handler, maybe_
         declaration = route.declare(method, rc.route, {
           params = rc.params, query = rc.query, body = rc.body,
           memory = rc.memory, capabilities = rc.capabilities, message = rc.message, message_source = rc.message_source, scope = scope,
-        }, { kind = "lua", path = handler_stage.path, module = handler_stage.module })
+        }, {
+          kind = "lua",
+          path = handler_stage.path,
+          module = handler_stage.module,
+          nparams = handler_stage.nparams,
+          arg_mode = handler_stage.arg_mode,
+        })
       elseif handler_stage.strat == "zig" then
         declaration = route.declare(method, rc.route, {
           params = rc.params, query = rc.query, body = rc.body,

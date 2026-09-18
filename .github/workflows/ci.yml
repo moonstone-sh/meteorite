@@ -60,4 +60,4 @@ jobs:
       - name: Validate release gate
         run: moon run test-release-gate
       - name: Export release candidate with locked Ballad tool
-        run: moon exec ballad play partiture.lua
+        run: moon exec -- ballad play partiture.lua

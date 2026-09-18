@@ -21,12 +21,12 @@ pub const form_body_helper =
     \\      local hex = value:sub(i + 1, i + 2)
     \\      if not hex:match("^%x%x$") then return nil end
     \\      local byte = tonumber(hex, 16)
-    \\      if byte == 0 or byte == 10 or byte == 13 then return nil end
+    \\      if byte == 0 then return nil end
     \\      out[#out + 1] = string.char(byte)
     \\      i = i + 3
     \\    else
     \\      local byte = ch:byte()
-    \\      if byte == 0 or byte == 10 or byte == 13 then return nil end
+    \\      if byte == 0 then return nil end
     \\      out[#out + 1] = ch
     \\      i = i + 1
     \\    end
@@ -48,7 +48,14 @@ pub const form_body_helper =
     \\    local name = decode_component(raw_name)
     \\    local value = decode_component(raw_value)
     \\    if not name or not value or name == "" then return nil, "invalid form body" end
-    \\    if result[name] == nil then result[name] = value end
+    \\    local previous = result[name]
+    \\    if previous == nil then
+    \\      result[name] = value
+    \\    elseif type(previous) == "table" then
+    \\      previous[#previous + 1] = value
+    \\    else
+    \\      result[name] = { previous, value }
+    \\    end
     \\  end
     \\  return result, nil
     \\end
@@ -300,4 +307,3 @@ pub const log_helper =
     \\  return event
     \\end
 ;
-

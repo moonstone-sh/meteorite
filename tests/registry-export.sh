@@ -25,8 +25,14 @@ fi
 
 if [[ "$archive" == *.tar.zst ]]; then
   contents="$(zstd -dc "$archive" | tar -tf -)"
+  details="$(zstd -dc "$archive" | tar -tvf -)"
 else
   contents="$(gzip -dc "$archive" | tar -tf -)"
+  details="$(gzip -dc "$archive" | tar -tvf -)"
+fi
+if ! grep -Eq '^-rwxr-xr-x.* (\./)?bin/meteorite$' <<<"$details"; then
+  echo "registry export: bin/meteorite is not executable in the source archive" >&2
+  exit 1
 fi
 for required_path in README.md docs/roadmap/v0.1-ga.md; do
   if ! grep -Fqx "./$required_path" <<<"$contents" && ! grep -Fqx "$required_path" <<<"$contents"; then

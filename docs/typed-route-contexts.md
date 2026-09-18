@@ -112,6 +112,14 @@ Two consequences worth knowing:
 - **A `u64` larger than a Lua integer stays a string** rather than wrapping to
   a negative number.
 
+`meteorite.dir(root, { param = "path" })` is a terminal static handler, not a
+Lua callback. Meteorite checks that `path` names the final `:path*` capture and
+uses that capture to select a compiled asset. In a separate inline route, use
+`c.params.path` for the generated route type. `c:param("path")` deliberately
+returns raw text and cannot promise the schema-coerced type. The `dir` options
+are annotated with a required `param`; the generated route context is still
+usable only when `.meteorite/aids/lua` is on LuaLS's path.
+
 `tests/typed_route_contexts.lua` pins both fixes, including a test that reads
 the context parameter name back out of real generated output and asserts that
 name still selects a params-bearing calling convention — the exact coupling

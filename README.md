@@ -54,6 +54,27 @@ moon run dev
 
 The dev command runs `Watch_partiture.lua` through Ballad's watcher plugin. Clingy owns the process group and terminal shutdown, Ballad owns polling and debounce, and Meteorite owns graph generation and the development binary. The direct `meteorite dev` supervisor can use an in-process Lua-only reload optimization, but the packaged watch recipe deliberately provides restart-safe live reload and does not promise state-preserving HMR. The future stateful-HMR design is documented in `docs/design/stateful-hmr-supervisor.md`; the concrete ownership and recovery contract is in [`docs/dev-lifecycle.md`](docs/dev-lifecycle.md). `scripts/guard.sh` remains an explicit manual recovery tool and is never run automatically by dev startup or shutdown.
 
+For apps using the direct `meteorite dev` supervisor, `dev_watch` can narrow its
+input domain without changing project layout:
+
+```lua
+local app = meteorite.app({
+  dev_watch = {
+    graph = { "src/main.lua", "src/views/Site.lua", "public" },
+    runtime = { "src/views", "src/loaders" },
+  },
+})
+```
+
+Graph inputs regenerate and classify the graph; runtime-only inputs restart the
+server without regenerating it. Meteorite always watches the entrypoint,
+`zig/`, `build.zig`, and `moonstone.toml` as graph/build inputs. The default, when
+`dev_watch` is absent, still watches all of `src/` and the usual static roots.
+Overlapping paths are treated as graph inputs. This is restart behavior, not
+client HMR: a browser refresh is still needed to see the new page. The Ballad
+`moon run dev` watch recipe has its own source list and does not yet consume
+this policy.
+
 For deployable output, use the app's Ballad partiture instead of `dist/server`:
 
 ```bash

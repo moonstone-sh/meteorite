@@ -85,6 +85,12 @@ for _, command in ipairs(COMMANDS) do
   end)
 end
 
+test("check accepts the behavior flags documented by its help page", function()
+  local ok, output = run_cli("check --mode hybrid_dev --backend fast_http --help")
+  test.assert_true(ok, "check accepts --mode and --backend")
+  test.assert_true(output:find("Meteorite check", 1, true) ~= nil, "check prints its help")
+end)
+
 test("every command in help.main's list has its own help page", function()
   local help = require("cli.help_text")
   for _, command in ipairs(COMMANDS) do

@@ -19,6 +19,7 @@ const encodeLuaValue = lua_json.encodeLuaValue;
 const encodeJsonString = lua_json.encodeJsonString;
 const HttpClient = lua_http.HttpClient;
 const HttpResponse = lua_http.HttpResponse;
+const RequestHeader = lua_http.RequestHeader;
 
 const ResponseHeaders = struct {
     items: [16]Header = undefined,
@@ -117,7 +118,7 @@ fn parseResponseOptionsHeaders(L: ?*c.lua_State, options_index: c_int) !Response
 }
 
 pub fn upvalueIndex(i: c_int) c_int {
-    return c.LUA_REGISTRYINDEX - i;
+    return lua_abi.upvalueIndex(i);
 }
 
 pub fn setupLuaPackagePaths(L: ?*c.lua_State) !void {
@@ -159,6 +160,8 @@ pub fn installGlobalResponseHelpers(L: ?*c.lua_State) void {
     c.lua_setglobal(L, "stream_write");
     c.lua_pushcfunction(L, l_stream_end);
     c.lua_setglobal(L, "stream_end");
+    c.lua_pushcfunction(L, l_meteorite_sleep);
+    c.lua_setglobal(L, "meteorite_sleep");
 }
 
 // --- Minimal streaming Lua bindings ------------------------------------
@@ -194,6 +197,25 @@ pub fn l_stream_end(L: ?*c.lua_State) callconv(.c) c_int {
     const rt = lua_vtable.current_vtable orelse return luaError(L, "stream_end: no active context", .{});
     const ctx = lua_vtable.current_ctx orelse return luaError(L, "stream_end: no active context", .{});
     rt.end_stream(ctx) catch |err| return luaError(L, "stream_end failed: {s}", .{@errorName(err)});
+    return 0;
+}
+
+/// Suspends the current request without spawning a subprocess. This is kept
+/// explicit to Meteorite rather than replacing Lua's general timing APIs: it
+/// uses the server's Io implementation and is safe inside threaded handlers.
+pub fn l_meteorite_sleep(L: ?*c.lua_State) callconv(.c) c_int {
+    const rt = lua_vtable.current_vtable orelse return luaError(L, "meteorite_sleep: no active context", .{});
+    const ctx = lua_vtable.current_ctx orelse return luaError(L, "meteorite_sleep: no active context", .{});
+    var is_number: c_int = 0;
+    const seconds = c.lua_tonumberx(L, 1, &is_number);
+    if (is_number == 0 or !std.math.isFinite(seconds) or seconds < 0 or seconds > 60) {
+        return luaError(L, "meteorite_sleep: expected seconds between 0 and 60", .{});
+    }
+    if (seconds == 0) return 0;
+    const nanoseconds: u64 = @intFromFloat(seconds * @as(c.lua_Number, std.time.ns_per_s));
+    rt.io(ctx).sleep(.{ .nanoseconds = nanoseconds }, .real) catch |err| {
+        return luaError(L, "meteorite_sleep failed: {s}", .{@errorName(err)});
+    };
     return 0;
 }
 
@@ -337,6 +359,47 @@ pub fn l_body(L: ?*c.lua_State) callconv(.c) c_int {
     };
     _ = c.lua_pushlstring(L, @ptrCast(body.ptr), body.len);
     return 1;
+}
+
+pub fn l_target(L: ?*c.lua_State) callconv(.c) c_int {
+    const value = lua_vtable.current_vtable.?.target(lua_vtable.current_ctx.?);
+    _ = c.lua_pushlstring(L, @ptrCast(value.ptr), value.len);
+    return 1;
+}
+
+pub fn l_path(L: ?*c.lua_State) callconv(.c) c_int {
+    const value = lua_vtable.current_vtable.?.path(lua_vtable.current_ctx.?);
+    _ = c.lua_pushlstring(L, @ptrCast(value.ptr), value.len);
+    return 1;
+}
+
+pub fn l_route_id(L: ?*c.lua_State) callconv(.c) c_int {
+    const value = lua_vtable.current_vtable.?.route_id(lua_vtable.current_ctx.?);
+    _ = c.lua_pushlstring(L, @ptrCast(value.ptr), value.len);
+    return 1;
+}
+
+pub fn l_redirect(L: ?*c.lua_State) callconv(.c) c_int {
+    const nargs = c.lua_gettop(L);
+    const offset: c_int = if (nargs >= 3 and c.lua_istable(L, 1)) 1 else 0;
+    if (nargs < offset + 2 or !lua_abi.isInteger(L, offset + 1)) {
+        return luaError(L, "redirect: expected status and location", .{});
+    }
+    const status_value = lua_abi.toInteger(L, offset + 1);
+    if (status_value < 0 or status_value > std.math.maxInt(u16)) {
+        return luaError(L, "redirect: invalid status", .{});
+    }
+    var location_len: usize = 0;
+    const location_ptr = c.lua_tolstring(L, offset + 2, &location_len) orelse {
+        return luaError(L, "redirect: location must be a string", .{});
+    };
+    lua_vtable.current_vtable.?.redirect(
+        lua_vtable.current_ctx.?,
+        @intCast(status_value),
+        location_ptr[0..location_len],
+    ) catch |err| return luaError(L, "redirect failed: {s}", .{@errorName(err)});
+    lua_vtable.markResponded();
+    return 0;
 }
 
 pub fn l_param(L: ?*c.lua_State) callconv(.c) c_int {
@@ -543,26 +606,32 @@ pub fn l_http(L: ?*c.lua_State) callconv(.c) c_int {
     };
     const timeout_ms = getCapabilityInt("http", cap_name, "timeout_ms") orelse 1500;
     const max_response_bytes = getCapabilityInt("http", cap_name, "max_response_bytes") orelse 65536;
+    if (timeout_ms < 1 or timeout_ms > std.math.maxInt(u32) or max_response_bytes < 1) {
+        _ = c.luaL_error(L, "http capability has invalid timeout_ms or max_response_bytes");
+        unreachable;
+    }
 
-    const client = allocator.create(HttpClient) catch {
+    const client = @as(?*HttpClient, @ptrCast(@alignCast(lua_abi.newUserdata(L.?, @sizeOf(HttpClient))))) orelse {
         _ = c.luaL_error(L, "out of memory");
         unreachable;
     };
     client.* = HttpClient.init(allocator, base_url, @intCast(timeout_ms), @intCast(max_response_bytes));
+    const client_index = absoluteIndex(L, -1);
 
     c.lua_newtable(L);
-    pushHttpClosure(L, client, "get", "GET");
-    pushHttpClosure(L, client, "post", "POST");
-    pushHttpClosure(L, client, "put", "PUT");
-    pushHttpClosure(L, client, "delete", "DELETE");
+    pushHttpClosure(L, client_index, "get", "GET");
+    pushHttpClosure(L, client_index, "post", "POST");
+    pushHttpClosure(L, client_index, "put", "PUT");
+    pushHttpClosure(L, client_index, "patch", "PATCH");
+    pushHttpClosure(L, client_index, "delete", "DELETE");
     return 1;
 }
 
-pub fn pushHttpClosure(L: ?*c.lua_State, client: *HttpClient, lua_name: []const u8, method: []const u8) void {
-    c.lua_pushlightuserdata(L, @ptrCast(client));
+pub fn pushHttpClosure(L: ?*c.lua_State, client_index: c_int, lua_name: []const u8, method: []const u8) void {
+    _ = c.lua_pushlstring(L, lua_name.ptr, lua_name.len);
+    c.lua_pushvalue(L, client_index);
     _ = c.lua_pushlstring(L, method.ptr, method.len);
     c.lua_pushcclosure(L, l_http_request, 2);
-    _ = c.lua_pushlstring(L, lua_name.ptr, lua_name.len);
     c.lua_rawset(L, -3);
 }
 
@@ -583,8 +652,8 @@ pub fn l_http_request(L: ?*c.lua_State) callconv(.c) c_int {
     const path = std.mem.span(path_ptr);
 
     var body: ?[]const u8 = null;
-    var content_type: ?[]const u8 = null;
-    var auth_header: ?[]const u8 = null;
+    var request_headers: [33]RequestHeader = undefined;
+    var request_header_count: usize = 0;
 
     if (c.lua_gettop(L) >= 3 and c.lua_istable(L, 3)) {
         _ = c.lua_getfield(L, 3, "body");
@@ -599,7 +668,8 @@ pub fn l_http_request(L: ?*c.lua_State) callconv(.c) c_int {
                 _ = c.luaL_error(L, "out of memory");
                 unreachable;
             };
-            content_type = "application/json";
+            request_headers[request_header_count] = .{ .name = "content-type", .value = "application/json" };
+            request_header_count += 1;
         } else if (c.lua_isstring(L, -1) != 0) {
             var len: usize = 0;
             const ptr = c.lua_tolstring(L, -1, &len);
@@ -612,31 +682,132 @@ pub fn l_http_request(L: ?*c.lua_State) callconv(.c) c_int {
 
         _ = c.lua_getfield(L, 3, "headers");
         if (c.lua_istable(L, -1)) {
-            _ = c.lua_getfield(L, -1, "authorization");
-            if (c.lua_isstring(L, -1) != 0) {
-                var len: usize = 0;
-                const ptr = c.lua_tolstring(L, -1, &len);
-                auth_header = allocator.dupe(u8, ptr[0..len]) catch {
-                    _ = c.luaL_error(L, "out of memory");
+            const headers_index = absoluteIndex(L, -1);
+            c.lua_pushnil(L);
+            while (c.lua_next(L, headers_index) != 0) {
+                if (request_header_count >= request_headers.len) {
+                    _ = c.luaL_error(L, "too many http request headers");
                     unreachable;
-                };
+                }
+                if (c.lua_type(L, -2) != c.LUA_TSTRING or c.lua_isstring(L, -1) == 0) {
+                    _ = c.luaL_error(L, "http request headers must be string pairs");
+                    unreachable;
+                }
+                var name_len: usize = 0;
+                const name_ptr = c.lua_tolstring(L, -2, &name_len);
+                var value_len: usize = 0;
+                const value_ptr = c.lua_tolstring(L, -1, &value_len);
+                const name = name_ptr[0..name_len];
+                var replaced = false;
+                for (request_headers[0..request_header_count]) |*header| {
+                    if (std.ascii.eqlIgnoreCase(header.name, name)) {
+                        header.value = value_ptr[0..value_len];
+                        replaced = true;
+                        break;
+                    }
+                }
+                if (!replaced) {
+                    request_headers[request_header_count] = .{ .name = name, .value = value_ptr[0..value_len] };
+                    request_header_count += 1;
+                }
+                c.lua_pop(L, 1);
             }
-            c.lua_pop(L, 1);
         }
         c.lua_pop(L, 1);
     }
     defer {
         if (body) |b| allocator.free(b);
-        if (auth_header) |h| allocator.free(h);
     }
 
-    var response = client_ptr.request(method, path, body, content_type, auth_header) catch |err| {
+    const response = client_ptr.request(method, path, body, request_headers[0..request_header_count]) catch |err| {
         std.log.err("http request failed: {s}", .{@errorName(err)});
         _ = c.luaL_error(L, "http request failed");
         unreachable;
     };
-    response.pushToLua(L);
+    defer response.deinit();
+    pushHttpClientResponse(L, response);
     return 1;
+}
+
+fn responseContentType(raw_headers: []const u8) ?[]const u8 {
+    var lines = std.mem.splitAny(u8, raw_headers, "\r\n");
+    var result: ?[]const u8 = null;
+    while (lines.next()) |line| {
+        const idx = std.mem.indexOfScalar(u8, line, ':') orelse continue;
+        if (std.ascii.eqlIgnoreCase(std.mem.trim(u8, line[0..idx], " \t"), "content-type")) {
+            result = std.mem.trim(u8, line[idx + 1 ..], " \t");
+        }
+    }
+    return result;
+}
+
+fn pushHttpClientResponse(L: ?*c.lua_State, response: HttpResponse) void {
+    c.lua_newtable(L);
+    c.lua_pushinteger(L, response.status);
+    c.lua_setfield(L, -2, "status");
+
+    c.lua_newtable(L);
+    var lines = std.mem.splitAny(u8, response.headers, "\r\n");
+    while (lines.next()) |line| {
+        const idx = std.mem.indexOfScalar(u8, line, ':') orelse continue;
+        const name = std.mem.trim(u8, line[0..idx], " \t");
+        const value = std.mem.trim(u8, line[idx + 1 ..], " \t");
+        if (name.len == 0) continue;
+        const lower_name = response.allocator.alloc(u8, name.len) catch continue;
+        defer response.allocator.free(lower_name);
+        _ = std.ascii.lowerString(lower_name, name);
+        _ = c.lua_pushlstring(L, lower_name.ptr, lower_name.len);
+        _ = c.lua_pushlstring(L, value.ptr, value.len);
+        c.lua_rawset(L, -3);
+    }
+    c.lua_setfield(L, -2, "headers");
+
+    const content_type = responseContentType(response.headers) orelse "";
+    const is_json = std.mem.indexOf(u8, content_type, "application/json") != null or std.mem.indexOf(u8, content_type, "+json") != null;
+    if (is_json) {
+        if (std.json.parseFromSlice(std.json.Value, response.allocator, response.body, .{ .allocate = .alloc_always })) |parsed| {
+            defer parsed.deinit();
+            pushJsonValue(L, parsed.value);
+            c.lua_setfield(L, -2, "body");
+            return;
+        } else |_| {
+            // A malformed JSON response remains inspectable as raw text.
+        }
+    }
+    _ = c.lua_pushlstring(L, response.body.ptr, response.body.len);
+    c.lua_setfield(L, -2, "body");
+}
+
+fn pushJsonValue(L: ?*c.lua_State, value: std.json.Value) void {
+    switch (value) {
+        .null => c.lua_pushnil(L),
+        .bool => |v| c.lua_pushboolean(L, @intFromBool(v)),
+        .integer => |v| c.lua_pushinteger(L, @intCast(v)),
+        .float => |v| c.lua_pushnumber(L, v),
+        .number_string => |v| {
+            _ = c.lua_pushlstring(L, v.ptr, v.len);
+        },
+        .string => |v| {
+            _ = c.lua_pushlstring(L, v.ptr, v.len);
+        },
+        .array => |v| {
+            c.lua_newtable(L);
+            for (v.items, 0..) |item, i| {
+                pushJsonValue(L, item);
+                c.lua_rawseti(L, -2, @intCast(i + 1));
+            }
+        },
+        .object => |v| {
+            c.lua_newtable(L);
+            var it = v.iterator();
+            while (it.next()) |entry| {
+                const key = entry.key_ptr.*;
+                _ = c.lua_pushlstring(L, key.ptr, key.len);
+                pushJsonValue(L, entry.value_ptr.*);
+                c.lua_rawset(L, -3);
+            }
+        },
+    }
 }
 
 pub fn l_auth(L: ?*c.lua_State) callconv(.c) c_int {
