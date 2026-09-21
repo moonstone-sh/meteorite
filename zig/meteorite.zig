@@ -221,8 +221,18 @@ pub fn compile(comptime spec: anytype) type {
                     if (@hasDecl(backend, "unauthorizedPeer")) backend.unauthorizedPeer(request);
                     break;
                 }
-                var arena_buffer: [graph.max_request_arena_bytes]u8 = undefined;
-                var arena_state = std.heap.FixedBufferAllocator.init(&arena_buffer);
+                // Route arenas are bounded by the generated graph, but they
+                // are not necessarily small: local component workbenches may
+                // encode multi-megabyte structured previews. Keeping the
+                // maximum as a stack array makes a legitimate route budget
+                // crash a connection thread before request handling starts.
+                // Allocate the same fixed-capacity buffer for this request's
+                // lifetime instead; `FixedBufferAllocator` still enforces the
+                // route limit exactly and the buffer is released on every
+                // loop iteration.
+                const arena_buffer = try std.heap.page_allocator.alloc(u8, graph.max_request_arena_bytes);
+                defer std.heap.page_allocator.free(arena_buffer);
+                var arena_state = std.heap.FixedBufferAllocator.init(arena_buffer);
                 const arena = arena_state.allocator();
                 if (!@hasField(@TypeOf(request.*), "frame_buffer")) request.body_cache = null;
                 request.close_after_response = !@hasField(@TypeOf(request.*), "frame_buffer");
