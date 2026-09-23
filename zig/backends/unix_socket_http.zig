@@ -230,6 +230,14 @@ pub fn header(req: *Request, header_name: []const u8) ?[]const u8 {
     return null;
 }
 
+/// Calls `cb(ctx, name, value)` for every request header, in the order the
+/// client sent them (repeats included). Used by the dev-event emitter,
+/// which needs the whole set rather than a lookup by name.
+pub fn forEachHeader(req: *Request, ctx: anytype, comptime cb: fn (@TypeOf(ctx), []const u8, []const u8) void) void {
+    var it = std.http.HeaderIterator.init(req.inner.head_buffer);
+    while (it.next()) |h| cb(ctx, h.name, h.value);
+}
+
 pub fn readBody(req: *Request, allocator: std.mem.Allocator, max_bytes: usize) ![]const u8 {
     if (req.body_cache) |body| return body;
     if (max_bytes == 0) {

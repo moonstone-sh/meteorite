@@ -283,6 +283,20 @@ pub fn header(req: *Request, header_name: []const u8) ?[]const u8 {
     return null;
 }
 
+/// Calls `cb(ctx, name, value)` for every request metadata entry (this
+/// backend's stand-in for HTTP headers -- native IPC framing, not real
+/// HTTP), in the order they appear in `metadata_value`. Used by the
+/// dev-event emitter, which needs the whole set rather than a lookup by
+/// name.
+pub fn forEachHeader(req: *Request, ctx: anytype, comptime cb: fn (@TypeOf(ctx), []const u8, []const u8) void) void {
+    var lines = std.mem.splitScalar(u8, req.metadata_value, '\n');
+    while (lines.next()) |line| {
+        if (line.len == 0) continue;
+        const separator = std.mem.indexOfScalar(u8, line, '=') orelse continue;
+        cb(ctx, line[0..separator], line[separator + 1 ..]);
+    }
+}
+
 pub const ReadBodyError = std.mem.Allocator.Error || error{ PayloadTooLarge, ReadFailed };
 
 pub fn readBody(req: *Request, allocator: std.mem.Allocator, max_bytes: usize) ReadBodyError![]const u8 {

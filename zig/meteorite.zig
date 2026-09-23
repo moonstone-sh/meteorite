@@ -257,6 +257,8 @@ pub fn compile(comptime spec: anytype) type {
                     const elapsed = dev_started.durationTo(Io.Timestamp.now(io, .awake)).toNanoseconds();
                     dev_events.logRequest(
                         io,
+                        backend,
+                        request,
                         @tagName(backend.method(request)),
                         backend.path(request),
                         request.status_code,
@@ -332,7 +334,7 @@ pub fn compile(comptime spec: anytype) type {
             if (comptime dev_reload_enabled) {
                 if ((req_method == .GET or req_method == .POST) and std.mem.eql(u8, req_path, "/__meteorite/reload-lua")) {
                     if (@hasDecl(lua_runtime, "reloadAll")) {
-                        try lua_runtime.reloadAll();
+                        try lua_runtime.reloadAll(io);
                         return backend.respondText(request, 200, "reloaded");
                     }
                     return backend.respondText(request, 501, "lua reload unavailable");
