@@ -45,23 +45,24 @@ fn routeIndexCached(comptime route_id: []const u8) usize {
     @compileError("unknown inline Lua route: " ++ route_id);
 }
 
-pub const CachedHybridRuntime = struct {
-    pub const lua_state_strategy = "per_thread_cached_refs";
-    pub const lua_handler_ref_strategy = "per_thread_registry_refs";
+pub const SingleOwnerHybridRuntime = struct {
+    pub const lua_state_strategy = "single_owner_locked";
+    pub const lua_handler_ref_strategy = "single_owner_registry_refs";
     pub const capability_store_strategy = "process_shared_zig_debug_store";
-    pub const require_cache_strategy = "per_thread_package_loaded";
+    pub const require_cache_strategy = "single_owner_package_loaded";
 
     pub fn snapshotStats() LuaStats {
         return snapshotLuaStats();
     }
 
-    threadlocal var L: ?*c.lua_State = null;
-    threadlocal var refs: [inlineLuaRouteCount()]c_int = undefined;
-    threadlocal var initialized: bool = false;
-    threadlocal var loaded_reload_epoch: u64 = 0;
+    var L: ?*c.lua_State = null;
+    var refs: [inlineLuaRouteCount()]c_int = undefined;
+    var initialized: bool = false;
+    var loaded_reload_epoch: u64 = 0;
     var reload_epoch = AtomicCounter.init(0);
+    var owner_mutex: std.Io.Mutex = .init;
 
-    fn init() !void {
+    fn initUnlocked() !void {
         if (initialized) {
             incLua(&lua_stats.stats.lua_state_reuse_hits);
             return;
@@ -128,15 +129,19 @@ pub const CachedHybridRuntime = struct {
         incLua(&lua_stats.stats.lua_handler_refs_loaded);
     }
 
-    pub fn reloadAll(_: anytype) !void {
-        try init();
+    pub fn reloadAll(io: anytype) !void {
+        owner_mutex.lockUncancelable(io);
+        defer owner_mutex.unlock(io);
+        try initUnlocked();
         try reloadRefs();
         loaded_reload_epoch = reload_epoch.fetchAdd(1, .acq_rel) + 1;
     }
 
     pub fn call(comptime handler: anytype, ctx: anytype) !void {
+        owner_mutex.lockUncancelable(ctx.io);
+        defer owner_mutex.unlock(ctx.io);
         const vtable = globalVtable(@TypeOf(ctx.*));
-        try init();
+        try initUnlocked();
         try refreshIfStale();
         const L2 = L.?;
 
@@ -170,8 +175,10 @@ pub const CachedHybridRuntime = struct {
     }
 
     pub fn callPlugin(comptime handler: anytype, ctx: anytype) !bool {
+        owner_mutex.lockUncancelable(ctx.io);
+        defer owner_mutex.unlock(ctx.io);
         const vtable = globalVtable(@TypeOf(ctx.*));
-        try init();
+        try initUnlocked();
         const L2 = L.?;
 
         const plugin_path = if (@hasField(@TypeOf(handler), "chunk_path")) handler.chunk_path else handler.path;

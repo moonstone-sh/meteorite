@@ -45,7 +45,7 @@ function luals_aids.emit(graph, output)
     "---@field profile? string|table",
     "---@field host? string",
     "---@field port? integer",
-    "---@field dev_watch? {graph: string[], runtime?: string[]}",
+    "---@field dev_watch? {graph: string[], runtime?: string[], passive?: string[], exclude?: string[]}",
     "---@field trusted_proxy? nil unsupported in the current release; proxy-derived IP headers remain untrusted",
     "---@field trust_proxy? nil unsupported alias",
     "---@field trusted_proxies? nil unsupported alias",

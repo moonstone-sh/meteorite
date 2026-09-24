@@ -135,6 +135,12 @@ end
 
 --- Build request body for an OpenAPI operation.
 local function build_request_body(route)
+  if route.json_contract then
+    return {
+      required = true,
+      content = { ["application/json"] = { schema = route.json_contract.schema } },
+    }
+  end
   local validation = route.validation or {}
   local content = {}
 

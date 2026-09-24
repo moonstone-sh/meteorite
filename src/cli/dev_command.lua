@@ -28,6 +28,7 @@ function dev_command.run(argv, deps)
   deps.build_request.require_behavior(request, "meteorite dev")
   local cli = deps.package_cli_file()
   local root = deps.current_dir()
+  local graph_input = request.graph_input or "src/main.lua"
   local state_dir = root .. "/.meteorite/dev"
   local mkdir_p = deps.mkdir_p or function(dir)
     local ok = os.execute("mkdir -p " .. quote(dir))
@@ -36,7 +37,7 @@ function dev_command.run(argv, deps)
   local build_parts = {
     "zig build --build-file", quote(deps.package_build_file()),
     "-Dproject-root=" .. quote(root),
-    "-Dgraph-input=src/main.lua -Dgraph-output=.meteorite/graph/current",
+    "-Dgraph-output=.meteorite/graph/current",
     table.concat(deps.build_request.to_build_flags(request, quote), " "),
   }
   if dev_command.dev_events_enabled(request.mode) then
@@ -50,7 +51,7 @@ function dev_command.run(argv, deps)
   local script = process.supervisor_script({
     label = "Meteorite dev",
     cwd = root,
-    argv = { lua, deps.package_dev_file(), root .. "/src/main.lua", root .. "/.meteorite/graph/current",
+    argv = { lua, deps.package_dev_file(), root .. "/" .. graph_input, root .. "/.meteorite/graph/current",
       request.mode, request.backend, build_command, root .. "/dist/server" },
     env = { METEORITE_CLI = cli, METEORITE_BUILD_COMMAND = build_command },
     stdin_eof = true,

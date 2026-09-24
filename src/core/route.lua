@@ -9,6 +9,7 @@
 ---@type RouteModule
 local profiles = require("core.profile")
 local contract = require("core.contract")
+local contracts = require("core.contracts")
 local scope_model = require("core.scope")
 local dev_watch = require("core.dev_watch")
 
@@ -91,6 +92,8 @@ end
 ---@return table  Route declaration
 function route.declare(method, path, options, handler)
   contract.reject_unsupported_body_features(options, method .. " " .. tostring(path))
+  local json_body = options.json or options.json_body or (options.body and options.body.json) or {}
+  local json_contract = type(json_body) == "table" and json_body._meteorite_contract_input and json_body or nil
   local memory = options.memory or {}
   if options.body and options.body.max ~= nil and memory.max_body == nil then
     memory.max_body = options.body.max
@@ -104,7 +107,8 @@ function route.declare(method, path, options, handler)
     query = options.query or {},
     headers = options.headers or {},
     cookies = options.cookies or {},
-    json_body = options.json or options.json_body or (options.body and options.body.json) or {},
+    json_body = json_contract and contracts.lower_input(json_contract) or json_body,
+    json_contract = json_contract,
     form_body = options.form or options.form_body or (options.body and options.body.form) or {},
     responses = options.responses or {},
     description = options.description or nil,
@@ -521,6 +525,7 @@ function route.normalize_app(app, opts)
       params = normalize_schema_map(declaration.params),
       query = normalize_schema_map(declaration.query),
       validation = normalize_validation_contract(declaration),
+      json_contract = declaration.json_contract,
       responses = declaration.responses or {},
       description = declaration.description,
       summary = declaration.summary,

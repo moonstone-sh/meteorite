@@ -95,6 +95,9 @@ app = c.create({
       -- explicit behavior contract before dev_command can validate it.
       c.option({ key = "mode", aliases = { "--mode" }, value = { schema = v.string() } }),
       c.option({ key = "backend", aliases = { "--backend" }, value = { schema = v.string() } }),
+      c.option({ key = "hybrid_profile", aliases = { "--hybrid-profile" }, value = { schema = v.string() } }),
+      c.option({ key = "router_dispatch", aliases = { "--router-dispatch" }, value = { schema = v.string() } }),
+      c.option({ key = "graph_input", aliases = { "--graph-input" }, value = { schema = v.string() } }),
       c.option({ key = "lua_root", aliases = { "--lua-root" }, value = { schema = v.string() } }),
       c.arg({ key = "args", schema = v.string(), occurs = { min = 0, max = "many" } }),
       c.passthrough("argv"),
@@ -123,7 +126,7 @@ app = c.create({
         require("cli.client").run(arg or {})
         return 0
       end),
-    }, { description = "Generate Lua client" }),
+    }, { description = "Generate Lua or TypeScript client" }),
 
     openapi = c.node({
       c.arg({ key = "args", schema = v.string(), occurs = { min = 0, max = "many" } }),

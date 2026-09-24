@@ -50,6 +50,8 @@ const LuaRuntime = if (!final_requires_lua)
     bridge.LuaRuntimeUnavailable
 else if (std.mem.eql(u8, build_info.hybrid_profile, "optimized"))
     bridge.CachedHybridRuntime
+else if (std.mem.eql(u8, build_info.hybrid_profile, "single_owner"))
+    bridge.SingleOwnerHybridRuntime
 else
     bridge.HybridLuaRuntime;
 

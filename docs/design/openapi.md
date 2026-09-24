@@ -47,9 +47,22 @@ cat .meteorite/graph/current/openapi.json | python3 -m json.tool
 # Generate a transport-agnostic Lua client from routes and native messages
 meteorite client lua src/main.lua .meteorite/client.lua
 
+# Generate a browser-native TypeScript fetch client. Contract-backed route
+# request/response DTOs are emitted alongside the operation methods.
+meteorite client typescript src/main.lua js/src/generated/meteorite-client.ts
+
+# Generate ambient LuaCATS aliases from the identical route DTOs. Add this
+# file to the Hydronium project's LuaLS workspace library; it is never loaded
+# by the browser runtime.
+meteorite client luacats src/main.lua types/meteorite-client.d.lua
+
 # Generate an optional Swagger UI static HTML asset
 meteorite openapi swagger-ui site/dist/docs.html ./openapi.json
 ```
+
+Every generated TypeScript operation accepts `args.signal?: AbortSignal` and
+forwards it to `fetch`. This lets a Hydronium browser query or route adapter
+cancel obsolete work without depending on a Meteorite-specific runtime.
 
 ## OpenAPI 3.1 Mapping
 
@@ -279,5 +292,32 @@ Meteorite's compile-time graph offers stronger guarantees than Hono RPC because:
 - Schema validators compile to DFA pattern matchers and Zig comptime checks,
   not runtime validation.
 - Undocumented route detection runs at build time in release modes.
+
+## Generated Contract Bundles
+
+Meteorite can consume the portable JSON artifact emitted by Valua's explicit
+contract build. The service compiler does not load or inspect Valua source:
+the same generated bundle is the input for Bun/Vite type consumers and for the
+route graph.
+
+```lua
+local m = require("meteorite")
+local contracts = m.contracts.load(".contracts/contracts.json")
+
+app:post("/todos", {
+  json = contracts:input("todo.CreateTodo"),
+  responses = {
+    [201] = contracts:response("todo.Todo", { description = "Created" }),
+  },
+}, handlers.create_todo)
+```
+
+The normal `json` route field accepts the bundle input. It is currently limited to a closed, flat JSON object whose
+fields are strings, integers, or booleans; Meteorite lowers those fields into
+its existing compiled request validator. Nested objects, arrays, unions,
+patterns, and references fail graph construction rather than becoming
+OpenAPI-only fiction. Response schemas retain the complete generated JSON
+Schema in OpenAPI because response validation is not yet a compiled Meteorite
+runtime feature.
 - The spec is a serialized JSON artifact, not a type-level construct tied to
   one language's compiler.

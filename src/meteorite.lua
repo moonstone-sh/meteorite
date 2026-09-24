@@ -15,13 +15,14 @@ local app_core = require("core.app")
 local schema_exports = require("core.schema_exports")
 local handler_exports = require("core.handler_exports")
 local utility_exports = require("core.utility_exports")
+local contract_exports = require("core.contracts")
 
 ---@class MeteoriteAppOptions
 ---@field name? string
 ---@field profile? string|MeteoriteProfile
 ---@field host? string bind address (default "127.0.0.1")
 ---@field port? integer bind port (default 8080)
----@field dev_watch? {graph: string[], runtime?: string[]} Project-relative inputs for the direct dev supervisor
+---@field dev_watch? {graph: string[], runtime?: string[], passive?: string[], exclude?: string[]} Project-relative inputs for the direct dev supervisor
 ---@field trusted_proxy? nil unsupported in the current release; proxy-derived IP headers remain untrusted
 ---@field trust_proxy? nil unsupported alias
 ---@field trusted_proxies? nil unsupported alias
@@ -124,6 +125,10 @@ local utility_exports = require("core.utility_exports")
 
 ---@type MeteoriteModule
 local M = {}
+
+-- Generated contract bundles are explicit build artifacts. See
+-- `valua contract build`; Meteorite does not discover or execute Valua source.
+M.contracts = contract_exports
 
 local plugin_counter = 0
 

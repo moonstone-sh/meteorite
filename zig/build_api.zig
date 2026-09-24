@@ -144,7 +144,7 @@ pub fn addService(b: *std.Build, options: Options) Service {
     else
         options.optimize;
     const lua_runtime = !std.mem.eql(u8, mode, "release-static");
-    const lua_state_strategy = if (lua_runtime and std.mem.eql(u8, hybrid_profile, "optimized")) "per_thread_cached_refs" else if (lua_runtime) "per_request_state" else "none";
+    const lua_state_strategy = if (lua_runtime and std.mem.eql(u8, hybrid_profile, "optimized")) "per_thread_cached_refs" else if (lua_runtime and std.mem.eql(u8, hybrid_profile, "single_owner")) "single_owner_locked" else if (lua_runtime) "per_request_state" else "none";
     const is_native_ipc = std.mem.eql(u8, backend, "ipc_unixsocket");
     const is_unix_transport = is_native_ipc or std.mem.eql(u8, backend, "ipc_unixsocket_http");
 

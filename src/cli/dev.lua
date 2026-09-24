@@ -233,15 +233,23 @@ local function watch_paths()
   local policy = dev_watch.decode(read_file(output .. "/dev-watch.paths"))
   local graph = { input, "zig", "build.zig", "moonstone.toml" }
   for _, path in ipairs(policy.graph) do graph[#graph + 1] = path end
-  return graph, policy.runtime
+  return graph, policy.runtime, policy.passive, policy.exclude
 end
 
-local function source_fingerprint(paths)
+local function source_fingerprint(paths, exclude)
   if #paths == 0 then return "" end
   local quoted = {}
   for _, path in ipairs(paths) do quoted[#quoted + 1] = shell_quote(path) end
+  local prune = {}
+  for _, path in ipairs(exclude or {}) do
+    local q = shell_quote(path)
+    prune[#prune + 1] = "-path " .. q
+    prune[#prune + 1] = "-path " .. shell_quote(path .. "/*")
+  end
+  local find = "find " .. table.concat(quoted, " ")
+  if #prune > 0 then find = find .. " \\( " .. table.concat(prune, " -o ") .. " \\) -prune -o" end
   local command = table.concat({
-    "find " .. table.concat(quoted, " ") .. " -type f 2>/dev/null",
+    find .. " -type f -print 2>/dev/null",
     "| sort",
     "| while IFS= read -r f; do stat -f '%m %z %N' \"$f\" 2>/dev/null || stat -c '%Y %s %n' \"$f\" 2>/dev/null; done"
   }, " ")
@@ -368,11 +376,12 @@ if prebuilt then
   if once then return end
 end
 
-local last_graph, last_runtime = nil, nil
+local last_graph, last_runtime, last_passive = nil, nil, nil
 while running do
-  local graph_paths, runtime_paths = watch_paths()
-  local current_graph = source_fingerprint(graph_paths)
-  local current_runtime = source_fingerprint(runtime_paths)
+  local graph_paths, runtime_paths, passive_paths, exclude_paths = watch_paths()
+  local current_graph = source_fingerprint(graph_paths, exclude_paths)
+  local current_runtime = source_fingerprint(runtime_paths, exclude_paths)
+  local current_passive = source_fingerprint(passive_paths)
   if current_graph ~= last_graph then
     local force_build = changed_zig_or_build(last_graph, current_graph) or not file_exists(server)
     io.stderr:write("\nMeteorite dev: change detected; regenerating graph...\n")
@@ -403,13 +412,17 @@ while running do
       io.stderr:write("Meteorite dev: graph failed; keeping previous server state.\n")
       emit_event("build_error", { stage = "graph", detail = "graph failed; keeping previous server state" })
     end
-    graph_paths, runtime_paths = watch_paths()
-    last_graph = source_fingerprint(graph_paths)
-    last_runtime = source_fingerprint(runtime_paths)
+    graph_paths, runtime_paths, passive_paths, exclude_paths = watch_paths()
+    last_graph = source_fingerprint(graph_paths, exclude_paths)
+    last_runtime = source_fingerprint(runtime_paths, exclude_paths)
+    last_passive = source_fingerprint(passive_paths)
   elseif current_runtime ~= last_runtime then
     io.stderr:write("\nMeteorite dev: runtime input changed; restarting server without graph regeneration.\n")
     start_server()
     last_runtime = current_runtime
+  elseif current_passive ~= last_passive then
+    emit_event("passive_change", { paths = #passive_paths })
+    last_passive = current_passive
   end
   -- A server we started that is gone without us stopping it is a crash: report
   -- it so a consumer can show a definite down-state instead of a stuck spinner.

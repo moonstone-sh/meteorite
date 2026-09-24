@@ -23,5 +23,5 @@ pub const LuaRuntimeUnavailable = struct {
         return false;
     }
 
-    pub fn reloadAll() !void {}
+    pub fn reloadAll(_: anytype) !void {}
 };

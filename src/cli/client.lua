@@ -5,6 +5,8 @@ local function usage()
 
 Usage:
   meteorite client lua [input] [output]
+  meteorite client typescript [input] [output]
+  meteorite client luacats [input] [output]
 
 Examples:
   meteorite client lua src/main.lua .meteorite/client.lua]]
@@ -38,13 +40,21 @@ function client.run(args)
     print(usage())
     return
   end
-  if kind ~= "lua" then error("unknown client target `" .. tostring(kind) .. "`; expected lua") end
+  if kind ~= "lua" and kind ~= "typescript" and kind ~= "luacats" then error("unknown client target `" .. tostring(kind) .. "`; expected lua, typescript, or luacats") end
   local input = args[3] or "src/main.lua"
-  local output = args[4] or ".meteorite/client.lua"
+  local output = args[4] or (kind == "typescript" and ".meteorite/client.ts" or (kind == "luacats" and ".meteorite/client.d.lua" or ".meteorite/client.lua"))
   local graph = load_graph(input)
-  local source = require("codegen.lua_client").emit(graph, { module_name = "client" })
+  local source
+  if kind == "typescript" then
+    source = require("codegen.typescript_client").emit(graph)
+  elseif kind == "luacats" then
+    source = require("codegen.luacats_client").emit(graph)
+  else
+    source = require("codegen.lua_client").emit(graph, { module_name = "client" })
+  end
   write_file(output, source)
-  print("Meteorite Lua client written: " .. output)
+  local label = kind == "typescript" and "TypeScript" or (kind == "luacats" and "LuaCATS" or "Lua")
+  print("Meteorite " .. label .. " client written: " .. output)
 end
 
 return client

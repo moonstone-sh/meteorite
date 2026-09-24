@@ -32,14 +32,18 @@ function dev_watch.normalize(value)
   assert(value.graph ~= nil, "dev_watch.graph is required")
   local graph = normalize_list(value.graph, "graph")
   local runtime = normalize_list(value.runtime or {}, "runtime")
+  local passive = normalize_list(value.passive or {}, "passive")
+  local exclude = normalize_list(value.exclude or {}, "exclude")
   assert(#graph > 0, "dev_watch.graph cannot be empty")
-  return { graph = graph, runtime = runtime }
+  return { graph = graph, runtime = runtime, passive = passive, exclude = exclude }
 end
 
 function dev_watch.encode(value)
-  local lines = { "meteorite.dev_watch.v1", tostring(#value.graph), tostring(#value.runtime) }
+  local lines = { "meteorite.dev_watch.v2", tostring(#value.graph), tostring(#value.runtime), tostring(#value.passive), tostring(#value.exclude) }
   for _, path in ipairs(value.graph) do lines[#lines + 1] = path end
   for _, path in ipairs(value.runtime) do lines[#lines + 1] = path end
+  for _, path in ipairs(value.passive) do lines[#lines + 1] = path end
+  for _, path in ipairs(value.exclude) do lines[#lines + 1] = path end
   return table.concat(lines, "\n") .. "\n"
 end
 
@@ -48,15 +52,26 @@ function dev_watch.decode(content)
   local lines = {}
   for line in content:gmatch("[^\n]+") do lines[#lines + 1] = line end
   local graph_count, runtime_count = tonumber(lines[2]), tonumber(lines[3])
-  assert(lines[1] == "meteorite.dev_watch.v1" and graph_count and runtime_count
+  local v1 = lines[1] == "meteorite.dev_watch.v1"
+  local passive_count, exclude_count = v1 and 0 or tonumber(lines[4]), v1 and 0 or tonumber(lines[5])
+  assert((v1 or lines[1] == "meteorite.dev_watch.v2") and graph_count and runtime_count and passive_count and exclude_count
     and graph_count >= 1 and graph_count <= 256 and graph_count % 1 == 0
     and runtime_count >= 0 and runtime_count <= 256 and runtime_count % 1 == 0
-    and #lines == 3 + graph_count + runtime_count,
+    and passive_count >= 0 and passive_count <= 256 and passive_count % 1 == 0
+    and exclude_count >= 0 and exclude_count <= 256 and exclude_count % 1 == 0
+    and #lines == (v1 and 3 or 5) + graph_count + runtime_count + passive_count + exclude_count,
     "invalid dev-watch.paths header or counts")
-  local value = { graph = {}, runtime = {} }
-  for i = 1, graph_count do value.graph[#value.graph + 1] = lines[3 + i] end
+  local value = { graph = {}, runtime = {}, passive = {}, exclude = {} }
+  local header = v1 and 3 or 5
+  for i = 1, graph_count do value.graph[#value.graph + 1] = lines[header + i] end
   for i = 1, runtime_count do
-    value.runtime[#value.runtime + 1] = lines[3 + graph_count + i]
+    value.runtime[#value.runtime + 1] = lines[header + graph_count + i]
+  end
+  if not v1 then
+    local offset = 5 + graph_count + runtime_count
+    for i = 1, passive_count do value.passive[#value.passive + 1] = lines[offset + i] end
+    offset = offset + passive_count
+    for i = 1, exclude_count do value.exclude[#value.exclude + 1] = lines[offset + i] end
   end
   return dev_watch.normalize(value)
 end

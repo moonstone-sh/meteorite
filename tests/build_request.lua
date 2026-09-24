@@ -10,11 +10,13 @@ test "build request keeps the last repeated behavior flag" (function()
     "--backend", "std_http",
     "--backend=fast_http",
     "--hybrid-profile", "optimized",
+    "--graph-input", ".hydronium/lab/main.lua",
   })
   request.require_behavior(parsed)
   test.assert_eq(parsed.mode, "hybrid_dev")
   test.assert_eq(parsed.backend, "fast_http")
   test.assert_eq(parsed.hybrid_profile, "optimized")
+  test.assert_eq(parsed.graph_input, ".hydronium/lab/main.lua")
 end)
 
 test "build request rejects incomplete direct invocations" (function()
@@ -67,6 +69,28 @@ test "dev command passes mode and backend to dev supervisor" (function()
   test.assert_true(written_content ~= nil, "script written")
   test.assert_eq(supervisor_argv[5], "hybrid")
   test.assert_eq(supervisor_argv[6], "fast_http")
+end)
+
+test "dev command accepts a generated development graph input" (function()
+  local supervisor_argv
+  local dev_command = require("cli.dev_command")
+  dev_command.run({ "dev", "--mode", "hybrid_dev", "--backend", "fast_http",
+    "--graph-input", ".hydronium/lab/main.lua" }, {
+    shell_quote = function(val) return "'" .. tostring(val) .. "'" end,
+    build_request = request,
+    package_cli_file = function() return "src/cli/main.lua" end,
+    current_dir = function() return "/app" end,
+    package_build_file = function() return "build.zig" end,
+    package_dev_file = function() return "src/cli/dev.lua" end,
+    mkdir_p = function() end,
+    read_file = function() return nil end,
+    process = { supervisor_script = function(opts) supervisor_argv = opts.argv; return "supervisor" end },
+    write_file = function() end,
+    run_command = function() return true end,
+  })
+  test.assert_eq(supervisor_argv[3], "/app/.hydronium/lab/main.lua")
+  local _, graph_input_count = supervisor_argv[7]:gsub("%-Dgraph%-input", "")
+  test.assert_eq(graph_input_count, 1, "build command has one graph-input flag")
 end)
 
 test.run()
