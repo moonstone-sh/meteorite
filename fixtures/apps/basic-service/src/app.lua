@@ -17,6 +17,9 @@ app:capability("zig", {
 app:get("/health", {
   summary = "Report service health",
 }, "handlers.health")
+app:get("/__test/sleep-1s", {
+  summary = "Sleep for 1 second (used by fixtures/tests/signal-shutdown.sh to hold a request in flight)",
+}, "handlers.sleep_1s")
 app:get("/users/:id", {
   summary = "Fetch one user",
   params = { id = m.u64() },

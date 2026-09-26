@@ -1,5 +1,19 @@
+const std = @import("std");
+
 pub fn health(ctx: anytype) !void {
     try ctx.text(200, "ok");
+}
+
+// Used by fixtures/tests/signal-shutdown.sh to hold a request in flight
+// while a shutdown signal is sent, long enough (1s) to reliably straddle
+// normal process/network scheduling jitter in that test.
+pub fn sleep_1s(ctx: anytype) !void {
+    var req: std.c.timespec = .{ .sec = 1, .nsec = 0 };
+    var rem: std.c.timespec = undefined;
+    while (std.c.nanosleep(&req, &rem) != 0) {
+        req = rem;
+    }
+    try ctx.text(200, "slept");
 }
 
 pub fn get_user(ctx: anytype) !void {

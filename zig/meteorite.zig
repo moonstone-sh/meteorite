@@ -66,15 +66,27 @@ pub fn compile(comptime spec: anytype) type {
 
             startup_log.print(config, graph_requires_lua, inline_lua_handlers, zig_handlers);
 
+            // The raw listening fd, used only to poll it alongside the
+            // shutdown self-pipe in `signals.waitForAcceptable` -- it is
+            // never shut down or closed ahead of `server.deinit()` below.
+            const listen_fd = server.inner.socket.handle;
             var accept_failures: u32 = 0;
             while (true) {
-                if (signals.isShutdownRequested()) {
-                    std.debug.print("Shutting down...\n", .{});
-                    Pool.shutdown(io);
+                if (!signals.waitForAcceptable(listen_fd)) {
+                    gracefulShutdown(io);
                     break;
                 }
                 var request: backend.Request = undefined;
                 backend.accept(&server, &request) catch |err| {
+                    if (signals.isShutdownRequested()) {
+                        // A shutdown signal raced the poll-then-accept
+                        // window (e.g. a second signal arrived while this
+                        // accept() call was already in flight). Treat it as
+                        // shutting down rather than an accept failure --
+                        // no backoff, no failure log spam.
+                        gracefulShutdown(io);
+                        break;
+                    }
                     accept_failures += 1;
                     std.debug.print("accept failed: {s}\n", .{@errorName(err)});
                     // Exponential backoff on persistent accept errors (capped at 1s)
@@ -111,6 +123,36 @@ pub fn compile(comptime spec: anytype) type {
                 }
                 try serveConnection(io, &request);
             }
+        }
+
+        /// Upper bound on how long a graceful shutdown waits for requests
+        /// already in flight to finish before exiting anyway. Chosen to be
+        /// generous for a normal request/response cycle while staying well
+        /// short of Docker's default 10s SIGKILL grace period.
+        const graceful_shutdown_timeout_ms: u64 = 5000;
+        const graceful_shutdown_poll_ms: u64 = 20;
+
+        /// Stops accepting new connections (the caller has already broken
+        /// out of the accept loop) and waits, bounded, for requests already
+        /// in flight to finish -- across every backend concurrency strategy
+        /// (single-connection-loop, threaded, and pooled alike), since they
+        /// all funnel through the same `requestStarted`/`requestCompleted`
+        /// counters in `serveConnection`/`Context`. `Pool.shutdown` itself
+        /// only wakes idle pool workers so they stop pulling new work; it
+        /// does not wait for anything, so the bounded wait below is what
+        /// actually bounds this. A second SIGINT/SIGTERM at any point during
+        /// this wait forces an immediate exit from the signal handler
+        /// itself (see `signals.zig`), so this can never hang the process.
+        fn gracefulShutdown(io: Io) void {
+            std.debug.print("Shutting down...\n", .{});
+            Pool.shutdown(io);
+            var waited_ms: u64 = 0;
+            while (waited_ms < graceful_shutdown_timeout_ms) {
+                if (backend.snapshotCounters().inflight_current == 0) return;
+                io.sleep(.{ .nanoseconds = graceful_shutdown_poll_ms * std.time.ns_per_ms }, .real) catch return;
+                waited_ms += graceful_shutdown_poll_ms;
+            }
+            std.debug.print("Shutdown: {d} request(s) still in flight after {d}ms; exiting anyway\n", .{ backend.snapshotCounters().inflight_current, graceful_shutdown_timeout_ms });
         }
 
         fn connectionThread(io: Io, request: *backend.Request) void {
