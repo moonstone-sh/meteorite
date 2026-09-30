@@ -72,8 +72,13 @@ pub fn StaticResponse(comptime graph: anytype, comptime backend: anytype, compti
                 }
             }
             if (head_only) return backend.respondStatic(request, 200, content_type, content_length, cache_control, etag, content_encoding, "", true);
-            const body = try server_static.readArtifactFile(allocator, io, artifact_path, content_length);
-            defer allocator.free(body);
+            // Not the request arena: a built asset (e.g. a bundled JS island)
+            // is routinely larger than the default 256KB request arena, and
+            // failed with OutOfMemory. The length is fixed by the build-time
+            // manifest, so this allocation is bounded and freed right after.
+            _ = allocator;
+            const body = try server_static.readArtifactFile(std.heap.page_allocator, io, artifact_path, content_length);
+            defer std.heap.page_allocator.free(body);
             return backend.respondStatic(request, 200, content_type, content_length, cache_control, etag, content_encoding, body, head_only);
         }
     };

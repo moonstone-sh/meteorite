@@ -13,6 +13,11 @@ while read -r pid; do
 done < <(lsof -tiTCP:8080 -sTCP:LISTEN 2>/dev/null || true)
 sleep 0.2
 
+# A static asset larger than the default 256KB request arena (a bundled JS
+# island is routinely this size). Generated, not committed.
+large_asset="fixtures/apps/web-standards/public/assets/large.js"
+node -e 'require("node:fs").writeFileSync(process.argv[1], "// large static asset\n" + "x".repeat(409600 - 22))' "$large_asset"
+
 zig build \
   -Dgraph-input=fixtures/apps/web-standards/src/main.lua \
   -Dgraph-output="$GRAPH" \
@@ -840,6 +845,11 @@ expect_validation(hybrid.invoke(app, { method = "POST", path = "/validation/cont
 LUA
 
 expect_body 'hello static' /static/hello.txt
+large_size="$(curl -fsS -o /tmp/meteorite-web-standards-large.js -w '%{size_download}' "http://127.0.0.1:8080/static/assets/large.js")"
+if [[ "$large_size" != 409600 ]]; then
+  echo "expected the 409600-byte static asset in full, got $large_size bytes" >&2
+  exit 1
+fi
 expect_header /static/hello.txt content-type 'text/plain; charset=utf-8'
 expect_header /static/hello.txt cache-control 'public, max-age=60'
 static_etag="$(header_value /static/hello.txt etag)"
