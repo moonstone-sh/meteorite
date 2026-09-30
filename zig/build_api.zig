@@ -359,15 +359,17 @@ pub fn addService(b: *std.Build, options: Options) Service {
 
     if (lua_runtime) {
         bridge_module.addIncludePath(cwdPath(join(b, &.{ project_lua_root, "include" })));
-        bridge_module.addLibraryPath(cwdPath(join(b, &.{ project_lua_root, "lib" })));
         // Moonstone names the LuaJIT archive libluajit-5.1.a while PUC Lua
-        // is liblua.a. The project runtime is explicit, so choose the
-        // corresponding link name from its materialized root.
-        const lua_library = if (std.mem.indexOf(u8, lua_root, "luajit") != null) "luajit-5.1" else "lua";
-        if (std.mem.indexOf(u8, lua_root, "luajit") != null) {
+        // is liblua.a. Link the project's archive BY PATH: `-llua` searches
+        // system directories too and silently picked up a Homebrew
+        // liblua.5.5.dylib, so a server compiled against the project's 5.4
+        // headers ran on a different Lua and native modules (cjson) crashed.
+        // A missing archive is now a build error instead of a fallback.
+        const is_luajit = std.mem.indexOf(u8, lua_root, "luajit") != null;
+        if (is_luajit) {
             bridge_module.addIncludePath(cwdPath(join(b, &.{ project_lua_root, "include", "luajit-2.1" })));
         }
-        bridge_module.linkSystemLibrary(lua_library, .{});
+        bridge_module.addObjectFile(cwdPath(join(b, &.{ project_lua_root, "lib", if (is_luajit) "libluajit-5.1.a" else "liblua.a" })));
         bridge_module.linkSystemLibrary("m", .{});
     }
 

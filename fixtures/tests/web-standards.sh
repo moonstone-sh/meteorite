@@ -1137,6 +1137,9 @@ expect_method_header POST /validation/contracts/123 X-Meteorite-Validation-Reaso
 expect_body 'param-lua:123:missing' /params/lua/123
 expect_body 'param-zig:123:missing' /params/zig/123
 expect_status 404 /params/lua/not-a-number
+# Path params reach handlers percent-decoded (c:param and c.params alike).
+expect_body 'param-text:Ada Lovelace:Ada Lovelace' /params/lua-text/Ada%20Lovelace
+expect_body 'param-text:a+b:a+b' /params/lua-text/a+b
 expect_status 404 /params/zig/not-a-number
 
 expect_method_body body: POST /body/echo

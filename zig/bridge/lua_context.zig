@@ -202,12 +202,13 @@ fn pushParamValue(L: *c.lua_State, ctx: anytype, name: []const u8, value: []cons
 /// Build the `params` table from the matched path captures. Always emitted
 /// (empty when the route declares no params) so `c.params.x` can never raise
 /// "attempt to index field 'params' (a nil value)".
-fn pushParamsTable(L: *c.lua_State, ctx: anytype) void {
+fn pushParamsTable(L: *c.lua_State, ctx: anytype, vtable: *const VTable) void {
     if (!@hasField(@TypeOf(ctx.*), "captures")) return;
     c.lua_newtable(L);
     const captures = ctx.captures;
     for (captures.items[0..captures.len]) |item| {
-        pushParamValue(L, ctx, item.name, item.value);
+        // vtable.param decodes percent escapes, exactly as c:param() does.
+        pushParamValue(L, ctx, item.name, vtable.param(ctx, item.name) orelse item.value);
         c.lua_setfield(L, -2, @ptrCast(item.name.ptr));
     }
     c.lua_setfield(L, -2, "params");
@@ -237,7 +238,7 @@ pub fn pushFullRequestTable(comptime handler: anytype, L: *c.lua_State, ctx: any
     c.lua_newtable(L);
     pushCoreContextMethods(L);
 
-    pushParamsTable(L, ctx);
+    pushParamsTable(L, ctx, vtable);
     pushQueryTable(L, ctx, vtable);
 
     c.lua_newtable(L);
@@ -268,7 +269,7 @@ fn pushLazyContextTable(comptime handler: anytype, L: *c.lua_State, ctx: anytype
     _ = handler;
     c.lua_newtable(L);
     pushCoreContextMethods(L);
-    pushParamsTable(L, ctx);
+    pushParamsTable(L, ctx, vtable);
     pushQueryTable(L, ctx, vtable);
     c.lua_newtable(L);
     c.lua_setfield(L, -2, "state");

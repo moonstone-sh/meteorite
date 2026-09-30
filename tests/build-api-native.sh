@@ -16,9 +16,9 @@ if [[ -z "$lua_bin" || ! -x "$lua_bin" ]]; then
   exit 1
 fi
 
-mkdir -p "$tmp/.moonstone/env/libexec/meteorite/files"
+mkdir -p "$tmp/.moonstone/env/libexec/moonstone/meteorite"
 ln -s "$(dirname "$lua_bin")" "$tmp/.moonstone/env/bin"
-ln -s "$ROOT" "$tmp/.moonstone/env/libexec/meteorite/files/meteorite"
+ln -s "$ROOT" "$tmp/.moonstone/env/libexec/moonstone/meteorite/meteorite"
 mkdir -p "$tmp/deps/answer/src"
 
 (
@@ -55,15 +55,15 @@ zig fetch --save=answer deps/answer >/dev/null
 
 cat > build.zig <<'EOF'
 const std = @import("std");
-const meteorite = @import(".moonstone/env/libexec/meteorite/files/meteorite/zig/build_api.zig");
+const meteorite = @import(".moonstone/env/libexec/moonstone/meteorite/meteorite/zig/build_api.zig");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const answer = b.dependency("answer", .{ .target = target, .optimize = optimize });
     const service = meteorite.addService(b, .{
-        .meteorite_root = ".moonstone/env/libexec/meteorite/files/meteorite",
-        .meteorite_cli = ".moonstone/env/libexec/meteorite/files/meteorite/src/cli/main.lua",
+        .meteorite_root = ".moonstone/env/libexec/moonstone/meteorite/meteorite",
+        .meteorite_cli = ".moonstone/env/libexec/moonstone/meteorite/meteorite/src/cli/main.lua",
         .target = target,
         .optimize = optimize,
         .mode = b.option([]const u8, "mode", "Meteorite build mode") orelse "release-static",

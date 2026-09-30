@@ -501,6 +501,10 @@ app:get("/params/lua/:id", {
 	return "param-lua:" .. tostring(ctx:param("id")) .. ":" .. tostring(ctx:param("missing") or "missing")
 end)
 
+app:get("/params/lua-text/:name", function(ctx)
+	return "param-text:" .. tostring(ctx:param("name")) .. ":" .. tostring(ctx.params.name)
+end)
+
 app:get("/params/zig/:id", {
 	params = { id = m.u64() },
 }, "handlers.param_zig")

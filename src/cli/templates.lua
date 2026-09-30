@@ -499,7 +499,7 @@ end
 function handler_sync.project_build_zig()
   return table.concat({
     "const std = @import(\"std\");",
-    "const meteorite = @import(\".moonstone/env/libexec/meteorite/files/meteorite/zig/build_api.zig\");",
+    "const meteorite = @import(\".moonstone/env/libexec/moonstone/meteorite/meteorite/zig/build_api.zig\");",
     "",
     "pub fn build(b: *std.Build) void {",
     "    const target = b.standardTargetOptions(.{});",
@@ -507,7 +507,7 @@ function handler_sync.project_build_zig()
     "    const mode = b.option([]const u8, \"mode\", \"Meteorite build mode\") orelse \"release-static\";",
     "    const backend = b.option([]const u8, \"backend\", \"Meteorite backend\") orelse \"fast_http\";",
     "    const service = meteorite.addService(b, .{",
-    "        .meteorite_root = \".moonstone/env/libexec/meteorite/files/meteorite\",",
+    "        .meteorite_root = \".moonstone/env/libexec/moonstone/meteorite/meteorite\",",
     "        .target = target,",
     "        .optimize = optimize,",
     "        .mode = mode,",

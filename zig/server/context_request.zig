@@ -1,6 +1,33 @@
 const std = @import("std");
 const process = std.process;
 
+/// Path captures reach handlers percent-decoded, like query values do.
+/// Captures are stored raw: static directory routes read them directly and
+/// validate the encoded form themselves (decoding here too would double-
+/// decode). Malformed escapes are kept literally; `+` is not a space in paths.
+pub fn decodeCapture(allocator: std.mem.Allocator, raw: []const u8) []const u8 {
+    if (std.mem.indexOfScalar(u8, raw, '%') == null) return raw;
+    var out = allocator.alloc(u8, raw.len) catch return raw;
+    var len: usize = 0;
+    var i: usize = 0;
+    while (i < raw.len) {
+        if (raw[i] == '%' and i + 2 < raw.len) {
+            const hi = std.fmt.charToDigit(raw[i + 1], 16) catch null;
+            const lo = std.fmt.charToDigit(raw[i + 2], 16) catch null;
+            if (hi != null and lo != null) {
+                out[len] = @intCast((hi.? << 4) | lo.?);
+                len += 1;
+                i += 3;
+                continue;
+            }
+        }
+        out[len] = raw[i];
+        len += 1;
+        i += 1;
+    }
+    return out[0..len];
+}
+
 pub fn RequestContext(comptime backend: anytype, comptime protocol: anytype, comptime build_info: anytype, comptime request_id: anytype, comptime backendProtocolMethod: anytype, comptime queryValue: anytype, comptime queryAllValues: anytype) type {
     return struct {
         pub fn captureEntries(ctx: anytype) ![]const protocol.MetadataEntry {
@@ -8,7 +35,7 @@ pub fn RequestContext(comptime backend: anytype, comptime protocol: anytype, com
             var count: usize = 0;
             for (ctx.route.params) |param_spec| {
                 if (ctx.captures.get(param_spec.name)) |value| {
-                    entries[count] = .{ .name = param_spec.name, .value = value };
+                    entries[count] = .{ .name = param_spec.name, .value = decodeCapture(ctx.allocator, value) };
                     count += 1;
                 }
             }
@@ -101,12 +128,14 @@ pub fn RequestContext(comptime backend: anytype, comptime protocol: anytype, com
         }
 
         pub fn param(ctx: anytype, name: []const u8) ?[]const u8 {
-            return ctx.captures.get(name);
+            const raw = ctx.captures.get(name) orelse return null;
+            return decodeCapture(ctx.allocator, raw);
         }
 
         pub fn paramAt(ctx: anytype, index: usize) ?[]const u8 {
             if (index >= ctx.route.params.len) return null;
-            return ctx.captures.get(ctx.route.params[index].name);
+            const raw = ctx.captures.get(ctx.route.params[index].name) orelse return null;
+            return decodeCapture(ctx.allocator, raw);
         }
 
         pub fn query(ctx: anytype, name: []const u8) ?[]const u8 {
@@ -183,4 +212,16 @@ pub fn RequestContext(comptime backend: anytype, comptime protocol: anytype, com
             return ctx.cached_body.?;
         }
     };
+}
+
+test "decodeCapture decodes percent escapes and keeps everything else" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try std.testing.expectEqualStrings("Ada Lovelace", decodeCapture(a, "Ada%20Lovelace"));
+    try std.testing.expectEqualStrings("<b>", decodeCapture(a, "%3Cb%3E"));
+    try std.testing.expectEqualStrings("a+b", decodeCapture(a, "a+b"));
+    try std.testing.expectEqualStrings("100%", decodeCapture(a, "100%"));
+    try std.testing.expectEqualStrings("%zz", decodeCapture(a, "%zz"));
+    try std.testing.expectEqualStrings("plain", decodeCapture(a, "plain"));
 }
