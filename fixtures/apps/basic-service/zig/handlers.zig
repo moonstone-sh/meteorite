@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 pub fn health(ctx: anytype) !void {
     try ctx.text(200, "ok");
@@ -8,10 +9,21 @@ pub fn health(ctx: anytype) !void {
 // while a shutdown signal is sent, long enough (1s) to reliably straddle
 // normal process/network scheduling jitter in that test.
 pub fn sleep_1s(ctx: anytype) !void {
-    var req: std.c.timespec = .{ .sec = 1, .nsec = 0 };
-    var rem: std.c.timespec = undefined;
-    while (std.c.nanosleep(&req, &rem) != 0) {
-        req = rem;
+    // A static Linux build does not link libc (macOS always does), so use
+    // the raw syscall there; std.c.nanosleep would fail to compile.
+    if (builtin.os.tag == .linux and !builtin.link_libc) {
+        const linux = std.os.linux;
+        var req: linux.timespec = .{ .sec = 1, .nsec = 0 };
+        var rem: linux.timespec = undefined;
+        while (linux.errno(linux.nanosleep(&req, &rem)) == .INTR) {
+            req = rem;
+        }
+    } else {
+        var req: std.c.timespec = .{ .sec = 1, .nsec = 0 };
+        var rem: std.c.timespec = undefined;
+        while (std.c.nanosleep(&req, &rem) != 0) {
+            req = rem;
+        }
     }
     try ctx.text(200, "slept");
 }
