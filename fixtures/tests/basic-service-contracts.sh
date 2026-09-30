@@ -190,10 +190,28 @@ grep -q 'release build contains generated handler stub `get_user`' /tmp/meteorit
 tmp_typed="$(mktemp -d /tmp/meteorite-typed.XXXXXX)"
 cp -R fixtures/apps/basic-service/. "$tmp_typed/"
 cat > "$tmp_typed/zig/handlers.zig" <<'ZIG'
+const std = @import("std");
+const builtin = @import("builtin");
 const mt = @import("meteorite_graph");
 
 pub fn health(c: mt.ctx.health) !void {
     try c.text(200, "ok");
+}
+
+// Mirrors fixtures/apps/basic-service/zig/handlers.zig: the route exists for
+// signal-shutdown.sh, so every handler set for this app must provide it.
+pub fn sleep_1s(c: mt.ctx.sleep_1s) !void {
+    if (builtin.os.tag == .linux and !builtin.link_libc) {
+        const linux = std.os.linux;
+        var req: linux.timespec = .{ .sec = 1, .nsec = 0 };
+        var rem: linux.timespec = undefined;
+        while (linux.errno(linux.nanosleep(&req, &rem)) == .INTR) req = rem;
+    } else {
+        var req: std.c.timespec = .{ .sec = 1, .nsec = 0 };
+        var rem: std.c.timespec = undefined;
+        while (std.c.nanosleep(&req, &rem) != 0) req = rem;
+    }
+    try c.text(200, "slept");
 }
 
 pub fn get_user(c: mt.ctx.get_user) !void {
