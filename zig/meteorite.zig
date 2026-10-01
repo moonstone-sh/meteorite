@@ -13,6 +13,11 @@ pub const backends = struct {
 pub const ListenConfig = struct {
     host: []const u8 = "127.0.0.1",
     port: u16 = 8080,
+    /// Optional environment variable names that override `host`/`port` when
+    /// the built server starts (`meteorite.new({ port_env = "PORT" })`).
+    /// Empty: the address is exactly what the app declared at build time.
+    host_env: []const u8 = "",
+    port_env: []const u8 = "",
 };
 
 pub const BackendContract = struct {

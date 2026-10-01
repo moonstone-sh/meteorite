@@ -73,11 +73,32 @@ const App = meteorite.compile(.{
     .hybrid_profile = build_info.hybrid_profile,
 });
 
+/// Applies the app's opted-in environment overrides (`host_env`/`port_env`)
+/// to the build-time listen address. A set but invalid port fails start-up
+/// instead of silently binding the declared default.
+fn applyListenEnv(declared: ListenConfig, env: *const std.process.Environ.Map) !ListenConfig {
+    var config = declared;
+    if (config.port_env.len > 0) {
+        if (env.get(config.port_env)) |raw| {
+            config.port = std.fmt.parseInt(u16, raw, 10) catch {
+                std.debug.print("meteorite: {s}={s} is not a valid port (0-65535)\n", .{ config.port_env, raw });
+                return error.InvalidListenPort;
+            };
+        }
+    }
+    if (config.host_env.len > 0) {
+        if (env.get(config.host_env)) |raw| {
+            if (raw.len > 0) config.host = raw;
+        }
+    }
+    return config;
+}
+
 pub fn main(init: std.process.Init) !void {
     try enterReleaseRoot(init);
 
     const listen_zon = listen_config.listen_zon;
     const parsed = try std.zon.parse.fromSliceAlloc(ListenConfig, init.gpa, listen_zon, null, .{});
     defer std.zon.parse.free(init.gpa, parsed);
-    try App.serve(init.io, parsed);
+    try App.serve(init.io, try applyListenEnv(parsed, init.environ_map));
 }

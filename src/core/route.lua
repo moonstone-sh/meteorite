@@ -583,6 +583,18 @@ function route.normalize_app(app, opts)
     host = (app.options and app.options.host) or "127.0.0.1",
     port = (app.options and app.options.port) or 8080,
   }
+  -- Opt-in run-time overrides: the built server reads these environment
+  -- variables at start-up (zig/main.zig applyListenEnv). Absent, the
+  -- address stays exactly what was declared here.
+  for _, key in ipairs({ "host_env", "port_env" }) do
+    local name = app.options and app.options[key]
+    if name ~= nil then
+      if type(name) ~= "string" or not name:match("^[%a_][%w_]*$") then
+        error("meteorite: " .. key .. " must be an environment variable name, got " .. tostring(name), 0)
+      end
+      listen[key] = name
+    end
+  end
   local trailing_slash = (app.options and app.options.trailing_slash) or "default"
   local plugins = {}
   local plugin_seen = {}

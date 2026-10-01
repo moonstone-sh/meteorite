@@ -152,13 +152,29 @@ end
 -- entirely unrelated project.
 local function graph_listen_port()
   local data = read_file(output .. "/listen.zon")
-  return data and data:match("%.port%s*=%s*(%d+)") or nil
+  if not data then return nil end
+  local port = data:match("%.port%s*=%s*(%d+)")
+  -- The server applies the app's opted-in `port_env` at start-up (zig/main.zig
+  -- applyListenEnv), and it inherits this process's environment.
+  local env_name = data:match('%.port_env%s*=%s*"([%a_][%w_]*)"')
+  local from_env = env_name and os.getenv(env_name)
+  if from_env and from_env:match("^%d+$") then port = from_env end
+  return port
 end
 
--- METEORITE_DEV_PORT stays an explicit override; the 8080 literal is only a
--- last resort for the window before the first graph() run produces listen.zon.
+-- The port is always the one the server binds. METEORITE_DEV_PORT never moved
+-- the server (it only relabelled the banner and guards, pointing them at a
+-- port nothing listened on), so a disagreeing value is reported, not used.
+-- The 8080 literal is only a last resort before the first graph() run.
+local warned_dev_port = false
 local function resolve_dev_port()
-  return explicit_dev_port or graph_listen_port() or "8080"
+  local actual = graph_listen_port()
+  if explicit_dev_port and actual and explicit_dev_port ~= actual and not warned_dev_port then
+    warned_dev_port = true
+    io.stderr:write("meteorite dev: METEORITE_DEV_PORT=" .. explicit_dev_port .. " is ignored; the server listens on "
+      .. actual .. " (the app's `port`, or the variable named by its `port_env`)\n")
+  end
+  return actual or explicit_dev_port or "8080"
 end
 
 local function pid_running(pid)

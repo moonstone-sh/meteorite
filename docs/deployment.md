@@ -15,14 +15,23 @@ meteorite build --mode release-static --backend fast_http
 ./dist/server
 ```
 
-### Environment Variables
+### Listen address
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `METEORITE_HOST` | `127.0.0.1` | Bind address |
-| `METEORITE_PORT` | `8080` | Listen port |
-| `METEORITE_UNIX_SOCKET_PATH` | (none) | UNIX socket path (overrides TCP) |
-| `METEORITE_UNIX_SOCKET_MODE` | `0660` | Socket file permissions |
+The address is compiled into the binary from the app's declaration
+(`m.app({ host = "127.0.0.1", port = 8080 })`, the defaults). A built server
+reads no environment variables for it unless the app names them:
+
+```lua
+local app = m.app({ name = "api", port = 8080, port_env = "PORT", host_env = "HOST" })
+```
+
+With that declaration, `PORT=9000 ./dist/server` listens on 9000, and an
+unset `PORT` keeps 8080. An invalid `PORT` stops start-up with an error
+instead of falling back. Use `port_env = "PORT"` on platforms that assign the
+port at run time.
+
+UNIX socket backends take their path and mode from build options
+(`-Dunix-socket-path`, `-Dunix-socket-mode`), not from the environment.
 
 ## Systemd (Linux)
 
@@ -40,8 +49,9 @@ User=meteorite
 Group=meteorite
 WorkingDirectory=/opt/meteorite
 ExecStart=/opt/meteorite/bin/server
-Environment=METEORITE_HOST=0.0.0.0
-Environment=METEORITE_PORT=8080
+# Requires the app to declare host_env = "HOST", port_env = "PORT".
+Environment=HOST=0.0.0.0
+Environment=PORT=8080
 Restart=on-failure
 RestartSec=5
 
@@ -97,9 +107,10 @@ journalctl -u meteorite -f
   </array>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>METEORITE_HOST</key>
+    <!-- Requires the app to declare host_env = "HOST", port_env = "PORT". -->
+    <key>HOST</key>
     <string>127.0.0.1</string>
-    <key>METEORITE_PORT</key>
+    <key>PORT</key>
     <string>8080</string>
   </dict>
   <key>RunAtLoad</key>
@@ -134,7 +145,8 @@ tail -f /var/log/meteorite/output.log
 command=/opt/meteorite/bin/server
 directory=/opt/meteorite
 user=meteorite
-environment=METEORITE_HOST="0.0.0.0",METEORITE_PORT="8080"
+; Requires the app to declare host_env = "HOST", port_env = "PORT".
+environment=HOST="0.0.0.0",PORT="8080"
 autostart=true
 autorestart=true
 startsecs=5
