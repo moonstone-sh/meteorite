@@ -98,8 +98,9 @@ Runs the graph-aware live reload loop:
 Use generated Moonstone scripts for explicit defaults. Repeated behavior flags
 are resolved left-to-right; the last value wins.
 
-Environment:
-  METEORITE_DEV_PORT  Port for the dev server, default 8080]]
+Port:
+  The dev server listens where the app declares: m.app({ port = 8080 }).
+  To choose it per run, declare port_env = "PORT" and run PORT=9000 meteorite dev.]]
 
 help.check = [[Meteorite check
 

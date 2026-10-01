@@ -99,9 +99,14 @@ function doctor.run(deps)
   -- listen.zon, then the 8080 literal only when no graph has been generated.
   local function configured_listen_port()
     local data = read_file(path_join(".meteorite/graph/current", "listen.zon"))
-    return data and data:match("%.port%s*=%s*(%d+)") or nil
+    if not data then return nil end
+    local port = data:match("%.port%s*=%s*(%d+)")
+    local env_name = data:match('%.port_env%s*=%s*"([%a_][%w_]*)"')
+    local from_env = env_name and os.getenv(env_name)
+    if from_env and from_env:match("^%d+$") then port = from_env end
+    return port
   end
-  local port = os.getenv("METEORITE_DEV_PORT") or configured_listen_port() or "8080"
+  local port = configured_listen_port() or "8080"
   local listener = capture_command("lsof -tiTCP:" .. port .. " -sTCP:LISTEN 2>/dev/null | head -n 1")
   add(listener ~= "" and "warn" or "ok", "dev port " .. port, listener ~= "" and ("listener pid " .. listener:gsub("%s+$", "")) or "free")
 
