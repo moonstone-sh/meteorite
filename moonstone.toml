@@ -2,7 +2,7 @@ manifest_version = 2
 
 [package]
 name = "moonstone/meteorite"
-version = "0.3.4"
+version = "0.3.5"
 kind = "bin"
 description = "Moonstone-zig service compiler prototype"
 
@@ -101,7 +101,7 @@ path = "fixtures/apps/web-standards"
 
 [[dependencies]]
 name = "moonstone/ballad"
-constraint = "^0.3.8"
+constraint = "^0.4.2"
 role = "tool"
 
 [[dependencies]]
@@ -112,7 +112,7 @@ role = "runtime"
 
 [[dependencies]]
 name = "lua-cjson"
-constraint = "^2.1.0-1"
+constraint = "^2.1.0.10-1"
 registry = "rocks"
 role = "runtime"
 

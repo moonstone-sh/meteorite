@@ -255,7 +255,7 @@ local function build_partitions(graph, routes_text, graph_hash, mode, backend)
       local source_path = (route.handler.lifted or {}).chunk_path or handler.chunk_path
       lua_chunks[#lua_chunks + 1] = { id = route.id, path = handler.chunk_path, hash = helpers.hash_text(read_file(source_path) or "") }
     elseif handler.kind == "lua" then
-      lua_chunks[#lua_chunks + 1] = { id = route.id, path = handler.path, hash = helpers.hash_text(read_file(handler.path) or "") }
+      lua_chunks[#lua_chunks + 1] = { id = route.id, path = handler.path, hash = helpers.hash_text(read_file(route.handler.source_path or handler.path) or "") }
     elseif handler.kind == "file" then
       static_assets[#static_assets + 1] = { id = route.id, kind = "file", path = handler.artifact_path or handler.path or route.raw_path, hash = helpers.hash_zon(handler) }
     elseif handler.kind == "dir" then
