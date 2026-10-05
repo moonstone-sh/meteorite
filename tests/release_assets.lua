@@ -110,4 +110,21 @@ test "generated route descriptors use the runtime path" (function()
   test.assert_true(graph_routes.plugin_handler_zig(plugin):find('chunk_path = ".meteorite/lua/inline/route_1.lua"', 1, true) ~= nil, "plugin runtime path")
 end)
 
+test "release closure includes rebased installed handlers" (function()
+  local root = os.tmpname()
+  os.remove(root)
+  mkdir_p(root .. "/.meteorite/graph/current")
+  local external = root .. "/installed-handler.lua"
+  write_file(external, "return function(c) return c:text('portable') end\n")
+  local app_graph = { routes = {
+    { id = "installed", handler = { kind = "lua", path = external }, scope = {}, runtime = {}, execution = {} },
+  } }
+  require("codegen.graph_prepare").prepare_graph(app_graph, root .. "/.meteorite/graph/current", "release-hybrid")
+  local assets = release_assets.new_set()
+  release_assets.add_hybrid_lua_assets({ graph = graph.Graph.new() }, assets, root, app_graph)
+  test.assert_eq(#assets.assets, 1, "handler is in deployment closure")
+  test.assert_eq(assets.assets[1].virtual_path, ".meteorite/lua/handlers/installed.lua", "portable path")
+  assert(os.execute("rm -rf " .. string.format("%q", root)))
+end)
+
 test.run()

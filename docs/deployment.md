@@ -73,9 +73,9 @@ WantedBy=multi-user.target
 
 ```ini
 [Service]
+# Compile with -Dunix-socket-path=/run/meteorite/meteorite.sock
+# and -Dunix-socket-mode=0660; these are build options.
 ExecStart=/opt/meteorite/bin/server
-Environment=METEORITE_UNIX_SOCKET_PATH=/run/meteorite/meteorite.sock
-Environment=METEORITE_UNIX_SOCKET_MODE=0660
 RuntimeDirectory=meteorite
 ```
 

@@ -85,6 +85,19 @@ function graph_prepare.prepare_graph(graph, output, mode)
         if ref.kind == "zig" then route.runtime.requires_zig_capability = true end
       end
     elseif route.handler.kind == "lua" then
+      -- Installed package handlers can resolve to absolute Moonstone/CAS paths.
+      -- A release must load its own copy after deployment, never that host path.
+      local source_path = route.handler.path or route.handler.module
+      if tostring(mode):match("^release") and tostring(source_path):match("^/") then
+        local source, err = helpers.read_file(source_path)
+        if not source then error("cannot package Lua handler " .. tostring(source_path) .. ": " .. tostring(err)) end
+        local runtime_path = ".meteorite/lua/handlers/" .. helpers.zig_ident(route.id) .. ".lua"
+        local target = helpers.path_join(helpers.project_root_from_output(output), runtime_path)
+        helpers.mkdir_p(helpers.dirname(target))
+        helpers.write_file(target, source)
+        route.handler.source_path = source_path
+        route.handler.path = runtime_path
+      end
       route.runtime.requires_lua = true
       route.runtime.execution_class = "lua"
       route.execution.class = "lua"
