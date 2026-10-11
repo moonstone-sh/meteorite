@@ -29,7 +29,7 @@ test "meteorite standalone manifest uses Moonstone v2 canonical storage" (functi
   test.assert_true(manifest:find("manifest_version = 2", 1, true) ~= nil)
   test.assert_true(manifest:find('kind = "script"', 1, true) ~= nil)
   test.assert_true(manifest:find('kind = "app"', 1, true) == nil)
-  test.assert_true(manifest:find('constraint = "^0.3.5"', 1, true) ~= nil)
+  test.assert_true(manifest:find('constraint = "^0.4.3"', 1, true) ~= nil)
 end)
 
 test "meteorite init augments an empty Moonstone host with canonical tools" (function()
@@ -65,15 +65,15 @@ test "meteorite init augments an empty Moonstone host with canonical tools" (fun
 
   local updated = read_file(manifest_path)
   test.assert_true(updated:find('name = "moonstone/meteorite"', 1, true) ~= nil)
-  test.assert_true(updated:find('constraint = "^0.2.0"', 1, true) ~= nil)
+  test.assert_true(updated:find('constraint = "^0.3.6"', 1, true) ~= nil)
   test.assert_true(updated:find('name = "moonstone/ballad"', 1, true) ~= nil)
-  test.assert_true(updated:find('constraint = "^0.3.5"', 1, true) ~= nil)
+  test.assert_true(updated:find('constraint = "^0.4.3"', 1, true) ~= nil)
   test.assert_true(updated:find('[dependencies.tool]', 1, true) == nil)
-  test.assert_true(updated:find('role = "tool"', 1, true) ~= nil)
+  test.assert_true(updated:find('role = "dev"', 1, true) ~= nil)
   test.assert_true(updated:find('[scripts]', 1, true) ~= nil)
-  test.assert_true(updated:find('dev = "moon exec ballad -- play Watch_partiture.lua', 1, true) ~= nil)
-  test.assert_true(updated:find('build = "moon exec ballad -- play Dev_partiture.lua', 1, true) ~= nil)
-  test.assert_true(updated:find('check = "moon exec ballad -- play Check_partiture.lua', 1, true) ~= nil)
+  test.assert_true(updated:find('dev = "moon exec -- lua Watch_supervisor.lua', 1, true) ~= nil)
+  test.assert_true(updated:find('build = "moon exec -- ballad play Dev_partiture.lua', 1, true) ~= nil)
+  test.assert_true(updated:find('check = "moon exec -- ballad play Check_partiture.lua', 1, true) ~= nil)
   local build_file = read_file(target .. "/build.zig")
   test.assert_true(build_file:find("meteorite/zig/build_api.zig", 1, true) ~= nil)
   test.assert_true(build_file:find("meteorite.addService", 1, true) ~= nil)
@@ -115,11 +115,41 @@ test "meteorite init preserves existing Moonstone scripts" (function()
   local updated = read_file(manifest_path)
   test.assert_true(updated:find("# The user owns this entrypoint and its note.", 1, true) ~= nil)
   test.assert_true(updated:find('dev = "echo user-owned-dev"', 1, true) ~= nil)
-  test.assert_true(updated:find('build = "moon exec ballad -- play Dev_partiture.lua', 1, true) ~= nil)
-  test.assert_true(updated:find('check = "moon exec ballad -- play Check_partiture.lua', 1, true) ~= nil)
+  test.assert_true(updated:find('build = "moon exec -- ballad play Dev_partiture.lua', 1, true) ~= nil)
+  test.assert_true(updated:find('check = "moon exec -- ballad play Check_partiture.lua', 1, true) ~= nil)
   test.assert_true(read_file(target .. "/build.zig"):find("meteorite.addService", 1, true) ~= nil)
   test.assert_true(read_file(target .. "/build.zig.zon"):find(".fingerprint = 0x", 1, true) ~= nil)
 
+  remove_tree(target)
+end)
+
+test "meteorite init projects existing tool modules without changing the pinned version" (function()
+  local target = os.tmpname()
+  os.remove(target)
+  assert(os.execute("mkdir -p " .. string.format("%q", target)))
+  local file = assert(io.open(target .. "/moonstone.toml", "wb"))
+  file:write([=[manifest_version = 2
+[package]
+name = "adopt-tool"
+version = "0.1.0"
+kind = "script"
+[[dependencies]]
+name = "moonstone/meteorite"
+constraint = "=0.3.5"
+role = "tool"
+]=])
+  file:close()
+  init.run({ "init", target, "--no-sync" }, {
+    print_help = function() end,
+    roots = { install_root = "./", module_root = "src/" },
+    moon_bin = resolve_moon_bin(),
+  })
+  local updated = read_file(target .. "/moonstone.toml")
+  test.assert_true(updated:find('constraint = "=0.3.5"', 1, true) ~= nil)
+  test.assert_true(updated:find('role = "dev"', 1, true) ~= nil)
+  local build = read_file(target .. "/build.zig")
+  test.assert_true(build:find('"project-root"', 1, true) ~= nil)
+  test.assert_true(build:find('"meteorite-cli"', 1, true) ~= nil)
   remove_tree(target)
 end)
 
