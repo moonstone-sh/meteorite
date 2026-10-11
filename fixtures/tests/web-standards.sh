@@ -419,8 +419,9 @@ set +e
 )
 doctor_status=$?
 set -e
-if [ "$doctor_status" -eq 0 ]; then
-  echo "expected fixture-local doctor to report missing moonstone.toml" >&2
+if [ "$doctor_status" -ne 0 ]; then
+  cat "$doctor_output" >&2
+  echo "expected fixture-local doctor to accept the tracked manifest and discover the Ballad plugin" >&2
   exit 1
 fi
 for needle in 'Meteorite doctor' 'moonstone.toml' 'src/main.lua' 'Moonstone env' 'Lua runtime' 'Meteorite CLI' 'Zig' 'Ballad plugin' 'Ballad core' 'generated graph' 'LuaLS aids' 'static release readiness' 'hybrid release readiness' 'release partiture' 'dev port'; do
