@@ -1024,13 +1024,20 @@ end
 --- @param name string
 --- @return string|integer|nil
 function Context:param(name)
-  local params = self.params or {}
+  local params = self._raw_params or self.params or {}
   if params[name] ~= nil then return params[name] end
   return nil
 end
 
 local function new_context(opts)
-  local params = opts.params or {}
+  local params = {}
+  for _, spec in ipairs(opts.param_specs or {}) do
+    local value = (opts.params or {})[spec.name]
+    if value ~= nil then params[spec.name] = convert_schema(spec, value) end
+  end
+  for key, value in pairs(opts.params or {}) do
+    if params[key] == nil then params[key] = value end
+  end
   local scope_values = {}
   for key, value in pairs(opts.scope or {}) do scope_values[key] = value end
   local readonly_scope = setmetatable({}, {
@@ -1040,10 +1047,15 @@ local function new_context(opts)
     end,
     __pairs = function() return pairs(scope_values) end,
   })
+  local query = setmetatable(opts.query or {}, {
+    __call = function(_, ctx, name) return Context.query(ctx, name) end,
+  })
   return setmetatable({
+    query = query,
     request = opts.request,
     params = params,
-    _validated_query = opts.query or {},
+    _raw_params = opts.params or {},
+    _validated_query = query,
     _raw_query_values = opts.raw_query_values or {},
     _raw_query_all = opts.raw_query_all or {},
     _target = opts.target,
@@ -1129,7 +1141,7 @@ function hybrid.invoke(app, request, opts)
       if query_error then return query_error end
       local validation_error = validate_request_domains(route, request)
       if validation_error then return validation_error end
-      local ctx = new_context({ request = request, params = params, query = query, raw_query_values = query_values, raw_query_all = query_all, target = request.path or "/", path = path, route_id = route.id, scope = route.scope.context or {}, capabilities = graph.capabilities, zig_helpers = opts.zig_helpers, http_request = opts.http_request, worker_cache = app.cache, capability_store = store.capabilities })
+      local ctx = new_context({ request = request, params = params, param_specs = route.params, query = query, raw_query_values = query_values, raw_query_all = query_all, target = request.path or "/", path = path, route_id = route.id, scope = route.scope.context or {}, capabilities = graph.capabilities, zig_helpers = opts.zig_helpers, http_request = opts.http_request, worker_cache = app.cache, capability_store = store.capabilities })
       local plugin_response = execute_scope_plugins(route, ctx, plugin_map)
       if plugin_response then return plugin_response end
       if route.handler.kind == "inline_lua" then
