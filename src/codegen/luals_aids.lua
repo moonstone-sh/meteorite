@@ -2,6 +2,7 @@
 
 local helpers = require("codegen.helpers")
 local fs = require("utils.fs")
+local lua_schema = require("codegen.lua_schema")
 
 local luals_aids = {}
 
@@ -147,8 +148,10 @@ function luals_aids.emit(graph, output)
     "---@param opts? {headers?: table<string, string>}",
     "function Context:text(body) end",
     "",
+    "---@overload fun(self: MeteoriteContext, status: integer, value: table|string|number|boolean, opts?: {headers?: table<string, string>}): table|nil",
     "---@param value table|string|number|boolean",
-    "---@param opts? {status?: integer, headers?: table<string, string>}",
+    "---@param opts? {headers?: table<string, string>}",
+    "---@return table|nil",
     "function Context:json(value, opts) end",
     "",
     "---@param status integer",
@@ -297,33 +300,6 @@ function luals_aids.emit(graph, output)
     "local ZigClient = {}",
     "",
   }) do lines[#lines + 1] = line end
-  for _, route in ipairs(graph.routes) do
-    if #route.params > 0 then
-      local class_name = "MeteoriteParams_" .. helpers.zig_ident(route.id)
-      lines[#lines + 1] = "---@class " .. class_name
-      for _, param in ipairs(route.params) do
-        local lua_type = luals_aids.lua_type_for(param.type)
-        lines[#lines + 1] = "---@field " .. param.name .. " " .. lua_type
-      end
-      lines[#lines + 1] = ""
-      lines[#lines + 1] = "---@class MeteoriteContext_" .. helpers.zig_ident(route.id) .. " : MeteoriteContext"
-      lines[#lines + 1] = "---@field params " .. class_name
-      lines[#lines + 1] = ""
-    end
-    if #(route.query or {}) > 0 then
-      local class_name = "MeteoriteQuery_" .. helpers.zig_ident(route.id)
-      lines[#lines + 1] = "---@class " .. class_name
-      for _, item in ipairs(route.query) do
-        local lua_type = luals_aids.lua_type_for(item.type)
-        if item.optional then lua_type = lua_type .. "|nil" end
-        lines[#lines + 1] = "---@field " .. item.name .. " " .. lua_type
-      end
-      lines[#lines + 1] = ""
-      lines[#lines + 1] = "---@class MeteoriteContext_" .. helpers.zig_ident(route.id) .. " : MeteoriteContext"
-      lines[#lines + 1] = "---@field query " .. class_name
-      lines[#lines + 1] = ""
-    end
-  end
   lines[#lines + 1] = "return meteorite"
   local meteorite_module = table.concat(lines, "\n") .. "\n"
   helpers.write_file(aid_dir .. "/meteorite.lua", meteorite_module)
@@ -354,10 +330,60 @@ function luals_aids.emit(graph, output)
       end
       route_lines[#route_lines + 1] = ""
     end
-    route_lines[#route_lines + 1] = "---@class MeteoriteContext_" .. route_id .. " : MeteoriteContext"
+    local request_schema = route.json_contract and route.json_contract.schema
+    local body_fields = route.validation and route.validation.json_body or {}
+    local request_type
+    if request_schema then
+      request_type = "MeteoriteRequest_" .. route_id
+      route_lines[#route_lines + 1] = "---@alias " .. request_type .. " " .. lua_schema.render(request_schema)
+    elseif #body_fields > 0 then
+      request_type = "MeteoriteRequest_" .. route_id
+      route_lines[#route_lines + 1] = "---@class " .. request_type
+      for _, field in ipairs(body_fields) do
+        route_lines[#route_lines + 1] = "---@field " .. field.name .. (field.optional and "? " or " ") .. luals_aids.lua_type_for(field.type)
+      end
+    end
+    local responses, statuses = {}, {}
+    for status, response in pairs(route.responses or {}) do
+      local schema = type(response) == "table" and (response.schema or response.json or response.body)
+      if type(response) == "table" and tostring(status):match("^%d%d%d$") then
+        statuses[#statuses + 1] = tonumber(status)
+        responses[tonumber(status)] = type(schema) == "table" and schema or false
+      end
+    end
+    table.sort(statuses)
+    for _, status in ipairs(statuses) do
+      route_lines[#route_lines + 1] = "---@alias MeteoriteResponse_" .. route_id .. "_" .. status .. " " .. lua_schema.render(responses[status])
+    end
+    local ctx = "MeteoriteContext_" .. route_id
+    local variable = "Context_" .. route_id
+    route_lines[#route_lines + 1] = "---@class " .. ctx .. " : MeteoriteContext"
     if #route.params > 0 then route_lines[#route_lines + 1] = "---@field params MeteoriteParams_" .. route_id end
     if #(route.query or {}) > 0 then route_lines[#route_lines + 1] = "---@field query MeteoriteQuery_" .. route_id end
+    route_lines[#route_lines + 1] = "local " .. variable .. " = {}"
+    if request_type then
+      route_lines[#route_lines + 1] = "---@return " .. request_type .. "|nil value"
+      route_lines[#route_lines + 1] = "---@return string|nil err"
+      route_lines[#route_lines + 1] = "function " .. variable .. ":json_body() end"
+    end
+    if #statuses > 0 then
+      local options = "{headers?: table<string, string>}"
+      for _, status in ipairs(statuses) do
+        if status ~= statuses[1] then
+          route_lines[#route_lines + 1] = "---@overload fun(self: " .. ctx .. ", status: " .. status .. ", value: MeteoriteResponse_" .. route_id .. "_" .. status .. ", opts?: " .. options .. "): table|nil"
+        end
+      end
+      if responses[200] ~= nil then
+        route_lines[#route_lines + 1] = "---@overload fun(self: " .. ctx .. ", value: MeteoriteResponse_" .. route_id .. "_200, opts?: " .. options .. "): table|nil"
+      end
+      route_lines[#route_lines + 1] = "---@param status " .. statuses[1]
+      route_lines[#route_lines + 1] = "---@param value MeteoriteResponse_" .. route_id .. "_" .. statuses[1]
+      route_lines[#route_lines + 1] = "---@param opts? " .. options
+      route_lines[#route_lines + 1] = "---@return table|nil"
+      route_lines[#route_lines + 1] = "function " .. variable .. ":json(status, value, opts) end"
+    end
     route_lines[#route_lines + 1] = ""
+
   end
   helpers.write_file(aid_dir .. "/routes.meta.lua", table.concat(route_lines, "\n") .. "\n")
   helpers.write_file(aid_dir .. "/lfs.lua", table.concat({

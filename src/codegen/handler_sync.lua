@@ -405,60 +405,50 @@ function handler_sync.sync_luarc(output)
   local root = project_root_from_output(output)
   local target = helpers.path_join(root, ".luarc.json")
   local lua_ver = helpers.detect_lua_version(root)
-  helpers.write_file(target, table.concat({
-    "{",
-    "  \"workspace\": {",
-    "    \"library\": [",
-    "      \".meteorite/aids/lua\",",
-    "      \".moonstone/env/share/lua/" .. lua_ver .. "\",",
-    "      \".moonstone/env/lib/lua/" .. lua_ver .. "\",",
-    "      \"src\"",
-    "    ],",
-    "    \"checkThirdParty\": \"Disable\",",
-    "    \"useGitIgnore\": true,",
-    "    \"ignoreDir\": [",
-    "      \".moonstone/env/bin\",",
-    "      \".moonstone/env/bin-runtime\",",
-    "      \".moonstone/env/include\",",
-    "      \".moonstone/env/libexec\",",
-    "      \".ballad\",",
-    "      \"zig-cache\",",
-    "      \".zig-cache\",",
-    "      \"zig-out\",",
-    "      \".meteorite/graph\",",
-    "      \".meteorite/dev\",",
-    "      \".meteorite/cache\",",
-    "      \"dist\",",
-    "      \"node_modules\",",
-    "      \".git\"",
-    "    ],",
-    "    \"maxPreload\": 2000,",
-    "    \"preloadFileSize\": 200",
-    "  },",
-    "  \"runtime\": {",
-    "    \"version\": \"Lua " .. lua_ver .. "\",",
-    "    \"path\": [",
-    "      \"src/?.lua\",",
-    "      \"src/?/init.lua\",",
-    "      \".meteorite/aids/lua/?.lua\",",
-    "      \".meteorite/aids/lua/?/init.lua\",",
-    "      \".moonstone/env/share/lua/" .. lua_ver .. "/?.lua\",",
-    "      \".moonstone/env/share/lua/" .. lua_ver .. "/?/init.lua\",",
-    "      \".moonstone/env/share/lua/" .. lua_ver .. "/meteorite/?.lua\",",
-    "      \".moonstone/env/share/lua/" .. lua_ver .. "/meteorite/?/init.lua\"",
-    "    ]",
-    "  },",
-    "  \"completion\": {",
-    "    \"autoRequire\": true",
-    "  },",
-    "  \"diagnostics\": {",
-    "    \"disable\": [",
-    "      \"lowercase-global\"",
-    "    ]",
-    "  }",
-    "}",
-    "",
-  }, "\n"))
+  local defaults = {
+    workspace = {
+      library = {".meteorite/aids/lua", ".moonstone/env/share/lua/" .. lua_ver, ".moonstone/env/lib/lua/" .. lua_ver, "src"},
+      checkThirdParty = "Disable", useGitIgnore = true,
+      ignoreDir = {".moonstone/env/bin", ".moonstone/env/bin-runtime", ".moonstone/env/include", ".moonstone/env/libexec", ".ballad", "zig-cache", ".zig-cache", "zig-out", ".meteorite/graph", ".meteorite/dev", ".meteorite/cache", "dist", "node_modules", ".git"},
+      maxPreload = 2000, preloadFileSize = 200,
+    },
+    runtime = {
+      version = "Lua " .. lua_ver,
+      path = {"src/?.lua", "src/?/init.lua", ".meteorite/aids/lua/?.lua", ".meteorite/aids/lua/?/init.lua",
+        ".moonstone/env/share/lua/" .. lua_ver .. "/?.lua", ".moonstone/env/share/lua/" .. lua_ver .. "/?/init.lua",
+        ".moonstone/env/share/lua/" .. lua_ver .. "/meteorite/?.lua", ".moonstone/env/share/lua/" .. lua_ver .. "/meteorite/?/init.lua"},
+    },
+    completion = {autoRequire = true},
+    diagnostics = {disable = {"lowercase-global"}},
+  }
+  local env = helpers.read_file(helpers.path_join(root, ".moonstone/env/env.toml")) or ""
+  if env:match('name%s*=%s*"luajit"') then defaults.runtime.version = "LuaJIT" end
+  local alter = require("alter")
+  local doc, err = alter.open(target, {backend = require("alter_jsonc"), create = true, default_text = "{}\n"})
+  assert(doc, err and (err.message or tostring(err)))
+  -- Edit only Meteorite-owned defaults. Runtime plugins, pluginArgs, custom
+  -- library entries, diagnostics, and JSONC comments belong to the workspace.
+  for _, section in ipairs({"workspace", "runtime", "completion", "diagnostics"}) do
+    local parent = doc:at(section)
+    assert(parent:kind() == "none" or parent:kind() == "object", section .. " must be an object")
+    parent:ensure_object()
+    local keys = {}
+    for key in pairs(defaults[section]) do keys[#keys + 1] = key end
+    table.sort(keys)
+    for _, key in ipairs(keys) do
+      local value = defaults[section][key]
+      local cursor = doc:at(section, key)
+      if type(value) == "table" then
+        assert(cursor:kind() == "none" or cursor:kind() == "array", section .. "." .. key .. " must be an array")
+        cursor:ensure_array()
+        for _, entry in ipairs(value) do cursor:append_unique(entry) end
+      elseif cursor:kind() == "none" or (section == "runtime" and key == "version") then
+        cursor:set(value)
+      end
+    end
+  end
+  local result, commit_err = doc:commit()
+  assert(result, commit_err and (commit_err.message or tostring(commit_err)))
 end
 
 return handler_sync
