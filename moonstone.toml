@@ -2,7 +2,7 @@ manifest_version = 2
 
 [package]
 name = "moonstone/meteorite"
-version = "0.3.6"
+version = "0.3.7"
 kind = "bin"
 description = "Moonstone-zig service compiler prototype"
 
@@ -114,6 +114,16 @@ role = "runtime"
 name = "lua-cjson"
 constraint = "^2.1.0.10-1"
 registry = "rocks"
+role = "runtime"
+
+[[dependencies]]
+name = "moonstone/alter"
+constraint = "^0.2.2"
+role = "runtime"
+
+[[dependencies]]
+name = "moonstone/alter-jsonc"
+constraint = "^0.2.2"
 role = "runtime"
 
 [[dependencies]]
