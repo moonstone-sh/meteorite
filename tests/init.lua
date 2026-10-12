@@ -65,7 +65,7 @@ test "meteorite init augments an empty Moonstone host with canonical tools" (fun
 
   local updated = read_file(manifest_path)
   test.assert_true(updated:find('name = "moonstone/meteorite"', 1, true) ~= nil)
-  test.assert_true(updated:find('constraint = "^0.3.9"', 1, true) ~= nil)
+  test.assert_true(updated:find('constraint = "^0.3.10"', 1, true) ~= nil)
   test.assert_true(updated:find('name = "moonstone/ballad"', 1, true) ~= nil)
   test.assert_true(updated:find('constraint = "^0.4.3"', 1, true) ~= nil)
   test.assert_true(updated:find('[dependencies.tool]', 1, true) == nil)

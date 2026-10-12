@@ -245,8 +245,28 @@ local function validate_request_domains(route, request)
     local ok, parsed
     if cjson_ok then ok, parsed = pcall(cjson.decode, request.body or "") else ok, parsed = true, parse_simple_json_object(request.body) end
     if not ok or type(parsed) ~= "table" then return validation_response("json", "body", "invalid") end
-    _, err = validate_specs("json", validation.json_body, parsed)
-    if err then return err end
+    for _, spec in ipairs(validation.json_body) do
+      local value = parsed[spec.name]
+      if value == nil then
+        if not spec.optional then return validation_response("json", spec.name, "missing") end
+      else
+        local kind = spec.kind or spec.type or "string"
+        local numeric = kind == "i32" or kind == "u64"
+        if (numeric and (type(value) ~= "number" or value % 1 ~= 0))
+          or (kind == "bool" and type(value) ~= "boolean")
+          or (not numeric and kind ~= "bool" and type(value) ~= "string") then
+          return validation_response("json", spec.name, "invalid")
+        end
+        if numeric and ((spec.min and value < spec.min) or (spec.max and value > spec.max)) then
+          return validation_response("json", spec.name, "invalid")
+        end
+        if type(value) == "string" and spec.min_len and #value < spec.min_len then
+          return validation_response("json", spec.name, "invalid")
+        end
+        local raw = numeric and string.format("%.0f", value) or tostring(value)
+        if not validate_schema(spec, raw) then return validation_response("json", spec.name, "invalid") end
+      end
+    end
   elseif #(validation.form_body or {}) > 0 then
     if not ct:match("^application/x%-www%-form%-urlencoded[%s;]?") then return validation_response("form", "content-type", "invalid") end
     local form = parse_form_values(request.body or "")
