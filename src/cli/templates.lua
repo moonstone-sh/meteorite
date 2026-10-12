@@ -442,7 +442,7 @@ function handler_sync.moonstone_manifest(name, build_mode)
     "",
     "[[dependencies]]",
     "name = \"moonstone/meteorite\"",
-    "constraint = \"^0.3.8\"",
+    "constraint = \"^0.3.10\"",
     "role = \"dev\"",
     "",
     "[[dependencies]]",
