@@ -192,6 +192,30 @@ test "graph preparation points m.lua handlers at the target variant" (function()
   end)
 end)
 
+test "development graphs with own variant modules ask for the runtime searcher" (function()
+  with_variants(true, function()
+    local prepare = require("codegen.graph_prepare")
+    local root = tmp_root()
+    local output = root .. "/.meteorite/graph/current"
+    helpers.mkdir_p(output)
+    touch(root, "src/app/hello.lua", "return function(c) return c:text(require('app.util').name) end\n")
+    touch(root, "src/app/util.lua", "return { name = 'fallback' }\n")
+    local function prepared(mode)
+      local route = { id = "hello", method = "GET", raw_path = "/", handler = { kind = "lua", path = "src/app/hello.lua" }, scope = {}, runtime = {}, execution = {} }
+      local restore = flavor.override_target(lua54)
+      local ok, graph = pcall(prepare.prepare_graph, { routes = { route } }, output, mode)
+      restore()
+      if not ok then error(graph, 0) end
+      return graph
+    end
+    test.assert_eq(prepared("hybrid").lua_variant_flavor, nil, "no variants, no searcher")
+    touch(root, "src/app/util@lua54.lua", "return { name = 'lua54' }\n")
+    test.assert_eq(prepared("hybrid").lua_variant_flavor.id, "lua54-aarch64-macos", "dev graph gets the flavor")
+    test.assert_eq(prepared("release-hybrid").lua_variant_flavor, nil, "releases ship projected modules instead")
+    rm_rf(root)
+  end)
+end)
+
 test "hybrid release ships the selected module variant under its plain name" (function()
   with_variants(true, function()
     local graph = require("ballad.graph")

@@ -137,6 +137,17 @@ function graph_zig.emit(graph, output)
     lines[#lines + 1] = "};"
   end
   lines[#lines + 1] = ""
+  local variant_flavor = graph.lua_variant_flavor
+  if variant_flavor then
+    -- Read by zig/bridge/lua_bindings.zig: installs moonstone.variants'
+    -- searcher for this flavor in development servers.
+    lines[#lines + 1] = "pub const lua_variant_flavor = .{ .id = " .. helpers.zig_string(variant_flavor.id)
+      .. ", .family = " .. helpers.zig_string(variant_flavor.family)
+      .. ", .level = " .. tostring(math.floor(tonumber(variant_flavor.level) or 0))
+      .. ", .os = " .. helpers.zig_string(variant_flavor.os)
+      .. ", .arch = " .. helpers.zig_string(variant_flavor.arch) .. " };"
+    lines[#lines + 1] = ""
+  end
   helpers.write_file(output .. "/graph.zig", table.concat(lines, "\n"))
 end
 

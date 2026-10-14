@@ -72,6 +72,21 @@ function graph_prepare.resolve_lua_variant(route, output, target)
   end
 end
 
+--- Does the project keep flavor variants of its own modules under src/?
+--- Those are found at run time by `require`, not by handler path.
+function graph_prepare.project_has_variants(root)
+  if not io.popen then return false end
+  local src = helpers.path_join(root, "src")
+  local pipe = io.popen("find " .. string.format("%q", src) .. " -name '*@*.lua' 2>/dev/null")
+  if not pipe then return false end
+  local found = false
+  for line in pipe:lines() do
+    if flavor.is_variant(line) then found = true break end
+  end
+  pipe:close()
+  return found
+end
+
 function graph_prepare.prepare_graph(graph, output, mode)
   local lua_target
   for _, plugin in ipairs(graph.plugins or {}) do
@@ -135,6 +150,19 @@ function graph_prepare.prepare_graph(graph, output, mode)
       route.runtime.execution_class = "lua"
       route.execution.class = "lua"
       route.execution.requires_lua = true
+    end
+  end
+  -- Development servers load the project's own modules straight from src/,
+  -- so a project with variant modules gets Moonstone's runtime searcher in
+  -- the embedded Lua (graph.zig `lua_variant_flavor`). Releases ship those
+  -- modules already projected (ballad/release_assets.lua) and need none.
+  if not tostring(mode):match("^release") and flavor.variants() then
+    local requires_lua = false
+    for _, route in ipairs(graph_nodes(graph)) do
+      if route.runtime and route.runtime.requires_lua then requires_lua = true break end
+    end
+    if requires_lua and graph_prepare.project_has_variants(helpers.project_root_from_output(output)) then
+      graph.lua_variant_flavor = lua_target or flavor.target()
     end
   end
   return graph
