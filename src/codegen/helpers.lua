@@ -18,6 +18,7 @@
 --- @field normalized_scope fun(scope: table): table
 --- @field project_root_from_output fun(output: string): string
 --- @field detect_lua_version fun(root: string): string
+--- @field detect_luals_runtime fun(root: string): string
 --- @field dirname fun(path: string): string
 --- @field path_join fun(a: string, b: string): string
 
@@ -165,11 +166,23 @@ end
 function helpers.detect_lua_version(root)
   local env = helpers.read_file(helpers.path_join(root, ".moonstone/env/env.toml")) or ""
   local abi = env:match('abi%s*=%s*"([^"]+)"') or env:match("abi%s*=%s*'([^']+)'") or "5.4"
+  if abi:lower():find("jit", 1, true) then return "5.1" end
   local major, minor = abi:match("lua(%d)(%d)")
   if major and minor then return major .. "." .. minor end
   major, minor = abi:match("(%d)%.(%d)")
   if major and minor then return major .. "." .. minor end
   return "5.4"
+end
+
+--- LuaLS `runtime.version` for the project environment: "LuaJIT" for a
+--- LuaJIT runtime (so `jit`, `bit`, `ffi` are known), else "Lua 5.x".
+function helpers.detect_luals_runtime(root)
+  local env = helpers.read_file(helpers.path_join(root, ".moonstone/env/env.toml")) or ""
+  local runtime = env:match("%[runtime%]([^%[]*)") or ""
+  local name = runtime:match('name%s*=%s*"([^"]+)"') or ""
+  local abi = runtime:match('abi%s*=%s*"([^"]+)"') or ""
+  if name:lower():find("luajit", 1, true) or abi:lower():find("jit", 1, true) then return "LuaJIT" end
+  return "Lua " .. helpers.detect_lua_version(root)
 end
 
 return helpers

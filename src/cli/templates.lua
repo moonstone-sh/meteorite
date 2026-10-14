@@ -386,7 +386,7 @@ function handler_sync.sync_luarc(output)
     "    \"preloadFileSize\": 200",
     "  },",
     "  \"runtime\": {",
-    "    \"version\": \"Lua " .. lua_ver .. "\",",
+    "    \"version\": \"" .. helpers.detect_luals_runtime(root) .. "\",",
     "    \"path\": [",
     "      \"src/?.lua\",",
     "      \"src/?/init.lua\",",
