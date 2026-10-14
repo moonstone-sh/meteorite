@@ -5,6 +5,7 @@ local release_manifest = require("ballad.release_manifest")
 local release_assets = require("ballad.release_assets")
 local release_contract = require("ballad.release_contract")
 local release_tasks = require("ballad.release_tasks")
+local flavor = require("meteorite.flavor")
 
 local function plugin_root()
   local source = debug.getinfo(1, "S").source or ""
@@ -180,7 +181,18 @@ return {
     lua_root = lua_root or opts.lua_root
     local cmodule_task_sets = release_tasks.rebuild_lua_cmodules(ctx, root, opts, target_lua, lua_root, plugin_root())
 
-    local result = emitter.emit(app, { output = graph_output, mode = mode, backend = opts.backend })
+    -- The Lua flavor the release embeds: the environment's language with the
+    -- -Dtarget os/arch. Handler variants (graph_prepare) and shipped module
+    -- variants (release_assets) are chosen for it. nil without Moonstone
+    -- flavor support, which keeps the untagged-only behavior.
+    local lua_flavor = nil
+    if release_mode == "hybrid" and flavor.variants() then
+      lua_flavor = flavor.for_zig_target((flavor.target()), release_contract.target_from_opts(opts))
+    end
+    local restore_flavor = lua_flavor and flavor.override_target(lua_flavor)
+    local emitted_ok, result = pcall(emitter.emit, app, { output = graph_output, mode = mode, backend = opts.backend })
+    if restore_flavor then restore_flavor() end
+    if not emitted_ok then error(result, 0) end
     if release_mode == "static" then release_contract.assert_static_graph(ctx, result.graph) end
     local task_assets = ctx:native_task({
       tool = opts.tool or "zig",
@@ -220,8 +232,8 @@ return {
     }))
     release_assets.add_static_assets(ctx, assets, path.join(graph_output, "static"))
     if release_mode == "hybrid" then
-      release_assets.add_hybrid_lua_assets(ctx, assets, root, result.graph)
-      release_assets.add_package_assets(ctx, assets, opts.packages, { target = target_lua and target_lua.target or release_contract.target_from_opts(opts) })
+      release_assets.add_hybrid_lua_assets(ctx, assets, root, result.graph, lua_flavor)
+      release_assets.add_package_assets(ctx, assets, opts.packages, { target = target_lua and target_lua.target or release_contract.target_from_opts(opts), flavor = lua_flavor })
       release_assets.add_runtime_source_asset(ctx, assets, root, target_lua)
     end
     if release_mode == "static" then release_assets.assert_static_release_assets(ctx, assets) end

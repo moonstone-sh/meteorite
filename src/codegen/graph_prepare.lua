@@ -3,6 +3,7 @@
 local helpers = require("codegen.helpers")
 local lifter = require("codegen.lifter")
 local static_compiler = require("codegen.static")
+local flavor = require("meteorite.flavor")
 
 local graph_prepare = {}
 
@@ -44,7 +45,35 @@ function graph_prepare.validate_capability_refs(graph, route, refs)
   end
 end
 
+--- Point an `m.lua(...)` handler at the flavor variant the embedded Lua
+--- will load (`src/app/x.lua` -> `src/app/x@lua54.lua`). The server
+--- `loadfile`s handler paths, which bypasses both `moon sync`'s projection
+--- and any runtime searcher, so the choice has to be made here.
+function graph_prepare.resolve_lua_variant(route, output, target)
+  local declared = route.handler.path
+  if type(declared) ~= "string" or not declared:match("%.lua$") then return end
+  local root = declared:match("^/") and nil or helpers.project_root_from_output(output)
+  local ok, resolved, tags = pcall(flavor.resolve_file, declared, target, root)
+  if not ok then
+    error(table.concat({
+      "cannot choose a Lua flavor variant for handler `" .. tostring(route.id) .. "`",
+      "",
+      "route:",
+      "  " .. tostring(route.method) .. " " .. tostring(route.raw_path),
+      "",
+      "reason:",
+      "  " .. tostring(resolved),
+    }, "\n"), 0)
+  end
+  if tags then
+    route.handler.declared_path = declared
+    route.handler.path = resolved
+    route.handler.flavor = target and target.id or nil
+  end
+end
+
 function graph_prepare.prepare_graph(graph, output, mode)
+  local lua_target
   for _, plugin in ipairs(graph.plugins or {}) do
     if type(plugin.execute) ~= "function" then
       error("plugin " .. tostring(plugin.id) .. " must declare an execute function")
@@ -85,6 +114,10 @@ function graph_prepare.prepare_graph(graph, output, mode)
         if ref.kind == "zig" then route.runtime.requires_zig_capability = true end
       end
     elseif route.handler.kind == "lua" then
+      if flavor.variants() then
+        lua_target = lua_target or flavor.target()
+        graph_prepare.resolve_lua_variant(route, output, lua_target)
+      end
       -- Installed package handlers can resolve to absolute Moonstone/CAS paths.
       -- A release must load its own copy after deployment, never that host path.
       local source_path = route.handler.path or route.handler.module

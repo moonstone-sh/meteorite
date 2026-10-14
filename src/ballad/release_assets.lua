@@ -1,6 +1,9 @@
 local graph_mod = require("ballad.graph")
 local path = require("ballad.path")
 local fs = require("ballad.fs")
+-- Required eagerly: the Ballad plugin loader restores package.path after
+-- loading this module, so a lazy require would not find it.
+local flavor = require("meteorite.flavor")
 
 local assets_mod = {}
 
@@ -54,16 +57,33 @@ local function resolve_project_file(root, rel_path)
   return nil, nil
 end
 
-local function copy_tree_assets(ctx, assets, root, source_dir, dest_dir, kind)
+-- `target` (a flavor) projects flavor-tagged files the way `moon sync`
+-- does: `lexer@lua54.lua` ships as `lexer.lua` and losing variants are left
+-- out, so the release's plain `require` needs no variant searcher.
+local function copy_tree_assets(ctx, assets, root, source_dir, dest_dir, kind, target)
   local full_dir = join(root, source_dir)
   if not fs.is_dir(full_dir) then return end
+  local rels, by_rel = {}, {}
   for _, file_path in ipairs(fs.list_files(full_dir)) do
     local rel = path.relative(file_path, full_dir)
-    local source = fs.readlink(file_path)
+    rels[#rels + 1] = rel
+    by_rel[rel] = file_path
+  end
+  local entries
+  if target then
+    entries = flavor.project_files(rels, target)
+  else
+    entries = {}
+    for _, rel in ipairs(rels) do entries[#entries + 1] = { source = rel, path = rel } end
+  end
+  for _, entry in ipairs(entries) do
+    local metadata = nil
+    if entry.source ~= entry.path then metadata = { flavor_variant = entry.source, flavor = target.id } end
     assets:add(ctx.graph:add_asset({
       kind = kind or "file",
-      source_path = source,
-      virtual_path = path.join(dest_dir or source_dir, rel),
+      source_path = fs.readlink(by_rel[entry.source]),
+      virtual_path = path.join(dest_dir or source_dir, entry.path),
+      metadata = metadata,
     }))
   end
 end
@@ -104,11 +124,26 @@ local function scan_requires(source)
   return modules
 end
 
-local function add_project_lua_file(ctx, assets, root, rel_path, kind, metadata, seen)
+local function add_project_lua_file(ctx, assets, root, rel_path, kind, metadata, seen, target)
   if not rel_path or rel_path == "" then return end
   if not rel_path:match("%.lua$") then return end
-  local full, virtual_path = resolve_project_file(root, rel_path)
+  -- A required project module ships under its plain name with the content of
+  -- the variant the target flavor selects (handler paths were already
+  -- resolved by graph_prepare and are shipped as-is).
+  local source_rel = rel_path
+  if target and kind == "meteorite_lua_module" then
+    local chosen, tags = flavor.resolve_file(rel_path, target, root)
+    if tags then
+      source_rel = chosen
+      metadata = metadata or {}
+      metadata.flavor_variant = chosen
+      metadata.flavor = target.id
+    end
+  end
+  local full, virtual_path = resolve_project_file(root, source_rel)
   if not full then return end
+  -- Module candidates are always project-relative (`src/x.lua`).
+  if source_rel ~= rel_path then virtual_path = normalize_relative(rel_path) end
   if seen[virtual_path] then return end
   seen[virtual_path] = true
   assets:add(ctx.graph:add_asset({
@@ -120,7 +155,7 @@ local function add_project_lua_file(ctx, assets, root, rel_path, kind, metadata,
   local source = read_file(full)
   for _, module in ipairs(scan_requires(source)) do
     for _, candidate in ipairs(project_lua_candidates(module)) do
-      add_project_lua_file(ctx, assets, root, candidate, "meteorite_lua_module", { required_by = virtual_path, module = module }, seen)
+      add_project_lua_file(ctx, assets, root, candidate, "meteorite_lua_module", { required_by = virtual_path, module = module }, seen, target)
     end
   end
 end
@@ -144,7 +179,7 @@ local function is_cross_target(target)
   return target and target ~= "" and target ~= "native"
 end
 
-function assets_mod.add_hybrid_lua_assets(ctx, assets, root, graph)
+function assets_mod.add_hybrid_lua_assets(ctx, assets, root, graph, target)
   local seen = {}
   local nodes = {}
   for _, route in ipairs(graph.routes or {}) do nodes[#nodes + 1] = route end
@@ -152,19 +187,19 @@ function assets_mod.add_hybrid_lua_assets(ctx, assets, root, graph)
   for _, route in ipairs(nodes) do
     if route.handler and route.handler.kind == "inline_lua" then
       local chunk_path = route.handler.lifted and route.handler.lifted.chunk_path
-      add_project_lua_file(ctx, assets, root, chunk_path, "meteorite_lua_chunk", { route = route.id }, seen)
+      add_project_lua_file(ctx, assets, root, chunk_path, "meteorite_lua_chunk", { route = route.id }, seen, target)
     elseif route.handler and route.handler.kind == "lua" then
       local route_path = lua_file_path(route.handler)
-      add_project_lua_file(ctx, assets, root, route_path, "meteorite_lua_handler", { route = route.id }, seen)
+      add_project_lua_file(ctx, assets, root, route_path, "meteorite_lua_handler", { route = route.id }, seen, target)
     end
   end
   for _, plugin in ipairs(graph.plugins or {}) do
     if plugin.handler and plugin.handler.kind == "inline_lua" then
       local chunk_path = plugin.handler.lifted and plugin.handler.lifted.chunk_path
-      add_project_lua_file(ctx, assets, root, chunk_path, "meteorite_lua_chunk", { plugin = plugin.id }, seen)
+      add_project_lua_file(ctx, assets, root, chunk_path, "meteorite_lua_chunk", { plugin = plugin.id }, seen, target)
     elseif plugin.handler and plugin.handler.kind == "lua" then
       local plugin_path = lua_file_path(plugin.handler)
-      add_project_lua_file(ctx, assets, root, plugin_path, "meteorite_lua_plugin", { plugin = plugin.id }, seen)
+      add_project_lua_file(ctx, assets, root, plugin_path, "meteorite_lua_plugin", { plugin = plugin.id }, seen, target)
     end
   end
 end
@@ -194,7 +229,7 @@ function assets_mod.add_package_assets(ctx, assets, packages, opts)
     local artifact_path = package.artifact_path
     if artifact_path and artifact_path ~= "" then
       if assets_mod.package_is_lua_module(package) then
-        copy_tree_assets(ctx, assets, artifact_path, "files/share/lua", "lua", "lua_module")
+        copy_tree_assets(ctx, assets, artifact_path, "files/share/lua", "lua", "lua_module", opts.flavor)
       end
       if not is_cross_target(opts.target) and assets_mod.package_is_lua_cmodule(package) then
         copy_tree_assets(ctx, assets, artifact_path, "files/lib/lua", "lib", "lua_cmodule")
