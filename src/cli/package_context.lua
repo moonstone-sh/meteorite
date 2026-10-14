@@ -1,3 +1,5 @@
+local compat = require("meteorite.compat")
+
 local package_context = {}
 
 local function dirname(path)
@@ -26,7 +28,7 @@ Context.__index = Context
 -- with ipairs, so they must follow any optional (nil) entry, and they are
 -- empty exactly when share_root is nil.
 local function unpack_candidates(list)
-  return (table.unpack or unpack)(list, 1, list.n or #list)
+  return compat.unpack(list, 1, list.n or #list)
 end
 
 --- Each suffix under every libexec root Meteorite may be mounted at
