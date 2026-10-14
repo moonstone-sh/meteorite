@@ -78,6 +78,26 @@ fn readSmallFile(b: *std.Build, path: []const u8) ?[]const u8 {
     ) catch null;
 }
 
+/// Moonstone flavor id (`lua54-aarch64-macos`, `luajit-x86_64-linux`) of the
+/// Lua linked from `project_lua_root` for `target`, or null when the headers
+/// do not say which Lua it is.
+fn luaFlavorId(b: *std.Build, project_lua_root: []const u8, lua_root: []const u8, target: std.Build.ResolvedTarget) ?[]const u8 {
+    const os_name = @tagName(target.result.os.tag);
+    const arch_name = @tagName(target.result.cpu.arch);
+    if (std.mem.indexOf(u8, lua_root, "luajit") != null) {
+        return std.fmt.allocPrint(b.allocator, "luajit-{s}-{s}", .{ arch_name, os_name }) catch @panic("OOM");
+    }
+    const header = readSmallFile(b, join(b, &.{ project_lua_root, "include", "lua.h" })) orelse return null;
+    const marker = "#define LUA_VERSION_NUM";
+    const at = std.mem.indexOf(u8, header, marker) orelse return null;
+    const rest = std.mem.trimStart(u8, header[at + marker.len ..], " \t");
+    var end: usize = 0;
+    while (end < rest.len and std.ascii.isDigit(rest[end])) end += 1;
+    const num = std.fmt.parseInt(u32, rest[0..end], 10) catch return null;
+    if (num < 501 or num > 509) return null;
+    return std.fmt.allocPrint(b.allocator, "lua{d}{d}-{s}-{s}", .{ num / 100, num % 100, arch_name, os_name }) catch @panic("OOM");
+}
+
 fn configureNativeModule(b: *std.Build, module: *std.Build.Module, native: NativeOptions, project_root: []const u8) void {
     for (native.modules) |entry| module.addImport(entry.name, entry.module);
     for (native.include_paths) |include_path| {
@@ -168,6 +188,15 @@ pub fn addService(b: *std.Build, options: Options) Service {
         b.addSystemCommand(&.{ join(b, &.{ project_root, ".moonstone/env/bin/lua" }), cli, "graph", project_graph_input, project_graph_output, mode, backend })
     else
         b.addSystemCommand(&.{ "moon", "exec", "--dev", "meteorite", "graph", graph_input, graph_output, mode, backend });
+    // The graph step picks flavor-tagged Lua handler files
+    // (`handler@lua54.lua`) for the Lua this server embeds. Only the build
+    // knows that flavor: the language of the archive it links and the
+    // -Dtarget os/arch. See docs/LUA_FLAVORS.md.
+    if (lua_runtime) {
+        if (luaFlavorId(b, project_lua_root, lua_root, target)) |flavor_id| {
+            graph_step.setEnvironmentVariable("METEORITE_LUA_FLAVOR", flavor_id);
+        }
+    }
 
     // Generated build metadata so the server can report exactly what was compiled.
     const build_info_content = std.fmt.allocPrint(b.allocator,
