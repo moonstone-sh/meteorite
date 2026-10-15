@@ -105,17 +105,21 @@ function graph_zig.emit(graph, output)
   lines[#lines + 1] = "    return null;"
   lines[#lines + 1] = "}"
   lines[#lines + 1] = ""
-  lines[#lines + 1] = "pub const routes = [_]Route{"
-  for _, route in ipairs(graph.routes) do
-    lines[#lines + 1] = "    " .. graph_routes.route_module_name(route) .. ".route(@This()),"
+  -- Each entry is evaluated at compile time; Zig's default branch quota
+  -- (1000) fails a graph with more than about a thousand routes.
+  local function route_table(name, entries)
+    lines[#lines + 1] = "pub const " .. name .. " = blk: {"
+    lines[#lines + 1] = "    @setEvalBranchQuota(" .. tostring(1000 + #entries * 64) .. ");"
+    lines[#lines + 1] = "    break :blk [_]Route{"
+    for _, route in ipairs(entries) do
+      lines[#lines + 1] = "        " .. graph_routes.route_module_name(route) .. ".route(@This()),"
+    end
+    lines[#lines + 1] = "    };"
+    lines[#lines + 1] = "};"
   end
-  lines[#lines + 1] = "};"
+  route_table("routes", graph.routes)
   lines[#lines + 1] = ""
-  lines[#lines + 1] = "pub const messages = [_]Route{"
-  for _, route in ipairs(graph.messages or {}) do
-    lines[#lines + 1] = "    " .. graph_routes.route_module_name(route) .. ".route(@This()),"
-  end
-  lines[#lines + 1] = "};"
+  route_table("messages", graph.messages or {})
   lines[#lines + 1] = ""
   local method_buckets = { GET = {}, HEAD = {}, POST = {}, PUT = {}, PATCH = {}, DELETE = {}, OPTIONS = {}, OTHER = {}, ALL = {} }
   for i, route in ipairs(graph.routes) do method_buckets[route.method][#method_buckets[route.method] + 1] = i - 1 end

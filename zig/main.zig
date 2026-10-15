@@ -25,6 +25,7 @@ fn enterReleaseRoot(init: std.process.Init) !void {
 
 const requires_lua = blk: {
     var req = false;
+    @setEvalBranchQuota(1000 + graph.routes.len * 64); // unrolled per route
     for (graph.routes) |r| {
         if (r.runtime.requires_lua) req = true;
         switch (r.handler) {

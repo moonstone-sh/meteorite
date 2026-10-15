@@ -91,6 +91,7 @@ pub fn tierName(tier: Tier) []const u8 {
 }
 
 pub fn routeIndexByName(name: []const u8) ?usize {
+    @setEvalBranchQuota(1000 + routes.len * 64); // unrolled per route
     inline for (routes, 0..) |route, index| {
         if (std.mem.eql(u8, route.name, name)) return index;
     }
@@ -98,6 +99,7 @@ pub fn routeIndexByName(name: []const u8) ?usize {
 }
 
 pub fn routeIndexByPath(path: []const u8) ?usize {
+    @setEvalBranchQuota(1000 + routes.len * 64); // unrolled per route
     inline for (routes, 0..) |route, index| {
         if (std.mem.eql(u8, route.path, path)) return index;
     }
@@ -137,6 +139,7 @@ fn appendJsonString(list: *std.ArrayListUnmanaged(u8), allocator: std.mem.Alloca
 
 pub fn writeJson(list: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator) !void {
     try list.appendSlice(allocator, "{\"fixture\":\"bench-service\",\"entry\":\"fixtures/apps/bench-service/src/main.lua\",\"routes\":{");
+    @setEvalBranchQuota(1000 + routes.len * 64); // unrolled per route
     inline for (routes, 0..) |route, index| {
         if (index != 0) try list.append(allocator, ',');
         try appendJsonString(list, allocator, route.name);

@@ -19,6 +19,7 @@ pub fn NativeMessage(comptime graph: anytype, comptime backend: anytype, comptim
                 try backend.respondText(request, 200, "ok");
                 return true;
             }
+            @setEvalBranchQuota(1000 + graph.messages.len * 64); // unrolled per route
             inline for (graph.messages) |route| {
                 if (try dispatchRoute(route, allocator, io, request, message_name)) return true;
             }

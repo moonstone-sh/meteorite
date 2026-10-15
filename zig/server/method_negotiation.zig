@@ -13,6 +13,8 @@ pub fn Negotiator(comptime graph: anytype, comptime backend: anytype, comptime r
         };
 
         pub fn pathMatchedAnyRoute(req_path: []const u8) bool {
+            // Unrolled per route: the default quota of 1000 fails past ~1000 routes.
+            @setEvalBranchQuota(1000 + graph.routes.len * 64);
             inline for (graph.routes) |route| {
                 if (routeMatchesRequestPath(route, req_path)) return true;
             }
@@ -20,6 +22,8 @@ pub fn Negotiator(comptime graph: anytype, comptime backend: anytype, comptime r
         }
 
         fn allowedMethodsForPath(req_path: []const u8) AllowedMethods {
+            // Unrolled per route: the default quota of 1000 fails past ~1000 routes.
+            @setEvalBranchQuota(1000 + graph.routes.len * 64);
             var allowed = AllowedMethods{};
             inline for (graph.routes) |route| {
                 if (routeMatchesRequestPath(route, req_path)) {
