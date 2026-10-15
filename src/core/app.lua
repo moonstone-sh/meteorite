@@ -4,6 +4,8 @@ local route = require("core.route")
 local contract = require("core.contract")
 local scope_model = require("core.scope")
 
+local build_context = require("meteorite.build_context")
+
 local app_core = {}
 
 local App = {}
@@ -410,6 +412,7 @@ function app_core.new(opts)
   end
   local initial_scope = scope_model.root()
   return setmetatable({
+    build_context = opts.build_context and build_context.create(opts.build_context.mode) or build_context.current(),
     name = opts.name or "meteorite-app",
     routes = {},
     middleware = {},

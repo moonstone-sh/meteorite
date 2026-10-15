@@ -32,11 +32,7 @@ function doctor.run(deps)
   local function load_app_for_doctor()
     local input = "src/main.lua"
     if not read_file(input) then return nil, "src/main.lua missing" end
-    local input_dir = input:match("^(.*[/\\])") or ""
-    if input_dir ~= "" then package.path = input_dir .. "?.lua;" .. input_dir .. "?/init.lua;" .. package.path end
-    local chunk, err = loadfile(input)
-    if not chunk then return nil, err end
-    local ok, app_or_err = pcall(chunk)
+    local ok, app_or_err = pcall(require("cli.app_loader").load, input, "dev")
     if not ok then return nil, app_or_err end
     local app = app_or_err
     if type(app) ~= "table" or not app.__meteorite_app then return nil, "src/main.lua must return a Meteorite app" end
