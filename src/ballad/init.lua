@@ -71,16 +71,16 @@ end
 
 
 local function load_app(root, input, mode)
-  local previous_mode = _G.METEORITE_BUILD_MODE
-  _G.METEORITE_BUILD_MODE = mode
+  local build_context = require("meteorite.build_context")
   local ok, app_or_err = pcall(function()
     local chunk, err = with_package_path(root, function()
       return loadfile(input)
     end)
     if not chunk then error(err) end
-    return with_package_path(root, chunk)
+    return build_context.with(build_context.create(mode), function(context)
+      return with_package_path(root, function() return chunk(context) end)
+    end)
   end)
-  _G.METEORITE_BUILD_MODE = previous_mode
   if not ok then error(app_or_err) end
   return app_or_err
 end

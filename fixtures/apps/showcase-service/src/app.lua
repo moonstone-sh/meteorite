@@ -81,7 +81,7 @@ app:get("/search", {
   },
 }, "handlers.search")
 
-local mode = _G.METEORITE_BUILD_MODE or "release-static"
+local mode = app.build_context.mode
 local is_hybrid = mode == "release-hybrid" or mode == "hybrid" or mode == "hybrid_dev"
 if is_hybrid then
   app:get("/hybrid-inline", function(ctx) return "ok" end)

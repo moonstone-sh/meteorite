@@ -40,3 +40,5 @@ historical archive material.
 - `maintenance/release-candidate-audit-2026-07-14.md` — latest v0.1 service-layer release audit result.
 - `maintenance/docs-stabilization.md` — docs tree stabilization record.
 - `archive/` — historical validation, claim-safety, and framework-guidance artifacts.
+
+- `build-context.md` — app-local build facts, loader scope, and integration migration.

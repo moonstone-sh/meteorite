@@ -17,7 +17,12 @@ local handler_exports = require("core.handler_exports")
 local utility_exports = require("core.utility_exports")
 local contract_exports = require("core.contracts")
 
+---@class MeteoriteBuildContext
+---@field mode "dev"|"hybrid_dev"|"hybrid"|"static"|"release-hybrid"|"release-static"
+---@field release boolean
+
 ---@class MeteoriteAppOptions
+---@field build_context? MeteoriteBuildContext
 ---@field name? string
 ---@field profile? string|MeteoriteProfile
 ---@field host? string bind address (default "127.0.0.1")
@@ -175,6 +180,7 @@ end
 ---@field patterns table
 ---@field profiles table
 ---@field template table Small dependency-free `{{name}}` string template helper; not an HTML engine
+---@field build_context table Build-time context creation and scoped declaration API
 ---@field app fun(opts?: MeteoriteAppOptions): MeteoriteApp
 ---@field profile fun(name_or_table?: string|table, opts?: table): table
 ---@field string fun(opts?: {max?: integer, max_len?: integer, optional?: boolean, decode?: boolean, validate?: string|function|table, pattern?: MeteoritePattern}): MeteoriteSchemaValue
@@ -196,6 +202,8 @@ local MDoc = {}
 
 ---@param opts? MeteoriteAppOptions
 ---@return MeteoriteApp
+M.build_context = require("meteorite.build_context")
+
 function M.app(opts)
   return app_core.new(opts)
 end
