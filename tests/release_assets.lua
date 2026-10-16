@@ -127,4 +127,94 @@ test "release closure includes rebased installed handlers" (function()
   assert(os.execute("rm -rf " .. string.format("%q", root)))
 end)
 
+local function failing_ctx()
+  local ctx = { graph = graph.Graph.new() }
+  ctx.fail = function(message) error({ release_failure = message }, 0) end
+  return ctx
+end
+
+local function expect_failure(fn, pattern, label)
+  local ok, err = pcall(fn)
+  test.assert_true(not ok, label .. ": expected failure")
+  local message = type(err) == "table" and err.release_failure or tostring(err)
+  test.assert_true(message:find(pattern) ~= nil, label .. ": message was: " .. tostring(message))
+end
+
+local function payload(assets)
+  local set = release_assets.new_set()
+  local g = graph.Graph.new()
+  for _, a in ipairs(assets) do set:add(g:add_asset(a)) end
+  return set
+end
+
+test "a Lua payload ships module files under lua/ and ignores other assets" (function()
+  local ctx = failing_ctx()
+  local assets = release_assets.new_set()
+  local provided, count = release_assets.add_payload_lua_assets(ctx, assets, { payload({
+    { kind = "generated", virtual_path = "hydronium_dom/server/renderer.lua", content = "return {}\n" },
+    { kind = "generated", virtual_path = "lua/app/page.lua", content = "return 1\n" },
+    { kind = "generated", virtual_path = "pkg/init.lua", content = "return 2\n" },
+    { kind = "generated", virtual_path = "quaver-contract.lua", content = "return {}\n" },
+    { kind = "generated", virtual_path = "quaver-report.txt", content = "report\n" },
+  }) })
+  test.assert_eq(count, 3, "module count")
+  test.assert_true(provided["hydronium_dom.server.renderer"] and provided["app.page"] and provided["pkg"], "provided modules")
+  local paths = {}
+  for _, a in ipairs(assets.assets) do paths[#paths + 1] = a.virtual_path end
+  table.sort(paths)
+  test.assert_eq(table.concat(paths, " "), "lua/app/page.lua lua/hydronium_dom/server/renderer.lua lua/pkg/init.lua", "shipped paths")
+  test.assert_eq(assets.assets[1].kind, "lua_module", "asset kind")
+  test.assert_true(assets.assets[1].content ~= nil, "generated content carried over")
+end)
+
+test "a Lua payload rejects flavor variants, duplicates and emptiness" (function()
+  expect_failure(function()
+    release_assets.add_payload_lua_assets(failing_ctx(), release_assets.new_set(), { payload({
+      { kind = "generated", virtual_path = "x@lua54.lua", content = "" } }) })
+  end, "flavor variant", "variant")
+  expect_failure(function()
+    release_assets.add_payload_lua_assets(failing_ctx(), release_assets.new_set(), { payload({
+      { kind = "generated", virtual_path = "a.lua", content = "" },
+      { kind = "generated", virtual_path = "lua/a.lua", content = "" } }) })
+  end, "twice", "duplicate")
+  expect_failure(function()
+    release_assets.add_payload_lua_assets(failing_ctx(), release_assets.new_set(), { payload({
+      { kind = "generated", virtual_path = "report.txt", content = "" } }) })
+  end, "produced no Lua modules", "empty")
+end)
+
+test "a payload module replaces the project copy a handler requires" (function()
+  local root = os.tmpname()
+  os.remove(root)
+  mkdir_p(root .. "/src/app")
+  write_file(root .. "/src/app/handler.lua", 'local page = require("app.page")\nlocal util = require("app.util")\nreturn function(c) return c:html(page.render()) end\n')
+  write_file(root .. "/src/app/page.lua", 'return { render = function() return "x" end }\n')
+  write_file(root .. "/src/app/util.lua", 'return {}\n')
+  local assets = release_assets.new_set()
+  local ctx = failing_ctx()
+  local provided = release_assets.add_payload_lua_assets(ctx, assets, { payload({
+    { kind = "generated", virtual_path = "app/page.lua", content = "return { render = function() return 'y' end }\n" } }) })
+  release_assets.add_hybrid_lua_assets(ctx, assets, root, { routes = {
+    { id = "home", handler = { kind = "lua", path = "src/app/handler.lua" } },
+  } }, nil, provided)
+  local paths = {}
+  for _, a in ipairs(assets.assets) do paths[#paths + 1] = a.virtual_path end
+  table.sort(paths)
+  test.assert_eq(table.concat(paths, " "), "lua/app/page.lua src/app/handler.lua src/app/util.lua", "payload wins for app.page only")
+  test.assert_eq(release_assets.check_lua_closure(ctx, assets, {}), 3, "closure holds")
+  assert(os.execute("rm -rf " .. string.format("%q", root)))
+end)
+
+test "the closure check names missing modules and honors externals" (function()
+  local assets = release_assets.new_set()
+  local ctx = failing_ctx()
+  release_assets.add_payload_lua_assets(ctx, assets, { payload({
+    { kind = "generated", virtual_path = "app/page.lua", content = 'local json = require("cjson")\nlocal h = require("hydronium_dom.server")\nlocal s = string.format\nlocal m = require("string")\nreturn {}\n' } }) })
+  expect_failure(function() release_assets.check_lua_closure(ctx, assets, {}) end,
+    "cjson %(required by lua/app/page.lua%).*hydronium_dom%.server %(required by lua/app/page.lua%)", "missing")
+  assets:add(ctx.graph:add_asset({ kind = "lua_cmodule", virtual_path = "lib/5.4/cjson.so", source_path = "/dev/null" }))
+  expect_failure(function() release_assets.check_lua_closure(ctx, assets, {}) end, "hydronium_dom%.server", "C module resolves cjson")
+  test.assert_eq(release_assets.check_lua_closure(ctx, assets, { "hydronium_dom.server" }), 1, "external accepted")
+end)
+
 test.run()
