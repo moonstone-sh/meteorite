@@ -24,10 +24,24 @@ const globalVtable = lua_vtable.globalVtable;
 
 const graph_cached = graph;
 
+/// Route handlers kept as registry refs: lifted inline chunks and Lua files
+/// (`m.lua(ref, { path = ... })`). Both load from a path.
+fn isLuaRoute(comptime route: anytype) bool {
+    return route.handler == .inline_lua or route.handler == .lua_file;
+}
+
+fn luaRoutePath(comptime route: anytype) []const u8 {
+    return switch (route.handler) {
+        .inline_lua => |handler| handler.chunk_path,
+        .lua_file => |handler| handler.path,
+        else => unreachable,
+    };
+}
+
 fn inlineLuaRouteCount() usize {
     comptime var count: usize = 0;
     inline for (graph_cached.routes) |route| {
-        if (route.handler == .inline_lua) count += 1;
+        if (comptime isLuaRoute(route)) count += 1;
     }
     return count;
 }
@@ -35,14 +49,14 @@ fn inlineLuaRouteCount() usize {
 fn routeIndexCached(comptime route_id: []const u8) usize {
     comptime var count: usize = 0;
     inline for (graph_cached.routes) |route| {
-        if (route.handler == .inline_lua) {
+        if (comptime isLuaRoute(route)) {
             if (std.mem.eql(u8, route.id, route_id)) {
                 return count;
             }
             count += 1;
         }
     }
-    @compileError("unknown inline Lua route: " ++ route_id);
+    @compileError("unknown Lua route: " ++ route_id);
 }
 
 pub const SingleOwnerHybridRuntime = struct {
@@ -81,9 +95,8 @@ pub const SingleOwnerHybridRuntime = struct {
 
         comptime var idx: usize = 0;
         inline for (graph_cached.routes) |route| {
-            if (route.handler == .inline_lua) {
-                const handler = route.handler.inline_lua;
-                try loadHandlerRef(idx, handler, false);
+            if (comptime isLuaRoute(route)) {
+                try loadHandlerRef(idx, comptime luaRoutePath(route), false);
                 idx += 1;
             }
         }
@@ -94,8 +107,8 @@ pub const SingleOwnerHybridRuntime = struct {
     fn reloadRefs() !void {
         comptime var idx: usize = 0;
         inline for (graph_cached.routes) |route| {
-            if (route.handler == .inline_lua) {
-                try loadHandlerRef(idx, route.handler.inline_lua, true);
+            if (comptime isLuaRoute(route)) {
+                try loadHandlerRef(idx, comptime luaRoutePath(route), true);
                 idx += 1;
             }
         }
@@ -108,20 +121,20 @@ pub const SingleOwnerHybridRuntime = struct {
         loaded_reload_epoch = current_epoch;
     }
 
-    fn loadHandlerRef(comptime idx: usize, comptime handler: graph_cached.InlineLuaHandler, comptime replace: bool) !void {
+    fn loadHandlerRef(comptime idx: usize, comptime chunk_path: []const u8, comptime replace: bool) !void {
         if (replace) c.luaL_unref(L.?, c.LUA_REGISTRYINDEX, refs[idx]);
-        if (loadfile(L.?, @ptrCast(handler.chunk_path.ptr)) != LUA_OK) {
-            std.log.err("cached load handler {s}: {s}", .{ handler.chunk_path, c.lua_tolstring(L.?, -1, null) });
+        if (loadfile(L.?, @ptrCast(chunk_path.ptr)) != LUA_OK) {
+            std.log.err("cached load handler {s}: {s}", .{ chunk_path, c.lua_tolstring(L.?, -1, null) });
             incLua(&lua_stats.stats.lua_errors);
             return error.LuaLoadFailed;
         }
         if (pcall(L.?, 0, 1, 0) != LUA_OK) {
-            std.log.err("cached init handler {s}: {s}", .{ handler.chunk_path, c.lua_tolstring(L.?, -1, null) });
+            std.log.err("cached init handler {s}: {s}", .{ chunk_path, c.lua_tolstring(L.?, -1, null) });
             incLua(&lua_stats.stats.lua_errors);
             return error.LuaRuntimeError;
         }
         if (!c.lua_isfunction(L.?, -1)) {
-            std.log.err("cached handler {s} did not return a function", .{handler.chunk_path});
+            std.log.err("cached handler {s} did not return a function", .{chunk_path});
             incLua(&lua_stats.stats.lua_errors);
             return error.LuaHandlerInvalid;
         }
