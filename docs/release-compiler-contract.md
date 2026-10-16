@@ -61,6 +61,44 @@ local release = meteorite.release({
 
 `mode` selects validation over the normalized graph. It should not select a separate graph builder.
 
+### Lua payload (`lua_modules = "inputs"`)
+
+By default a hybrid release ships every Lua package's module tree
+(`lua_modules = "packages"`). To ship only what the server needs, pass an
+upstream node that produces Lua modules, for example a Quaver build, as the
+release's input:
+
+```lua
+local quaver = p:use(require("quaver.ballad"))
+local sources = p.source.files({ "**/*.lua" }, { root = ".moonstone/env/share/lua/5.4" })
+local payload = quaver.optimize(sources, { mode = "strict", format = "files", entry = "app.handlers.home" })
+local release = m.release(payload, {
+  mode = "hybrid",
+  backend = "fast_http",
+  lua_modules = "inputs",
+  lua_externals = { "lfs" }, -- optional: modules the server's environment provides
+})
+```
+
+- Every `.lua` asset whose path is a module path (`a/b.lua`, optionally
+  under `lua/`) ships as `lua/a/b.lua`. Other assets, such as reports, are
+  ignored. Flavor-tagged files (`x@lua54.lua`) fail: select variants first.
+- Handler files, lifted inline chunks, and project modules they require still
+  ship from the project. When the payload provides a project module, the
+  payload's copy ships instead, since `src/?.lua` precedes `lua/?.lua` on the
+  server's path.
+- Lua C modules still come from `packages`; a Lua payload can't carry them.
+- **Closure check:** every literal `require` in the shipped Lua must resolve
+  to a shipped module, a shipped C module, a standard library, or an entry of
+  `lua_externals`. Otherwise the release fails, before the server build, with
+  each missing module and the file that requires it. Dynamic requires are not
+  checked.
+- `meteorite-release.json` records `lua_modules = { source, modules, externals }`.
+
+Meteorite does not know what produced the payload, so the payload node must
+emit plain module files. Quaver's `format = "files"` does; a single-file bundle
+does not fit handlers that the server loads by path.
+
 ## Moonstone/Ballad Store Contract
 
 The Moonstone Ballad plugin should expose runtime and package facts from the Moonstone store:
@@ -83,7 +121,8 @@ Implemented now:
 - Static mode fails before Zig build when retained Lua runtime execution nodes are present.
 - Hybrid mode records release-contract metadata in `meteorite-release.json`.
 - Hybrid cross-target mode fails early when retained Lua runtime nodes exist but no Lua runtime source payload is supplied.
-- Hybrid same-host mode packages lifted inline chunks, explicit Lua handler/module sources, discovered project-local `require(...)` dependencies, and current Moonstone Lua module/C-module trees.
+- Hybrid same-host mode packages lifted inline chunks, explicit Lua handler/module sources, discovered project-local `require(...)` dependencies, and current Moonstone Lua module/C-module trees, or a closure-checked Lua payload from an input node (`lua_modules = "inputs"`, verified by `fixtures/tests/lua-payload-release.sh`).
+- Lua file handlers (`m.lua(ref, { path = ... })`) compile in the optimized and single-owner hybrid runtimes, which previously indexed only inline chunks (`unknown inline Lua route`).
 - `meteorite.release({ project = moonstone.project(...) })` consumes Moonstone runtime/package store facts automatically.
 - Cross-target hybrid release invokes `scripts/build-target-lua.sh` to build PUC Lua from `runtime.source_payload_path` with `zig cc` and passes the result to Zig via `-Dlua-root`.
 - Cross-target hybrid release schedules per-package Lua C-module rebuilds through `scripts/build-lua-cmodule.sh` when C-module packages expose `source_payload_path` and `rockspec_payload_path`.
