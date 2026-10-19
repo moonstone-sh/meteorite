@@ -57,7 +57,7 @@ const build_options = @import("build_options");
 pub const path = build_options.dev_events_path;
 
 /// Comptime feature gate. Everything below is dead code when this is false.
-pub const enabled = path.len > 0 and builtin.os.tag != .windows;
+pub const enabled = path.len > 0;
 
 /// Longest line we will emit. A request path is capped by the backends well
 /// below this; anything that still would not fit is dropped rather than
