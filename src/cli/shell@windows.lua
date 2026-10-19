@@ -1,5 +1,6 @@
 local platform = require("clingy.platform")
 local compat = require("clingy.compat")
+local ps = require("clingy.windows_powershell")
 local shell = { windows = true, null = "NUL", executable_suffix = ".exe", quote = platform.quote }
 function shell.run(command)
   return compat.exit_status(os.execute(command)) == 0
@@ -11,33 +12,35 @@ function shell.capture(command)
   assert(compat.exit_status(ok, how, code) == 0, "command failed: " .. command)
   return output
 end
+local function query(script)
+  return shell.capture(ps.command("$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); " .. script))
+end
 function shell.current_dir()
-  return (shell.capture("cd"):gsub("[\r\n]+$", ""):gsub("\\", "/"))
+  return (query("(Get-Location).ProviderPath"):gsub("[\r\n]+$", ""):gsub("\\", "/"))
 end
 function shell.mkdir(path)
-  assert(shell.run("if not exist " .. shell.quote(path) .. " mkdir " .. shell.quote(path)), "cannot create directory " .. path)
-end
-function shell.files(root)
-  local files = {}
-  for file in shell.capture("cd /d " .. shell.quote(root) .. " && dir /b /s /a:-d"):gmatch("[^\r\n]+") do
-    local normalized = file:gsub("\\", "/")
-    local base = root:gsub("\\", "/")
-    if not base:match("^[A-Za-z]:/") then base = shell.current_dir() .. "/" .. base end
-    base = base:gsub("/%.$", ""):gsub("/+$", "")
-    assert(normalized:sub(1, #base):lower() == base:lower(), "directory escaped template root")
-    files[#files + 1] = normalized:sub(#base + 2)
-  end
-  table.sort(files)
-  return files
+  assert(shell.run(ps.command("$ErrorActionPreference='Stop'; [void][IO.Directory]::CreateDirectory(" .. ps.literal(path) .. ")")), "cannot create directory " .. path)
 end
 function shell.is_dir(path)
-  return shell.run("if exist " .. shell.quote(path .. "/NUL") .. " (exit /b 0) else (exit /b 1)")
+  return query("if([IO.Directory]::Exists(" .. ps.literal(path) .. ")) { 'yes' }"):find("yes",1,true) ~= nil
 end
-function shell.symlinks(root)
-  local result = {}
-  local pipe = assert(io.popen("cd /d " .. shell.quote(root) .. " && dir /b /s /a:l 2>NUL", "r"))
-  for line in pipe:lines() do result[#result + 1] = line end
-  pipe:close()
+local function walk(root, links)
+  -- Explicitly stop at reparse points. Static-root validation can report them
+  -- separately, and a junction must never silently expand the source closure.
+  local script="$root=[IO.Path]::GetFullPath(" .. ps.literal(root) .. ").TrimEnd('\\'); function Walk($dir) { foreach($file in [IO.Directory]::EnumerateFileSystemEntries($dir)) { $a=[IO.File]::GetAttributes($file); "
+  script=script .. "if(($a -band 1024) -ne 0) { " .. (links and "Write-Output $file; " or "") .. "continue }; if(($a -band 16) -ne 0) { Walk $file } " .. (links and "" or "else { Write-Output $file }") .. " } }; Walk $root"
+  local result={}
+  local prefix=(root:gsub("\\","/")):gsub("/+$", "")
+  if not prefix:match("^[A-Za-z]:/") and prefix:sub(1,2)~="//" then prefix=shell.current_dir() .. "/" .. prefix end
+  prefix=prefix:gsub("/%.$", "")
+  for file in query(script):gmatch("[^\r\n]+") do
+    local normalized=file:gsub("\\", "/")
+    assert(normalized:sub(1,#prefix):lower()==prefix:lower(),"directory escaped source root")
+    result[#result+1]=normalized:sub(#prefix+2)
+  end
+  table.sort(result)
   return result
 end
+function shell.files(root) return walk(root,false) end
+function shell.symlinks(root) return walk(root,true) end
 return shell
