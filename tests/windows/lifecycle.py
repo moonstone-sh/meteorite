@@ -123,8 +123,17 @@ with open(devlog,'wb') as output:
         request(url,b'after edit',90,session)
         session.send_signal(signal.CTRL_BREAK_EVENT)
         session.wait(timeout=15)
-        with socket.socket() as connection:
-            assert connection.connect_ex(('127.0.0.1',number))!=0,'dev server survived session cancellation'
+        # Closing/terminating a Windows job can complete after its session
+        # process has exited. Observe the bounded cleanup contract, not an
+        # instantaneous ordering between two independent process handles.
+        stopped=time.monotonic()+5
+        while True:
+            with socket.socket() as connection:
+                connection.settimeout(.2)
+                closed=connection.connect_ex(('127.0.0.1',number))!=0
+            if closed: break
+            assert time.monotonic()<stopped,'dev server survived session cancellation deadline'
+            time.sleep(.05)
         print('PASS: Windows dev startup, source edit, refresh and process-tree shutdown',flush=True)
     except BaseException:
         print(devlog.read_text(errors='replace'),flush=True)
