@@ -21,7 +21,7 @@ cleanup_port() {
 
 cleanup_port
 rm -rf fixtures/apps/static-site/dist fixtures/apps/static-site/.meteorite/release fixtures/apps/static-site/.meteorite/graph/static-site-basic-release
-if ! moon orbit sync static-site --update >/tmp/meteorite-release-static-site-sync.log 2>&1; then
+if ! moon --orbit static-site sync --update >/tmp/meteorite-release-static-site-sync.log 2>&1; then
   echo "release smoke: static-site orbit synchronization failed" >&2
   cat /tmp/meteorite-release-static-site-sync.log >&2
   exit 1

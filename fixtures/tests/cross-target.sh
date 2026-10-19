@@ -66,7 +66,7 @@ trap cleanup_cross_target EXIT INT TERM HUP
 # valid project environment and hides fixture dependency drift.
 FIXTURE_ROOT="$ROOT/fixtures/apps/hybrid-demo"
 SYNC_LOG="${TMPDIR:-/tmp}/meteorite-cross-target-sync.log"
-if ! moon orbit sync hybrid-demo --update >"$SYNC_LOG" 2>&1; then
+if ! moon --orbit hybrid-demo sync --update >"$SYNC_LOG" 2>&1; then
   echo "cross-target: failed to materialize the hybrid-demo environment:" >&2
   cat "$SYNC_LOG" >&2
   exit 1
