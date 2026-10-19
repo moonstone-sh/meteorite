@@ -67,7 +67,7 @@ end
 local function run(command)
   io.stderr:write("$ " .. command .. "\n")
   io.stderr:flush()
-  local ok, exit_type, code = os.execute(command)
+  local ok, exit_type, code = shell.execute(command)
   if is_signal(ok, exit_type, code) then
     handle_execute_signal()
   end
@@ -75,7 +75,7 @@ local function run(command)
 end
 
 local function quiet_run(command)
-  local ok, exit_type, code = os.execute(command)
+  local ok, exit_type, code = shell.execute(command)
   if is_signal(ok, exit_type, code) then
     handle_execute_signal()
   end

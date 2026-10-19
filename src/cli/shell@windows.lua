@@ -7,8 +7,11 @@ local function command_processor(command)
   -- differently from an argv launcher. Own the complete /s /c payload.
   return 'cmd /d /v:off /s /c "' .. command .. '"'
 end
+function shell.execute(command)
+  return os.execute(command_processor(command))
+end
 function shell.run(command)
-  return compat.exit_status(os.execute(command_processor(command))) == 0
+  return compat.exit_status(shell.execute(command)) == 0
 end
 function shell.capture(command)
   local pipe = assert(io.popen(command_processor(command), "r"))

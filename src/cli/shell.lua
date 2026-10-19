@@ -35,4 +35,5 @@ function shell.files(root)
   end
   return files
 end
+shell.execute = os.execute
 return shell
