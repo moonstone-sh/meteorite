@@ -27,7 +27,15 @@ function M.spawn(server, log_file)
   local file=assert(io.open(script_file,"wb")); file:write("\239\187\191",script); file:close()
   -- The guardian stays in the enclosing Clingy job. It owns a nested job so
   -- a rebuild can retire only this server and its descendants.
-  local output=capture("$p=Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',('\"'+" .. ps.literal(script_file) .. "+'\"')) -PassThru -NoNewWindow -RedirectStandardOutput " .. ps.literal(log_file) .. " -RedirectStandardError " .. ps.literal(log_file .. ".err") .. "; Write-Output ($p.Id.ToString()+'|'+$p.StartTime.ToUniversalTime().Ticks.ToString())")
+  -- Do not capture a daemon launch through popen: inherited pipe handles
+  -- can keep EOF open for the guardian's entire lifetime. Publish identity
+  -- as data and wait only for the short-lived launcher process instead.
+  local identity_file=log_file .. ".guardian.identity"
+  os.remove(identity_file)
+  local command="$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; $p=Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',('\"'+" .. ps.literal(script_file) .. "+'\"')) -PassThru -NoNewWindow -RedirectStandardOutput " .. ps.literal(log_file) .. " -RedirectStandardError " .. ps.literal(log_file .. ".err") .. "; [IO.File]::WriteAllText(" .. ps.literal(identity_file) .. ",($p.Id.ToString()+'|'+$p.StartTime.ToUniversalTime().Ticks.ToString()))"
+  assert(shell.run(ps.command(command)),"server guardian launcher failed")
+  local identity=assert(io.open(identity_file,"rb"))
+  local output=identity:read("*a"); identity:close(); os.remove(identity_file)
   local pid,ticks=output:match("(%d+)|(%d+)")
   assert(pid,"server guardian did not start: " .. output)
   owned[pid]=ticks
