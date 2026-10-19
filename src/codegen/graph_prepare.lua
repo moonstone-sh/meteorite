@@ -3,6 +3,7 @@
 local helpers = require("codegen.helpers")
 local lifter = require("codegen.lifter")
 local static_compiler = require("codegen.static")
+local flavor = require("meteorite.flavor")
 
 local graph_prepare = {}
 
@@ -44,7 +45,50 @@ function graph_prepare.validate_capability_refs(graph, route, refs)
   end
 end
 
+--- Point an `m.lua(...)` handler at the flavor variant the embedded Lua
+--- will load (`src/app/x.lua` -> `src/app/x@lua54.lua`). The server
+--- `loadfile`s handler paths, which bypasses both `moon sync`'s projection
+--- and any runtime searcher, so the choice has to be made here.
+function graph_prepare.resolve_lua_variant(route, output, target)
+  local declared = route.handler.path
+  if type(declared) ~= "string" or not declared:match("%.lua$") then return end
+  local root = declared:match("^/") and nil or helpers.project_root_from_output(output)
+  local ok, resolved, tags = pcall(flavor.resolve_file, declared, target, root)
+  if not ok then
+    error(table.concat({
+      "cannot choose a Lua flavor variant for handler `" .. tostring(route.id) .. "`",
+      "",
+      "route:",
+      "  " .. tostring(route.method) .. " " .. tostring(route.raw_path),
+      "",
+      "reason:",
+      "  " .. tostring(resolved),
+    }, "\n"), 0)
+  end
+  if tags then
+    route.handler.declared_path = declared
+    route.handler.path = resolved
+    route.handler.flavor = target and target.id or nil
+  end
+end
+
+--- Does the project keep flavor variants of its own modules under src/?
+--- Those are found at run time by `require`, not by handler path.
+function graph_prepare.project_has_variants(root)
+  if not io.popen then return false end
+  local src = helpers.path_join(root, "src")
+  local pipe = io.popen("find " .. string.format("%q", src) .. " -name '*@*.lua' 2>/dev/null")
+  if not pipe then return false end
+  local found = false
+  for line in pipe:lines() do
+    if flavor.is_variant(line) then found = true break end
+  end
+  pipe:close()
+  return found
+end
+
 function graph_prepare.prepare_graph(graph, output, mode)
+  local lua_target
   for _, plugin in ipairs(graph.plugins or {}) do
     if type(plugin.execute) ~= "function" then
       error("plugin " .. tostring(plugin.id) .. " must declare an execute function")
@@ -85,6 +129,10 @@ function graph_prepare.prepare_graph(graph, output, mode)
         if ref.kind == "zig" then route.runtime.requires_zig_capability = true end
       end
     elseif route.handler.kind == "lua" then
+      if flavor.variants() then
+        lua_target = lua_target or flavor.target()
+        graph_prepare.resolve_lua_variant(route, output, lua_target)
+      end
       -- Installed package handlers can resolve to absolute Moonstone/CAS paths.
       -- A release must load its own copy after deployment, never that host path.
       local source_path = route.handler.path or route.handler.module
@@ -102,6 +150,19 @@ function graph_prepare.prepare_graph(graph, output, mode)
       route.runtime.execution_class = "lua"
       route.execution.class = "lua"
       route.execution.requires_lua = true
+    end
+  end
+  -- Development servers load the project's own modules straight from src/,
+  -- so a project with variant modules gets Moonstone's runtime searcher in
+  -- the embedded Lua (graph.zig `lua_variant_flavor`). Releases ship those
+  -- modules already projected (ballad/release_assets.lua) and need none.
+  if not tostring(mode):match("^release") and flavor.variants() then
+    local requires_lua = false
+    for _, route in ipairs(graph_nodes(graph)) do
+      if route.runtime and route.runtime.requires_lua then requires_lua = true break end
+    end
+    if requires_lua and graph_prepare.project_has_variants(helpers.project_root_from_output(output)) then
+      graph.lua_variant_flavor = lua_target or flavor.target()
     end
   end
   return graph

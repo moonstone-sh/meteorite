@@ -21,6 +21,8 @@ pub fn Dispatcher(comptime graph: anytype, comptime build_info: anytype, comptim
         }
 
         fn dispatchLegacyScan(req_method: graph.Method, allocator: std.mem.Allocator, io: anytype, request: *backend.Request, req_path: []const u8) !bool {
+            // Unrolled per route: the default quota of 1000 fails past ~1000 routes.
+            @setEvalBranchQuota(1000 + graph.routes.len * 64);
             inline for (graph.routes) |route| {
                 if ((route.method == req_method or route.method == .ALL) and try dispatchRouteGeneric(route, allocator, io, request, req_path)) return true;
             }
@@ -28,6 +30,7 @@ pub fn Dispatcher(comptime graph: anytype, comptime build_info: anytype, comptim
         }
 
         fn dispatchRoutes(comptime routes: anytype, allocator: std.mem.Allocator, io: anytype, request: *backend.Request, req_path: []const u8) !bool {
+            @setEvalBranchQuota(1000 + routes.len * 64); // unrolled per route
             inline for (routes) |route| {
                 if (try dispatchRoute(route, allocator, io, request, req_path)) return true;
             }

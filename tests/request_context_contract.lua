@@ -58,4 +58,18 @@ test "Lua file handler argument metadata survives declaration normalization" (fu
   test.assert_eq(handler.arg_mode, "lazy_context", "arg mode retained")
 end)
 
+test "JSON request contracts reject wrong primitive types before invoking handlers" (function()
+  local app = m.app({name = "json-primitives"})
+  app:post("/", {json = {title = {type = "string", min_len = 1}, count = m.i32(), enabled = m.bool()}}, function(ctx)
+    return ctx:json({ok = true})
+  end)
+  local function invoke(body)
+    return hybrid.invoke(app, {method="POST", path="/", headers={["content-type"]="application/json"}, body=body})
+  end
+  test.assert_eq(invoke([[{"title":"ok","count":3,"enabled":false}]]).status, 200)
+  for _, body in ipairs({[[{"title":42,"count":3,"enabled":false}]], [[{"title":"ok","count":"3","enabled":false}]], [[{"title":"ok","count":3.5,"enabled":false}]], [[{"title":"ok","count":3,"enabled":"false"}]], [[{"title":"","count":3,"enabled":false}]]}) do
+    test.assert_eq(invoke(body).status, 400, body)
+  end
+end)
+
 test.run()

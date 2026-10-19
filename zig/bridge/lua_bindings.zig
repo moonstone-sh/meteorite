@@ -121,11 +121,31 @@ pub fn upvalueIndex(i: c_int) c_int {
     return lua_abi.upvalueIndex(i);
 }
 
-pub fn setupLuaPackagePaths(L: ?*c.lua_State) !void {
-    const setup =
+const package_path_setup =
         \\package.path = 'src/?.lua;src/?/init.lua;.moonstone/env/share/lua/5.4/?.lua;.moonstone/env/share/lua/5.4/?/init.lua;.moonstone/env/share/lua/5.3/?.lua;.moonstone/env/share/lua/5.3/?/init.lua;.moonstone/env/share/lua/5.2/?.lua;.moonstone/env/share/lua/5.2/?/init.lua;.moonstone/env/share/lua/5.1/?.lua;.moonstone/env/share/lua/5.1/?/init.lua;lua/?.lua;lua/?/init.lua;lua/5.4/?.lua;lua/5.4/?/init.lua;lua/5.3/?.lua;lua/5.3/?/init.lua;lua/5.2/?.lua;lua/5.2/?/init.lua;lua/5.1/?.lua;lua/5.1/?/init.lua;' .. package.path
         \\package.cpath = '.moonstone/env/lib/lua/5.4/?.so;.moonstone/env/lib/lua/5.4/?.dylib;.moonstone/env/lib/lua/5.4/?.dll;.moonstone/env/lib/lua/5.3/?.so;.moonstone/env/lib/lua/5.3/?.dylib;.moonstone/env/lib/lua/5.3/?.dll;.moonstone/env/lib/lua/5.2/?.so;.moonstone/env/lib/lua/5.2/?.dylib;.moonstone/env/lib/lua/5.2/?.dll;.moonstone/env/lib/lua/5.1/?.so;.moonstone/env/lib/lua/5.1/?.dylib;.moonstone/env/lib/lua/5.1/?.dll;lib/?.so;lib/?.dylib;lib/?.dll;lib/5.4/?.so;lib/5.4/?.dylib;lib/5.4/?.dll;lib/5.3/?.so;lib/5.3/?.dylib;lib/5.3/?.dll;lib/5.2/?.so;lib/5.2/?.dylib;lib/5.2/?.dll;lib/5.1/?.so;lib/5.1/?.dylib;lib/5.1/?.dll;' .. package.cpath
     ;
+
+/// A development graph whose project keeps flavor variants of its own
+/// modules (`src/util@lua54.lua`) declares `lua_variant_flavor`; its states
+/// then load them through Moonstone's runtime searcher, when the
+/// environment has one. Releases ship projected modules and omit it.
+const variant_searcher_setup = if (@hasDecl(graph, "lua_variant_flavor")) std.fmt.comptimePrint(
+    \\
+    \\do local ok, variants = pcall(require, 'moonstone.variants')
+    \\if ok and type(variants) == 'table' and variants.install then
+    \\variants.install({{ id = '{s}', family = '{s}', level = {d}, os = '{s}', arch = '{s}' }})
+    \\end end
+, .{
+    graph.lua_variant_flavor.id,
+    graph.lua_variant_flavor.family,
+    graph.lua_variant_flavor.level,
+    graph.lua_variant_flavor.os,
+    graph.lua_variant_flavor.arch,
+}) else "";
+
+pub fn setupLuaPackagePaths(L: ?*c.lua_State) !void {
+    const setup = package_path_setup ++ variant_searcher_setup;
     if (c.luaL_loadstring(L, setup.ptr) != c.LUA_OK) {
         const err = c.lua_tolstring(L, -1, null);
         std.log.err("lua package setup load failed: {s}", .{err});

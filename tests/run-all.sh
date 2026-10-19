@@ -9,7 +9,7 @@ if [ -x ".moonstone/env/bin/lua" ]; then
   LUA_BIN=".moonstone/env/bin/lua"
 fi
 
-export LUA_PATH="src/?.lua;src/?/init.lua;tests/?.lua;;"
+export LUA_PATH="src/?.lua;src/?/init.lua;tests/?.lua;${LUA_PATH:-};;"
 
 PASS=0
 FAIL=0

@@ -386,7 +386,7 @@ function handler_sync.sync_luarc(output)
     "    \"preloadFileSize\": 200",
     "  },",
     "  \"runtime\": {",
-    "    \"version\": \"Lua " .. lua_ver .. "\",",
+    "    \"version\": \"" .. helpers.detect_luals_runtime(root) .. "\",",
     "    \"path\": [",
     "      \"src/?.lua\",",
     "      \"src/?/init.lua\",",
@@ -421,6 +421,7 @@ function handler_sync.moonstone_scripts(build_mode)
     { key = "check", command = "moon exec ballad -- play Check_partiture.lua -- --mode " .. release_mode .. " --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
     { key = "check-release", command = "moon exec ballad -- play Check_partiture.lua -- --mode " .. release_mode .. " --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
     { key = "check-static", command = "moon exec ballad -- play Check_partiture.lua -- --mode static --backend fast_http --router-dispatch param_matchers" },
+
     { key = "doctor", command = "meteorite doctor" },
     { key = "invoke-health", command = "meteorite invoke --json src/main.lua GET /health" },
   }
@@ -442,12 +443,12 @@ function handler_sync.moonstone_manifest(name, build_mode)
     "",
     "[[dependencies]]",
     "name = \"moonstone/meteorite\"",
-    "constraint = \"^0.2.0\"",
-    "role = \"tool\"",
+    "constraint = \"^0.3.13\"",
+    "role = \"dev\"",
     "",
     "[[dependencies]]",
     "name = \"moonstone/ballad\"",
-    "constraint = \"^0.3.5\"",
+    "constraint = \"^0.4.3\"",
     "role = \"tool\"",
     "",
     "[scripts]",
@@ -491,6 +492,28 @@ function handler_sync.partiture_common()
     "  return request.to_options(value)",
     "end",
     "",
+    "function common.build(p, value)",
+    "  local args = { \"build\", \"--build-file\", \"build.zig\", \"install-server\" }",
+    "  for _, flag in ipairs(request.to_build_flags(value)) do args[#args + 1] = flag end",
+    "  args[#args + 1] = \"--\"",
+    "  args[#args + 1] = \"dist/server\"",
+    "  return p.task.native({",
+    "    id = \"meteorite.project-build.v1\",",
+    "    tool = \"zig\", args = args,",
+    "    inputs = { \"src/**\", \"zig/**\", \"build.zig\", \"moonstone.toml\", \"moonstone.lock\" },",
+    "    outputs = { \"dist/server\", \".meteorite/graph/current\" },",
+    "    toolchain = { command = \"zig version\" },",
+    "    description = \"Build Meteorite development server\",",
+    "  })",
+    "end",
+    "function common.server(value)",
+    "  local quote = require(\"ballad.process\").quote",
+    "  local source = debug.getinfo(request.parse, \"S\").source:gsub(\"^@\", \"\")",
+    "  local root = source:match(\"^(.*)/[^/]+$\")",
+    "  if root:match(\"/src/meteorite$\") then root = root:gsub(\"/meteorite$\", \"\") end",
+    "  return \"METEORITE_DEV_PREBUILT=1 METEORITE_DEV_ONCE=1 lua \" .. quote(root .. \"/cli/dev.lua\")",
+    "    .. \" src/main.lua .meteorite/graph/current \" .. quote(value.mode) .. \" \" .. quote(value.backend) .. \" \" .. quote(\"\") .. \" dist/server\"",
+    "end",
     "return common",
     "",
   }, "\n")
@@ -511,6 +534,8 @@ function handler_sync.project_build_zig()
     "        .target = target,",
     "        .optimize = optimize,",
     "        .mode = mode,",
+    "        .project_root = b.option([]const u8, \"project-root\", \"Service project root\") orelse \".\",",
+    "        .meteorite_cli = b.option([]const u8, \"meteorite-cli\", \"Meteorite graph generator\"),",
     "        .backend = backend,",
     "        .graph_input = b.option([]const u8, \"graph-input\", \"Meteorite app entry\") orelse \"src/main.lua\",",
     "        .graph_output = b.option([]const u8, \"graph-output\", \"Meteorite graph output\") orelse \".meteorite/graph/current\",",
@@ -566,9 +591,7 @@ function handler_sync.dev_partiture()
     "",
     "return ballad.partiture(function(p)",
     "  local request = common.request(p)",
-    "  local meteorite = p:use(\"meteorite.ballad\")",
-    "  local graph = meteorite.graph({ input = \"src/main.lua\", output = \".meteorite/graph/current\", mode = request.mode, backend = request.backend })",
-    "  local build = meteorite.zig({ input = \"src/main.lua\", graph = \".meteorite/graph/current\", mode = request.mode, backend = request.backend, hybrid_profile = request.hybrid_profile, router_dispatch = request.router_dispatch, target = request.target })",
+    "  local build = common.build(p, request)",
     "  p.sink.none(p.task.run(build))",
     "end)",
     "",
@@ -583,13 +606,11 @@ function handler_sync.watch_partiture()
     "return ballad.partiture(function(p)",
     "  local watcher = p:use(ballad.plugins.watcher)",
     "  local request = common.request(p)",
-    "  local app = p.source.files({ \"**/*.lua\" }, { root = \"src\" })",
-    "  local meteorite = p:use(\"meteorite.ballad\")",
-    "  local graph = meteorite.graph({ input = \"src/main.lua\", output = \".meteorite/graph/current\", mode = request.mode, backend = request.backend })",
-    "  local build = meteorite.zig({ input = \"src/main.lua\", graph = \".meteorite/graph/current\", mode = request.mode, backend = request.backend, hybrid_profile = request.hybrid_profile, router_dispatch = request.router_dispatch, target = request.target })",
+    "  local app = p.source.files({ \"src/**\", \"zig/**\", \"build.zig\", \"moonstone.toml\", \"moonstone.lock\" }, { root = \".\" })",
+    "  local build = common.build(p, request)",
     "  p.sink.none(watcher.watch({",
-    "    initial = { run = build, effect = \"./dist/server\" },",
-    "    reactions = { { watch = { app }, run = build, effect = \"./dist/server\" } },",
+    "    initial = { run = build, effect = common.server(request) },",
+    "    reactions = { { watch = { app }, run = build, effect = common.server(request) } },",
     "  }))",
     "end)",
     "",
@@ -612,6 +633,7 @@ function handler_sync.check_partiture()
 end
 
 function handler_sync.watch_supervisor()
+<<<<<<< HEAD
   return [=[
 require("moonstone.variants").install()
 local process = require("clingy.process")
@@ -630,6 +652,23 @@ assert(file:write(platform.windows and "\239\187\191" .. script or script)); ass
 local code = require("clingy.compat").exit_status(os.execute(process.supervisor_command(path)))
 os.exit(code)
 ]=]
+=======
+  return table.concat({
+    "local process = require(\"clingy.process\")",
+    "local argv = { \".moonstone/env/bin/ballad\", \"play\", \"Watch_partiture.lua\", \"--\" }",
+    "for _, value in ipairs(arg) do argv[#argv + 1] = value end",
+    "local script = process.supervisor_script({",
+    "  argv = argv, label = \"Meteorite watch\", stdin_eof = true,",
+    "  lock_dir = \".meteorite/dev/session.lock\",",
+    "  cleanup_files = { \".meteorite/dev/server.pid\" },",
+    "})",
+    "assert(os.execute(\"mkdir -p .meteorite/dev\"))",
+    "local file = assert(io.open(\".meteorite/dev/watch-supervisor.sh\", \"w\"))",
+    "assert(file:write(script));assert(file:close())",
+    "local ok, _, status = os.execute(\"bash .meteorite/dev/watch-supervisor.sh\")",
+    "if not (ok == true or ok == 0 or status == 0) then os.exit(1) end",
+  }, "\n")
+>>>>>>> origin/main
 end
 
 return handler_sync

@@ -25,7 +25,7 @@ function dev_command.run(argv, deps)
   local process = deps.process or require("clingy.process")
   assert(process.supervisor_script, "meteorite dev requires Clingy >= 0.6.2; run moon sync")
   local quote = deps.shell_quote
-  local request = deps.build_request.parse({ (table.unpack or unpack)(argv, 2) })
+  local request = deps.build_request.parse({ require("meteorite.compat").unpack(argv, 2) })
   deps.build_request.require_behavior(request, "meteorite dev")
   local cli = deps.package_cli_file()
   local root = deps.current_dir()

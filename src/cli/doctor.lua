@@ -64,7 +64,12 @@ function doctor.run(deps)
   local zig_version = zig_ok and (capture_command("zig version 2>/dev/null"):gsub("%s+$", "")) or nil
   add(zig_ok and "ok" or "fail", "Zig", zig_ok and zig_version or "zig not found on PATH")
   local ballad_plugin_path = candidate_file({
+    "src/ballad_plugin/meteorite/ballad.lua",
     "src/meteorite/ballad.lua",
+    module_root .. "ballad.lua",
+    module_root .. "ballad_plugin/meteorite/ballad.lua",
+    ".moonstone/env/share/lua/5.4/meteorite/ballad.lua",
+    ".moonstone/env/share/lua/5.1/meteorite/ballad.lua",
     module_root .. "meteorite/ballad.lua",
     install_root .. "src/meteorite/ballad.lua",
     share_root and (share_root .. "/meteorite/ballad.lua") or nil,

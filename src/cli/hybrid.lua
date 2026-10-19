@@ -245,8 +245,28 @@ local function validate_request_domains(route, request)
     local ok, parsed
     if cjson_ok then ok, parsed = pcall(cjson.decode, request.body or "") else ok, parsed = true, parse_simple_json_object(request.body) end
     if not ok or type(parsed) ~= "table" then return validation_response("json", "body", "invalid") end
-    _, err = validate_specs("json", validation.json_body, parsed)
-    if err then return err end
+    for _, spec in ipairs(validation.json_body) do
+      local value = parsed[spec.name]
+      if value == nil then
+        if not spec.optional then return validation_response("json", spec.name, "missing") end
+      else
+        local kind = spec.kind or spec.type or "string"
+        local numeric = kind == "i32" or kind == "u64"
+        if (numeric and (type(value) ~= "number" or value % 1 ~= 0))
+          or (kind == "bool" and type(value) ~= "boolean")
+          or (not numeric and kind ~= "bool" and type(value) ~= "string") then
+          return validation_response("json", spec.name, "invalid")
+        end
+        if numeric and ((spec.min and value < spec.min) or (spec.max and value > spec.max)) then
+          return validation_response("json", spec.name, "invalid")
+        end
+        if type(value) == "string" and spec.min_len and #value < spec.min_len then
+          return validation_response("json", spec.name, "invalid")
+        end
+        local raw = numeric and string.format("%.0f", value) or tostring(value)
+        if not validate_schema(spec, raw) then return validation_response("json", spec.name, "invalid") end
+      end
+    end
   elseif #(validation.form_body or {}) > 0 then
     if not ct:match("^application/x%-www%-form%-urlencoded[%s;]?") then return validation_response("form", "content-type", "invalid") end
     local form = parse_form_values(request.body or "")
@@ -1024,13 +1044,20 @@ end
 --- @param name string
 --- @return string|integer|nil
 function Context:param(name)
-  local params = self.params or {}
+  local params = self._raw_params or self.params or {}
   if params[name] ~= nil then return params[name] end
   return nil
 end
 
 local function new_context(opts)
-  local params = opts.params or {}
+  local params = {}
+  for _, spec in ipairs(opts.param_specs or {}) do
+    local value = (opts.params or {})[spec.name]
+    if value ~= nil then params[spec.name] = convert_schema(spec, value) end
+  end
+  for key, value in pairs(opts.params or {}) do
+    if params[key] == nil then params[key] = value end
+  end
   local scope_values = {}
   for key, value in pairs(opts.scope or {}) do scope_values[key] = value end
   local readonly_scope = setmetatable({}, {
@@ -1040,10 +1067,15 @@ local function new_context(opts)
     end,
     __pairs = function() return pairs(scope_values) end,
   })
+  local query = setmetatable(opts.query or {}, {
+    __call = function(_, ctx, name) return Context.query(ctx, name) end,
+  })
   return setmetatable({
+    query = query,
     request = opts.request,
     params = params,
-    _validated_query = opts.query or {},
+    _raw_params = opts.params or {},
+    _validated_query = query,
     _raw_query_values = opts.raw_query_values or {},
     _raw_query_all = opts.raw_query_all or {},
     _target = opts.target,
@@ -1129,7 +1161,7 @@ function hybrid.invoke(app, request, opts)
       if query_error then return query_error end
       local validation_error = validate_request_domains(route, request)
       if validation_error then return validation_error end
-      local ctx = new_context({ request = request, params = params, query = query, raw_query_values = query_values, raw_query_all = query_all, target = request.path or "/", path = path, route_id = route.id, scope = route.scope.context or {}, capabilities = graph.capabilities, zig_helpers = opts.zig_helpers, http_request = opts.http_request, worker_cache = app.cache, capability_store = store.capabilities })
+      local ctx = new_context({ request = request, params = params, param_specs = route.params, query = query, raw_query_values = query_values, raw_query_all = query_all, target = request.path or "/", path = path, route_id = route.id, scope = route.scope.context or {}, capabilities = graph.capabilities, zig_helpers = opts.zig_helpers, http_request = opts.http_request, worker_cache = app.cache, capability_store = store.capabilities })
       local plugin_response = execute_scope_plugins(route, ctx, plugin_map)
       if plugin_response then return plugin_response end
       if route.handler.kind == "inline_lua" then

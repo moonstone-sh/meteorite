@@ -475,6 +475,8 @@ pub fn compile(comptime spec: anytype) type {
         }
 
         fn countHandlers(comptime tag: std.meta.Tag(graph.Handler)) usize {
+            // Unrolled per route: the default quota of 1000 fails past ~1000 routes.
+            @setEvalBranchQuota(1000 + graph.routes.len * 64);
             comptime var count: usize = 0;
             inline for (graph.routes) |route| {
                 if (std.meta.activeTag(route.handler) == tag) count += 1;
@@ -483,6 +485,8 @@ pub fn compile(comptime spec: anytype) type {
         }
 
         fn countZigHandlers() usize {
+            // Unrolled per route: the default quota of 1000 fails past ~1000 routes.
+            @setEvalBranchQuota(1000 + graph.routes.len * 64);
             comptime var count: usize = 0;
             inline for (graph.routes) |route| {
                 switch (route.handler) {

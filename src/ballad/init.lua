@@ -5,6 +5,7 @@ local release_manifest = require("ballad.release_manifest")
 local release_assets = require("ballad.release_assets")
 local release_contract = require("ballad.release_contract")
 local release_tasks = require("ballad.release_tasks")
+local flavor = require("meteorite.flavor")
 
 local function plugin_root()
   local source = debug.getinfo(1, "S").source or ""
@@ -94,7 +95,8 @@ return {
     graph = { inputs = {}, outputs = { "asset_set" }, cacheable = false, parallel_safe = false },
     check = { inputs = {}, outputs = { "asset_set" }, cacheable = false, parallel_safe = false },
     zig = { inputs = {}, outputs = { "asset_set" }, cacheable = false, parallel_safe = false },
-    release = { inputs = {}, outputs = { "asset_set" }, cacheable = false, parallel_safe = false },
+    -- The optional input is a Lua payload, used with lua_modules = "inputs".
+    release = { inputs = { "asset_set" }, outputs = { "asset_set" }, cacheable = false, parallel_safe = false },
   },
 
   graph = function(ctx, inputs, opts)
@@ -168,6 +170,20 @@ return {
     local output = opts.output or opts.out or ".meteorite/release/server"
     local output_path = join(root, output)
     local mode, release_mode = release_contract.normalize_mode(opts.mode)
+    local lua_modules = opts.lua_modules or "packages"
+    local has_payload = inputs and inputs[1] ~= nil
+    if lua_modules ~= "packages" and lua_modules ~= "inputs" then
+      ctx.fail("meteorite.release: lua_modules must be \"packages\" or \"inputs\", got " .. tostring(lua_modules))
+    end
+    if has_payload and lua_modules ~= "inputs" then
+      ctx.fail("meteorite.release received an input node; pass lua_modules = \"inputs\" to ship it as the Lua payload")
+    end
+    if lua_modules == "inputs" and not has_payload then
+      ctx.fail("meteorite.release: lua_modules = \"inputs\" requires an input node, e.g. m.release(payload, { ... })")
+    end
+    if lua_modules == "inputs" and release_mode ~= "hybrid" then
+      ctx.fail("meteorite.release: lua_modules = \"inputs\" applies to hybrid releases; a static release ships no Lua")
+    end
     local app = load_app(root, input, mode)
     if type(app) ~= "table" or not app.__meteorite_app then ctx.fail(input .. " must return a Meteorite app") end
 
@@ -180,8 +196,41 @@ return {
     lua_root = lua_root or opts.lua_root
     local cmodule_task_sets = release_tasks.rebuild_lua_cmodules(ctx, root, opts, target_lua, lua_root, plugin_root())
 
-    local result = emitter.emit(app, { output = graph_output, mode = mode, backend = opts.backend })
+    -- The Lua flavor the release embeds: the environment's language with the
+    -- -Dtarget os/arch. Handler variants (graph_prepare) and shipped module
+    -- variants (release_assets) are chosen for it. nil without Moonstone
+    -- flavor support, which keeps the untagged-only behavior.
+    local lua_flavor = nil
+    if release_mode == "hybrid" and flavor.variants() then
+      lua_flavor = flavor.for_zig_target((flavor.target()), release_contract.target_from_opts(opts))
+    end
+    local restore_flavor = lua_flavor and flavor.override_target(lua_flavor)
+    local emitted_ok, result = pcall(emitter.emit, app, { output = graph_output, mode = mode, backend = opts.backend })
+    if restore_flavor then restore_flavor() end
+    if not emitted_ok then error(result, 0) end
     if release_mode == "static" then release_contract.assert_static_graph(ctx, result.graph) end
+
+    -- Lua packaging (and the payload's closure check) runs before the server
+    -- build is scheduled, so a bad payload fails without compiling first.
+    local assets = release_assets.new_set()
+    local lua_info = nil
+    if release_mode == "hybrid" then
+      local package_target = target_lua and target_lua.target or release_contract.target_from_opts(opts)
+      if lua_modules == "inputs" then
+        -- Ship the payload instead of package Lua trees; C modules still come
+        -- from the packages, since a Lua payload can't carry them.
+        local provided, count = release_assets.add_payload_lua_assets(ctx, assets, inputs)
+        release_assets.add_hybrid_lua_assets(ctx, assets, root, result.graph, lua_flavor, provided)
+        release_assets.add_package_assets(ctx, assets, opts.packages, { target = package_target, flavor = lua_flavor, lua = false })
+        release_assets.check_lua_closure(ctx, assets, opts.lua_externals)
+        lua_info = { source = "inputs", modules = count, externals = opts.lua_externals or {} }
+      else
+        release_assets.add_hybrid_lua_assets(ctx, assets, root, result.graph, lua_flavor)
+        release_assets.add_package_assets(ctx, assets, opts.packages, { target = package_target, flavor = lua_flavor })
+        lua_info = { source = "packages" }
+      end
+      release_assets.add_runtime_source_asset(ctx, assets, root, target_lua)
+    end
     local task_assets = ctx:native_task({
       tool = opts.tool or "zig",
       args = release_tasks.build_args_for(mode, { output = output, build_file = opts.build_file or plugin_build_file(), project_root = ".", meteorite_cli = plugin_cli_file(), graph_input = opts.input or "src/main.lua", graph_output = opts.graph_output or ".meteorite/graph/current", backend = opts.backend, unix_socket_path = opts.unix_socket_path, ["unix-socket-path"] = opts["unix-socket-path"], unix_socket_mode = opts.unix_socket_mode, ["unix-socket-mode"] = opts["unix-socket-mode"], unix_socket_unlink_stale = opts.unix_socket_unlink_stale, ["unix-socket-unlink-stale"] = opts["unix-socket-unlink-stale"], hybrid_profile = opts.hybrid_profile, ["hybrid-profile"] = opts["hybrid-profile"], router_dispatch = opts.router_dispatch, ["router-dispatch"] = opts["router-dispatch"], optimize = opts.optimize, target = opts.target, lua_root = lua_root }),
@@ -192,7 +241,6 @@ return {
       description = "Build Meteorite " .. release_mode .. " release",
     })
 
-    local assets = release_assets.new_set()
     if lua_task_assets then
       -- The built Lua runtime is a directory (bin/, lib/, include/).
       -- Add individual files so the Ballad sink can copy them.
@@ -211,19 +259,14 @@ return {
       asset.metadata.executable = true
       assets:add(asset)
     end
+    release_assets.add_static_assets(ctx, assets, path.join(graph_output, "static"))
     assets:add(ctx.graph:add_asset({
       kind = "meteorite_release_manifest",
       virtual_path = "meteorite-release.json",
-      content = release_manifest.build(result, release_mode, opts.bin or "bin/server", contract, target_lua, opts),
+      content = release_manifest.build(result, release_mode, opts.bin or "bin/server", contract, target_lua, opts, lua_info),
       generated = true,
       metadata = { mode = release_mode, graph_hash = result.graph_hash, contract = contract.format },
     }))
-    release_assets.add_static_assets(ctx, assets, path.join(graph_output, "static"))
-    if release_mode == "hybrid" then
-      release_assets.add_hybrid_lua_assets(ctx, assets, root, result.graph)
-      release_assets.add_package_assets(ctx, assets, opts.packages, { target = target_lua and target_lua.target or release_contract.target_from_opts(opts) })
-      release_assets.add_runtime_source_asset(ctx, assets, root, target_lua)
-    end
     if release_mode == "static" then release_assets.assert_static_release_assets(ctx, assets) end
     return assets
   end,

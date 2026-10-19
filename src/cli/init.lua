@@ -121,16 +121,27 @@ local function apply_manifest_operations(target, build_mode, moon_bin)
   local revision = export:match('"storage_revision":"([^"]+)"')
   if not revision then error("Moonstone manifest export did not return a storage revision") end
 
+  local dependencies = require("cjson").decode(export).manifest.dependencies
   local operations = {}
   for _, dependency in ipairs({
-    { name = "moonstone/meteorite", constraint = "^0.2.0" },
-    { name = "moonstone/ballad", constraint = "^0.3.5" },
+    { name = "moonstone/meteorite", constraint = "^0.3.13", role = "dev" },
+    { name = "moonstone/ballad", constraint = "^0.4.3", role = "tool" },
   }) do
     if not manifest_has_named_entry(export, "dependencies", dependency.name) then
       operations[#operations + 1] = {
         kind = "add_dependency",
-        dependency = { name = dependency.name, constraint = dependency.constraint, role = "tool" },
+        dependency = { name = dependency.name, constraint = dependency.constraint, role = dependency.role },
       }
+    elseif dependency.name == "moonstone/meteorite" then
+      -- The DSL and Ballad plugin are project authoring inputs, not an
+      -- isolated executable-only tool. Preserve the user's version/source.
+      for _, existing in ipairs(dependencies) do
+        if existing.name == dependency.name and existing.role == "tool" then
+          existing.role = "dev"
+          for key, value in pairs(existing) do if value == require("cjson").null then existing[key] = nil end end
+          operations[#operations + 1] = { kind = "set_dependency", dependency = existing }
+        end
+      end
     end
   end
 

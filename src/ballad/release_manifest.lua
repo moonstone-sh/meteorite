@@ -98,7 +98,7 @@ local function target_abi(opts, target_lua)
   return (target_lua and target_lua.target) or (opts and opts.target) or runtime.target or runtime.abi_target or "native"
 end
 
-function manifest.build(result, release_mode, server_path, contract, target_lua, opts)
+function manifest.build(result, release_mode, server_path, contract, target_lua, opts, lua_info)
   opts = opts or {}
   local retained = contract and contract.retained_lua_nodes or {}
   local retained_nodes = retained_lua_nodes(contract)
@@ -176,6 +176,15 @@ function manifest.build(result, release_mode, server_path, contract, target_lua,
     if entry.compressed_br_path then asset.compressed_br_path = entry.compressed_br_path end
     if entry.compressed_gzip_path then asset.compressed_gzip_path = entry.compressed_gzip_path end
     manifest_obj.static.assets[#manifest_obj.static.assets + 1] = asset
+  end
+  if lua_info then
+    -- Where the shipped Lua modules came from: "packages" (whole package
+    -- trees) or "inputs" (a payload from an upstream node, closure-checked).
+    manifest_obj.lua_modules = {
+      source = lua_info.source,
+      modules = lua_info.modules,
+      externals = lua_info.externals,
+    }
   end
   if release_mode == "static" then
     manifest_obj.static.lua_runtime_execution_nodes = #retained

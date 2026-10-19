@@ -51,6 +51,7 @@ run_gate basic-service-build bash fixtures/tests/basic-service-build.sh
 run_gate basic-service-http env METEORITE_BASIC_SERVICE_BUILT=1 bash fixtures/tests/basic-service-http.sh
 run_gate basic-service-contracts bash fixtures/tests/basic-service-contracts.sh
 run_gate release-smoke bash fixtures/tests/release-smoke.sh
+run_gate lua-payload-release bash fixtures/tests/lua-payload-release.sh
 run_gate release-reproducibility bash tests/release-reproducibility.sh
 run_gate ipc-release-smoke bash fixtures/tests/ipc-release-smoke.sh
 run_gate zig-build zig build -Dgraph-input=fixtures/apps/showcase-service/src/main.lua -Dgraph-output=.meteorite/graph/current

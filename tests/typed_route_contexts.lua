@@ -204,4 +204,37 @@ test "a missing optional query field is left unset so it reads back as nil" (fun
     "query fields are only set when actually present")
 end)
 
+test "route context types cover contract bodies and every declared response status" (function()
+  local m = require("meteorite")
+  local bundle = m.contracts.from_document({ format = "moonstone.contract-bundle.v1", exports = {{
+    id = "todo.Create", input = { type = "object", additionalProperties = false,
+      properties = { title = { type = "string" }, done = { type = "boolean" } }, required = { "title" } },
+    output = { type = "object", properties = { id = { type = "integer" } }, required = { "id" } },
+  }} })
+  local app = m.app({name = "typed-contract"})
+  app:post("/todos", {json = bundle:input("todo.Create"), responses = {
+    [201] = bundle:response("todo.Create"), [400] = {schema = {type = "string"}},
+  }}, function(ctx) return ctx:json(201, {id = 1}) end)
+  local aids = emit_aids(app:normalize({mode = "dev"}))
+  test.assert_true(aids.routes:find("---@alias MeteoriteRequest_route_1 { done?: boolean, title: string }", 1, true) ~= nil)
+  test.assert_true(aids.routes:find("---@return MeteoriteRequest_route_1|nil value", 1, true) ~= nil)
+  test.assert_true(aids.routes:find("---@return string|nil err", 1, true) ~= nil)
+  test.assert_true(aids.routes:find("status: 400, value: MeteoriteResponse_route_1_400", 1, true) ~= nil)
+  test.assert_true(aids.routes:find("---@param status 201", 1, true) ~= nil)
+  test.assert_true(aids.routes:find("value: MeteoriteResponse_route_1_200", 1, true) == nil,
+    "a 201-only route must not advertise a default-200 response")
+end)
+
+test "flat JSON bodies and default-200 responses remain typed without a bundle" (function()
+  local m = require("meteorite")
+  local app = m.app({name = "typed-flat"})
+  app:post("/items", {json = {name = m.string(), done = m.bool({optional = true})},
+    responses = {[200] = {schema = {type = "boolean"}}}}, function(ctx) return ctx:json(true) end)
+  local aids = emit_aids(app:normalize({mode = "dev"}))
+  test.assert_true(aids.routes:find("---@class MeteoriteRequest_route_1", 1, true) ~= nil)
+  test.assert_true(aids.routes:find("---@field done? boolean", 1, true) ~= nil)
+  test.assert_true(aids.routes:find("---@field name string", 1, true) ~= nil)
+  test.assert_true(aids.routes:find("value: MeteoriteResponse_route_1_200, opts?", 1, true) ~= nil)
+end)
+
 test.run()
