@@ -1,3 +1,4 @@
+local shell = require("cli.shell")
 --- Meteorite build command.
 local build = {}
 
@@ -20,7 +21,7 @@ function build.run(argv, deps)
     "-Dproject-root=" .. quote(root),
     "-Dgraph-input=src/main.lua -Dgraph-output=.meteorite/graph/current",
     table.concat(deps.build_request.to_build_flags(request, quote), " "),
-    "install-server --", quote(root .. "/dist/server"),
+    "install-server --", quote(root .. "/dist/server" .. shell.executable_suffix),
   }, " ")
   if not deps.run_command(command_line) then os.exit(1) end
 end

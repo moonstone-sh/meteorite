@@ -1,0 +1,56 @@
+name: Windows service lifecycle
+on:
+  pull_request:
+  push:
+    branches: [main, feat/windows-flavors]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lifecycle:
+    runs-on: windows-latest
+    env:
+      MOONSTONE_TRACE_ERRORS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: moonstone-sh/moonstone
+          ref: 7aaf173167056c3cad1c12272f3c9de496a143de
+          path: .ci/moonstone
+      - uses: actions/checkout@v4
+        with:
+          repository: moonstone-sh/clingy
+          ref: feat/windows-flavors
+          path: .ci/clingy
+      - uses: actions/checkout@v4
+        with:
+          repository: moonstone-sh/ballad
+          ref: feat/windows-flavors
+          path: .ci/ballad
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - uses: actions/cache@v4
+        with:
+          path: .zig-cache
+          key: moonstone-windows-7aaf173-zig016
+      - name: Build Moonstone
+        working-directory: .ci/moonstone
+        run: zig build
+      - name: Prepare native Lua and pure authoring dependencies
+        shell: pwsh
+        run: |
+          $moon="$env:GITHUB_WORKSPACE/.ci/moonstone/zig-out/bin/moon.exe"
+          "$env:GITHUB_WORKSPACE/.ci/moonstone/zig-out/bin" >> $env:GITHUB_PATH
+          & $moon init "$env:RUNNER_TEMP/meteorite-native" --name native-meteorite --kind script --interpreter lua@5.4 --no-sync
+          if ($LASTEXITCODE -ne 0) { throw 'init failed' }
+          & $moon -C "$env:RUNNER_TEMP/meteorite-native" add moonstone/valua moonstone/alter moonstone/alter-jsonc moonstone/luals-composer rocks:dkjson --no-sync
+          if ($LASTEXITCODE -ne 0) { throw 'add failed' }
+          & $moon -C "$env:RUNNER_TEMP/meteorite-native" sync
+          if ($LASTEXITCODE -ne 0) { throw 'sync failed' }
+      - name: Native scaffolding, Lua build, static and hybrid HTTP, relocation and shutdown
+        shell: pwsh
+        run: |
+          python tests/windows/lifecycle.py .ci/moonstone/zig-out/bin/moon.exe "$env:RUNNER_TEMP/meteorite-native" .ci/clingy .ci/ballad
+          if ($LASTEXITCODE -ne 0) { throw 'Windows lifecycle failed' }

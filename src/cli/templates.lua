@@ -415,7 +415,7 @@ function handler_sync.moonstone_scripts(build_mode)
   local release_mode = build_mode == "release-static" and "static" or "hybrid"
   return {
     { key = "graph", command = "meteorite graph src/main.lua .meteorite/graph/current " .. tostring(build_mode or "hybrid") .. " fast_http" },
-    { key = "dev", command = "moon exec ballad -- play Watch_partiture.lua -- --mode hybrid_dev --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
+    { key = "dev", command = "lua Watch_supervisor.lua --mode hybrid_dev --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
     { key = "build", command = "moon exec ballad -- play Dev_partiture.lua -- --mode hybrid_dev --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
     { key = "release", command = "moon exec ballad -- play partiture.lua -- --mode " .. release_mode .. " --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
     { key = "check", command = "moon exec ballad -- play Check_partiture.lua -- --mode " .. release_mode .. " --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
@@ -609,6 +609,27 @@ function handler_sync.check_partiture()
     "end)",
     "",
   }, "\n")
+end
+
+function handler_sync.watch_supervisor()
+  return [=[
+require("moonstone.variants").install()
+local process = require("clingy.process")
+local platform = require("clingy.platform")
+local argv = { "moon", "exec", "--", "ballad", "play", "Watch_partiture.lua", "--" }
+for _, value in ipairs(arg) do argv[#argv + 1] = value end
+local script = process.supervisor_script({
+  argv = argv, label = "Meteorite watch", stdin_eof = true,
+  lock_dir = ".meteorite/dev/session.lock",
+  cleanup_files = { ".meteorite/dev/server.pid" },
+})
+platform.mkdir(".meteorite/dev")
+local path = ".meteorite/dev/watch-supervisor" .. process.supervisor_extension()
+local file = assert(io.open(path, "wb"))
+assert(file:write(platform.windows and "\239\187\191" .. script or script)); assert(file:close())
+local code = require("clingy.compat").exit_status(os.execute(process.supervisor_command(path)))
+os.exit(code)
+]=]
 end
 
 return handler_sync

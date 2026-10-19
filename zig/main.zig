@@ -7,20 +7,29 @@ const listen_config = @import("listen_config");
 
 const ListenConfig = meteorite.ListenConfig;
 
+extern "kernel32" fn SetCurrentDirectoryW([*:0]const u16) callconv(.winapi) c_int;
+fn changeDirectory(init: std.process.Init, directory: []const u8) !void {
+    if (@import("builtin").os.tag == .windows) {
+        const wide = try std.unicode.utf8ToUtf16LeAllocZ(init.gpa, directory);
+        defer init.gpa.free(wide);
+        if (SetCurrentDirectoryW(wide) == 0) return error.ChangeDirectoryFailed;
+    } else try std.Io.Threaded.chdir(directory);
+}
+
 fn enterReleaseRoot(init: std.process.Init) !void {
     const exe_dir = try std.process.executableDirPathAlloc(init.io, init.gpa);
     defer init.gpa.free(exe_dir);
 
     if (std.mem.eql(u8, std.fs.path.basename(exe_dir), "bin")) {
         const release_root = std.fs.path.dirname(exe_dir) orelse return;
-        try std.Io.Threaded.chdir(release_root);
+        try changeDirectory(init, release_root);
         return;
     }
 
     const manifest_path = try std.fs.path.join(init.gpa, &.{ exe_dir, "meteorite-release.json" });
     defer init.gpa.free(manifest_path);
     std.Io.Dir.cwd().access(init.io, manifest_path, .{}) catch return;
-    try std.Io.Threaded.chdir(exe_dir);
+    try changeDirectory(init, exe_dir);
 }
 
 const requires_lua = blk: {

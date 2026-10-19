@@ -1,4 +1,4 @@
-local source = debug.getinfo(1, "S").source:gsub("^@", "")
+local source = debug.getinfo(1, "S").source:gsub("^@", ""):gsub("\\", "/")
 local met_dir = source:match("^(.*)/meteorite%.lua$") or source:match("^(.*)/src/meteorite%.lua$")
 if met_dir then
   local sub_dir = met_dir .. "/meteorite"
@@ -10,6 +10,9 @@ if met_dir then
     package.path,
   }, ";")
 end
+
+local variants_ok, variants = pcall(function() return require("moonstone.variants") end)
+if variants_ok then variants.install() end
 
 local app_core = require("core.app")
 local schema_exports = require("core.schema_exports")

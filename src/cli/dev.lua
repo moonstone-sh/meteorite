@@ -24,6 +24,9 @@ if script_source:sub(1, 1) == "@" then script_source = script_source:sub(2) end
 local module_root = (script_source:match("^(.*[/\\])") or "src/cli/"):gsub("cli[/\\]$", "")
 package.path = module_root .. "?.lua;" .. module_root .. "?/init.lua;" .. package.path
 
+require("moonstone.variants").install()
+local host = require("cli.dev_host")
+local shell = require("cli.shell")
 local dev_watch = require("core.dev_watch")
 
 local function path_exists(path)
@@ -34,9 +37,7 @@ end
 
 local lua_bin = os.getenv("METEORITE_LUA") or (path_exists(".moonstone/env/bin/lua") and ".moonstone/env/bin/lua" or "lua")
 
-local function shell_quote(value)
-  return "'" .. tostring(value):gsub("'", "'\\''") .. "'"
-end
+local shell_quote = shell.quote
 
 local running = true
 local is_shutting_down = false
@@ -90,7 +91,7 @@ local function capture(command)
 end
 
 local function mkdir_p(path)
-  os.execute("mkdir -p " .. shell_quote(path))
+  shell.mkdir(path)
 end
 
 local function read_file(path)
@@ -177,9 +178,7 @@ local function resolve_dev_port()
   return actual or explicit_dev_port or "8080"
 end
 
-local function pid_running(pid)
-  return pid ~= nil and quiet_run("kill -0 " .. tostring(pid) .. " >/dev/null 2>&1")
-end
+local pid_running = host.pid_running
 
 local function current_server_pid()
   local record = read_file(pid_file) or ""
@@ -201,29 +200,19 @@ stop_server = function()
   -- Only this active Clingy session may stop its recorded server. Stale PID
   -- files and listeners belonging to another project confer no ownership.
   local pid = current_server_pid()
-  if pid and pid_running(pid) then
-    os.execute("kill -TERM " .. pid .. " >/dev/null 2>&1")
-    for _ = 1, 20 do
-      if not pid_running(pid) then break end
-      os.execute("sleep 0.1")
-    end
-  end
-  if pid and pid_running(pid) then
-    os.execute("kill -9 " .. tostring(pid) .. " >/dev/null 2>&1 || true")
-  end
+  if pid then host.stop(pid) end
   os.remove(pid_file)
 end
 
 local function start_server()
   stop_server()
-  local command = "(trap - INT TERM HUP; exec " .. shell_quote(server) .. ") >" .. shell_quote(log_file) .. " 2>&1 & echo $!"
-  local pid = capture(command):match("%d+")
+  local pid = host.spawn(server, log_file)
   if pid then write_file(pid_file, pid .. "\n" .. session_id .. "\n") end
   local is_up = false
   -- Readiness at the supervisor's own polling resolution (100ms steps).
   local ready_ms = 0
   for _ = 1, 5 do
-    os.execute("sleep 0.1")
+    host.sleep(0.1)
     ready_ms = ready_ms + 100
     if pid_running(pid) then
       is_up = true
@@ -252,25 +241,7 @@ local function watch_paths()
   return graph, policy.runtime, policy.passive, policy.exclude
 end
 
-local function source_fingerprint(paths, exclude)
-  if #paths == 0 then return "" end
-  local quoted = {}
-  for _, path in ipairs(paths) do quoted[#quoted + 1] = shell_quote(path) end
-  local prune = {}
-  for _, path in ipairs(exclude or {}) do
-    local q = shell_quote(path)
-    prune[#prune + 1] = "-path " .. q
-    prune[#prune + 1] = "-path " .. shell_quote(path .. "/*")
-  end
-  local find = "find " .. table.concat(quoted, " ")
-  if #prune > 0 then find = find .. " \\( " .. table.concat(prune, " -o ") .. " \\) -prune -o" end
-  local command = table.concat({
-    find .. " -type f -print 2>/dev/null",
-    "| sort",
-    "| while IFS= read -r f; do stat -f '%m %z %N' \"$f\" 2>/dev/null || stat -c '%Y %s %n' \"$f\" 2>/dev/null; done"
-  }, " ")
-  return capture(command)
-end
+local source_fingerprint = host.fingerprint
 
 local function parse_partition_changes()
   local text = read_file(output .. "/partition-changes.json") or "[]"
@@ -447,7 +418,7 @@ while running do
     supervised_pid = nil
   end
   if once then break end
-  local ok, exit_type, code = os.execute("sleep 1")
+  local ok, exit_type, code = host.sleep(1)
   if is_signal(ok, exit_type, code) then
     handle_execute_signal()
   end

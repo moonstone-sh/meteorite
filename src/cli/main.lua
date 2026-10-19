@@ -7,6 +7,9 @@ local install_root = package_root:gsub("meteorite[/\\]$", "")
 local lua_v = _VERSION:match("%d+%.%d+") or "5.4"
 package.path = "src/?.lua;src/?/init.lua;" .. module_root .. "?.lua;" .. module_root .. "?/init.lua;" .. package_root .. ".moonstone/env/share/lua/" .. lua_v .. "/?.lua;" .. package_root .. ".moonstone/env/share/lua/" .. lua_v .. "/?/init.lua;" .. package_root .. "?.lua;" .. package_root .. "?/init.lua;" .. install_root .. "?.lua;" .. install_root .. "?/init.lua;" .. install_root .. ".moonstone/env/share/lua/" .. lua_v .. "/?.lua;" .. install_root .. ".moonstone/env/share/lua/" .. lua_v .. "/?/init.lua;" .. package.path
 
+local variants_ok, variants = pcall(function() return require("moonstone.variants") end)
+if variants_ok then variants.install() end
+
 local c = require("clingy")
 local v = require("valua")
 local cli_deps = require("cli.deps").new(source)

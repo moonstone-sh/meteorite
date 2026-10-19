@@ -1,3 +1,4 @@
+local shell = require("cli.shell")
 local client = {}
 
 local function usage()
@@ -14,7 +15,7 @@ end
 
 local function write_file(path, content)
   local dir = path:match("^(.*[/\\])")
-  if dir and dir ~= "" then os.execute("mkdir -p " .. string.format("%q", dir)) end
+  if dir and dir ~= "" then shell.mkdir(dir) end
   local file, err = io.open(path, "wb")
   if not file then error(err) end
   file:write(content)

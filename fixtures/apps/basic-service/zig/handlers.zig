@@ -18,6 +18,11 @@ pub fn sleep_1s(ctx: anytype) !void {
         while (linux.errno(linux.nanosleep(&req, &rem)) == .INTR) {
             req = rem;
         }
+    } else if (builtin.os.tag == .windows) {
+        const Windows = struct {
+            extern "kernel32" fn Sleep(u32) callconv(.winapi) void;
+        };
+        Windows.Sleep(1000);
     } else {
         var req: std.c.timespec = .{ .sec = 1, .nsec = 0 };
         var rem: std.c.timespec = undefined;

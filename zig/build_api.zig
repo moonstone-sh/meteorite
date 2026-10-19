@@ -165,7 +165,7 @@ pub fn addService(b: *std.Build, options: Options) Service {
     // etc.). An explicit CLI path remains available for standalone/custom
     // embedding callers that deliberately manage that environment themselves.
     const graph_step = if (meteorite_cli) |cli|
-        b.addSystemCommand(&.{ join(b, &.{ project_root, ".moonstone/env/bin/lua" }), cli, "graph", project_graph_input, project_graph_output, mode, backend })
+        b.addSystemCommand(&.{ join(b, &.{ project_root, if (@import("builtin").os.tag == .windows) ".moonstone/env/bin/lua.exe" else ".moonstone/env/bin/lua" }), cli, "graph", project_graph_input, project_graph_output, mode, backend })
     else
         b.addSystemCommand(&.{ "moon", "exec", "--dev", "meteorite", "graph", graph_input, graph_output, mode, backend });
 
@@ -370,7 +370,7 @@ pub fn addService(b: *std.Build, options: Options) Service {
             bridge_module.addIncludePath(cwdPath(join(b, &.{ project_lua_root, "include", "luajit-2.1" })));
         }
         bridge_module.addObjectFile(cwdPath(join(b, &.{ project_lua_root, "lib", if (is_luajit) "libluajit-5.1.a" else "liblua.a" })));
-        bridge_module.linkSystemLibrary("m", .{});
+        if (target.result.os.tag != .windows) bridge_module.linkSystemLibrary("m", .{});
     }
 
     const graph_module = b.createModule(.{
@@ -432,6 +432,7 @@ pub fn addService(b: *std.Build, options: Options) Service {
             },
         }),
     });
+    if (target.result.os.tag == .windows) exe.root_module.link_libc = true;
     for (options.native.libraries) |library| exe.root_module.linkLibrary(library);
     for (options.native.system_libraries) |library_name| exe.root_module.linkSystemLibrary(library_name, .{});
     if (options.native.c_sources.len > 0) {
@@ -448,15 +449,10 @@ pub fn addService(b: *std.Build, options: Options) Service {
     if (lua_runtime) exe.link_gc_sections = false;
     exe.step.dependOn(&graph_step.step);
 
-    const install_server = b.addSystemCommand(&.{ "sh", "-c", "out=\"${2:-dist/server}\"; dir=$(dirname \"$out\"); mkdir -p \"$dir\"; rm -f \"$out\"; cp \"$1\" \"$out\"; if [ -d \"$3/static\" ]; then rm -rf \"$dir/static\"; cp -R \"$3/static\" \"$dir/static\"; fi", "sh" });
-    install_server.addFileArg(exe.getEmittedBin());
-    if (b.args) |args| {
-        if (args.len > 0) install_server.addArg(args[0]) else install_server.addArg("dist/server");
-    } else {
-        install_server.addArg("dist/server");
-    }
-    install_server.addArg(graph_output);
-    install_server.step.dependOn(&exe.step);
+    const output = if (b.args) |args|
+        (if (args.len > 0) args[0] else if (target.result.os.tag == .windows) "dist/server.exe" else "dist/server")
+    else if (target.result.os.tag == .windows) "dist/server.exe" else "dist/server";
+    const install_server = @import("install_service.zig").create(b, exe.getEmittedBin(), output, join(b, &.{ graph_output, "static" }));
 
     const install_step = b.step("install-server", "Build the Meteorite HTTP server into dist/server");
     install_step.dependOn(&install_server.step);

@@ -33,6 +33,7 @@ return ballad.partiture(function(p)
 		collect = {
 			bins = {
 				convention.file("bin/meteorite", "bin/meteorite"),
+				convention.file("bin/meteorite.cmd", "bin/meteorite.cmd"),
 			},
 			lua_modules = {
 				convention.tree("src", {
