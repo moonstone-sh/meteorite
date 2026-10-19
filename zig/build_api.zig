@@ -226,7 +226,7 @@ pub fn addService(b: *std.Build, options: Options) Service {
         \\pub const hybrid_profile = "{s}";
         \\pub const lua_state_strategy = "{s}";
         \\pub const router_dispatch = "{s}";
-        \\pub const dev_events_path = {f};
+        \\pub const dev_events_path = "{f}";
         \\
         \\pub const zig_optimize = @tagName(builtin.mode);
         \\pub const cpu_arch = @tagName(builtin.cpu.arch);
