@@ -302,7 +302,7 @@ local function classify_changes(changes, force_build)
 end
 
 local function reload_lua()
-  return run("curl -fsS -X POST http://127.0.0.1:" .. resolve_dev_port() .. "/__meteorite/reload-lua >/dev/null")
+  return run("curl -fsS -X POST http://127.0.0.1:" .. resolve_dev_port() .. "/__meteorite/reload-lua >" .. shell.null)
 end
 
 local function graph()

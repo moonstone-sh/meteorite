@@ -53,7 +53,7 @@ function dev_command.run(argv, deps)
     cwd = root,
     argv = { lua, deps.package_dev_file(), root .. "/" .. graph_input, root .. "/.meteorite/graph/current",
       request.mode, request.backend, build_command, root .. "/dist/server" .. shell.executable_suffix },
-    env = { METEORITE_CLI = cli, METEORITE_BUILD_COMMAND = build_command },
+    env = { METEORITE_CLI = cli, METEORITE_BUILD_COMMAND = build_command, LUA_PATH = package.path },
     stdin_eof = true,
     lock_dir = root .. "/.meteorite/dev/session.lock",
     cleanup_files = { root .. "/.meteorite/dev/server.pid" },

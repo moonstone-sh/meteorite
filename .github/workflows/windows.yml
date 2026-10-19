@@ -45,7 +45,7 @@ jobs:
           "$env:GITHUB_WORKSPACE/.ci/moonstone/zig-out/bin" >> $env:GITHUB_PATH
           & $moon init "$env:RUNNER_TEMP/meteorite-native" --name native-meteorite --kind script --interpreter lua@5.4 --no-sync
           if ($LASTEXITCODE -ne 0) { throw 'init failed' }
-          & $moon -C "$env:RUNNER_TEMP/meteorite-native" add moonstone/valua moonstone/alter moonstone/alter-jsonc moonstone/luals-composer rocks:dkjson --no-sync
+          & $moon -C "$env:RUNNER_TEMP/meteorite-native" add moonstone/valua moonstone/alter moonstone/alter-jsonc moonstone/luals-composer rocks:dkjson
           if ($LASTEXITCODE -ne 0) { throw 'add failed' }
           & $moon -C "$env:RUNNER_TEMP/meteorite-native" sync
           if ($LASTEXITCODE -ne 0) { throw 'sync failed' }
