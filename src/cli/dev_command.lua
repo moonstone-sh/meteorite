@@ -48,7 +48,7 @@ function dev_command.run(argv, deps)
   build_parts[#build_parts + 1] = quote(root .. "/dist/server" .. shell.executable_suffix)
   local build_command = table.concat(build_parts, " ")
   local lua = os.getenv("LUA_BIN") or (deps.read_file(".moonstone/env/bin/lua") and ".moonstone/env/bin/lua" or "lua")
-  local worker_env = worker_env
+  local worker_env = { METEORITE_CLI = cli, METEORITE_BUILD_COMMAND = build_command, LUA_PATH = package.path }
   worker_env["LUA_PATH_" .. (_VERSION:match("%d+%.%d+") or "5.4"):gsub("%.", "_")] = package.path
   local script = process.supervisor_script({
     label = "Meteorite dev",
