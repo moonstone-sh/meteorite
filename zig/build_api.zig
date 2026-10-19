@@ -226,7 +226,7 @@ pub fn addService(b: *std.Build, options: Options) Service {
         \\pub const hybrid_profile = "{s}";
         \\pub const lua_state_strategy = "{s}";
         \\pub const router_dispatch = "{s}";
-        \\pub const dev_events_path = "{s}";
+        \\pub const dev_events_path = {f};
         \\
         \\pub const zig_optimize = @tagName(builtin.mode);
         \\pub const cpu_arch = @tagName(builtin.cpu.arch);
@@ -259,7 +259,7 @@ pub fn addService(b: *std.Build, options: Options) Service {
         hybrid_profile,
         lua_state_strategy,
         router_dispatch,
-        dev_events_path,
+        std.zig.fmtString(dev_events_path),
     }) catch @panic("OOM");
     const write_build_info = b.addWriteFiles();
     const build_info_file = write_build_info.add("build_info.zig", build_info_content);
