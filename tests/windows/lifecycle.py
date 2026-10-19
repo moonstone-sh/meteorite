@@ -41,6 +41,8 @@ def request(url,expected,seconds=30,process=None):
             last=error; time.sleep(.05)
     raise AssertionError((url,last))
 
+run("lua",root/"tests/windows/host.lua")
+
 # Scaffolding must work from the public command without mkdir/find/Bash.
 scaffold=fixture/'scaffold space'
 cli('init',scaffold,'--name','windows-scaffold','--no-sync','--static')
