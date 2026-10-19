@@ -399,10 +399,13 @@ while running do
       io.stderr:write("Meteorite dev: graph failed; keeping previous server state.\n")
       emit_event("build_error", { stage = "graph", detail = "graph failed; keeping previous server state" })
     end
-    graph_paths, runtime_paths, passive_paths, exclude_paths = watch_paths()
-    last_graph = source_fingerprint(graph_paths, exclude_paths)
-    last_runtime = source_fingerprint(runtime_paths, exclude_paths)
-    last_passive = source_fingerprint(passive_paths)
+    -- A build can publish its first response before this loop resumes. Keep
+    -- the snapshot that triggered the work: adopting a post-build snapshot
+    -- would consume edits made during graph/build/startup without processing
+    -- them. Newly discovered watch inputs are picked up on the next cycle.
+    last_graph = current_graph
+    last_runtime = current_runtime
+    last_passive = current_passive
   elseif current_runtime ~= last_runtime then
     io.stderr:write("\nMeteorite dev: runtime input changed; restarting server without graph regeneration.\n")
     start_server()
