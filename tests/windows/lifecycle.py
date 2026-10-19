@@ -25,10 +25,12 @@ def cli(*args): run('lua',wrapper,*args)
 def port():
     with socket.socket() as listener:
         listener.bind(('127.0.0.1',0)); return listener.getsockname()[1]
-def request(url,expected,seconds=30):
+def request(url,expected,seconds=30,process=None):
     deadline=time.monotonic()+seconds
     last=None
     while time.monotonic()<deadline:
+        if process is not None and process.poll() is not None:
+            raise AssertionError(("process exited before readiness",process.returncode,last))
         try:
             with urllib.request.urlopen(url,timeout=1) as response:
                 data=response.read(); assert response.status==200
@@ -114,9 +116,9 @@ with open(devlog,'wb') as output:
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
     try:
         url='http://127.0.0.1:'+str(number)+'/health'
-        request(url,b'before edit',180)
+        request(url,b'before edit',180,session)
         entry.write_text(application('after edit'))
-        request(url,b'after edit',90)
+        request(url,b'after edit',90,session)
         session.send_signal(signal.CTRL_BREAK_EVENT)
         session.wait(timeout=15)
         with socket.socket() as connection:
