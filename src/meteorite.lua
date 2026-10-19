@@ -11,8 +11,7 @@ if met_dir then
   }, ";")
 end
 
-local variants_ok, variants = pcall(function() return require("moonstone.variants") end)
-if variants_ok then variants.install() end
+require("meteorite.flavor").install_searcher()
 
 local app_core = require("core.app")
 local schema_exports = require("core.schema_exports")

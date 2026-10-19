@@ -14,8 +14,6 @@ package.path ="src/?.lua;src/?/init.lua;" .. module_root .. "?.lua;" .. module_r
 -- untagged fallbacks load.
 require("meteorite.flavor").install_searcher()
 
-local variants_ok, variants = pcall(function() return require("moonstone.variants") end)
-if variants_ok then variants.install() end
 
 local c = require("clingy")
 local v = require("valua")
