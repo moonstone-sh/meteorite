@@ -73,6 +73,10 @@ for mode in ('release-static','hybrid_dev'):
         relocated=fixture/('relocated '+mode+' '+backend)
         relocated.mkdir(exist_ok=True)
         target=relocated/'server.exe'; shutil.copy2(binary,target)
+        if mode=='hybrid_dev':
+            # Development handlers are runtime source assets, not embedded code.
+            # Relocate the declared closure, including the generated Lua chunks.
+            shutil.copytree(fixture/'.meteorite/lua',relocated/'.meteorite/lua',dirs_exist_ok=True)
         output=open(relocated/'server.log','wb')
         process=subprocess.Popen([str(target)],cwd=relocated,stdout=output,stderr=subprocess.STDOUT,
                                  creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,env=env)
@@ -88,6 +92,10 @@ for mode in ('release-static','hybrid_dev'):
             assert time.monotonic()-started<5
             assert process.returncode==0,(mode,backend,process.returncode)
             print('PASS:',mode,backend,'HTTP, relocated binary and idle shutdown',flush=True)
+        except BaseException:
+            output.flush()
+            print((relocated/'server.log').read_text(errors='replace'),flush=True)
+            raise
         finally:
             if process.poll() is None: process.kill(); process.wait(timeout=10)
             output.close()
