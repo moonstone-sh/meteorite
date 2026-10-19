@@ -75,16 +75,13 @@ end
 --- Does the project keep flavor variants of its own modules under src/?
 --- Those are found at run time by `require`, not by handler path.
 function graph_prepare.project_has_variants(root)
-  if not io.popen then return false end
+  local fs = require("utils.fs")
   local src = helpers.path_join(root, "src")
-  local pipe = io.popen("find " .. string.format("%q", src) .. " -name '*@*.lua' 2>/dev/null")
-  if not pipe then return false end
-  local found = false
-  for line in pipe:lines() do
-    if flavor.is_variant(line) then found = true break end
+  if not fs.is_dir(src) then return false end
+  for _, file in ipairs(fs.list_files(src)) do
+    if flavor.is_variant(file) then return true end
   end
-  pipe:close()
-  return found
+  return false
 end
 
 function graph_prepare.prepare_graph(graph, output, mode)

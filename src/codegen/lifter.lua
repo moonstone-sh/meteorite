@@ -18,7 +18,7 @@ local function write_file(path, content)
 end
 
 local function mkdir_p(path)
-  os.execute("mkdir -p " .. string.format("%q", path))
+  require("utils.fs").mkdir_p(path)
 end
 
 local function split_lines(text)
