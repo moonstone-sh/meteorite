@@ -2,11 +2,16 @@ local platform = require("clingy.platform")
 local compat = require("clingy.compat")
 local ps = require("clingy.windows_powershell")
 local shell = { windows = true, null = "NUL", executable_suffix = ".exe", quote = platform.quote }
+local function command_processor(command)
+  -- system()/popen enter cmd.exe, which strips a leading quoted program
+  -- differently from an argv launcher. Own the complete /s /c payload.
+  return 'cmd /d /v:off /s /c "' .. command .. '"'
+end
 function shell.run(command)
-  return compat.exit_status(os.execute(command)) == 0
+  return compat.exit_status(os.execute(command_processor(command))) == 0
 end
 function shell.capture(command)
-  local pipe = assert(io.popen(command, "r"))
+  local pipe = assert(io.popen(command_processor(command), "r"))
   local output = pipe:read("*a") or ""
   local ok, how, code = pipe:close()
   assert(compat.exit_status(ok, how, code) == 0, "command failed: " .. command)
