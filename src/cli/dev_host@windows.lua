@@ -6,7 +6,7 @@ local M={}
 -- terminate its exact Process handle; its Job Object reaps the server tree.
 local owned={}
 local function capture(script)
-  return shell.capture(ps.command("$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); " .. script))
+  return shell.capture(ps.command("$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); " .. script))
 end
 function M.sleep(seconds)
   return os.execute(ps.command("Start-Sleep -Milliseconds " .. math.floor(seconds*1000)))
@@ -40,6 +40,6 @@ function M.fingerprint(paths, exclude)
   for _,path in ipairs(exclude or {}) do excluded[#excluded+1]=ps.literal(path) end
   return capture("$excluded=@(" .. table.concat(excluded,",") .. ") | ForEach-Object { [IO.Path]::GetFullPath($_).TrimEnd('\\') }; " ..
     "$files=@(" .. table.concat(roots,",") .. ") | ForEach-Object { if(Test-Path -LiteralPath $_) { Get-ChildItem -LiteralPath $_ -File -Recurse -ErrorAction Stop } }; " ..
-    "$files | Sort-Object -Property FullName -Unique | ForEach-Object { $f=$_; $skip=$false; foreach($x in $excluded) { if($f.FullName.Equals($x,[StringComparison]::OrdinalIgnoreCase) -or $f.FullName.StartsWith($x+'\\',[StringComparison]::OrdinalIgnoreCase)) { $skip=$true } }; if(-not $skip) { $hash=(Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash; Write-Output ($f.FullName+'|'+$hash) } }")
+    "$files | Sort-Object -Property FullName -Unique | ForEach-Object { $f=$_; $skip=$false; foreach($x in $excluded) { if($f.FullName.Equals($x,[StringComparison]::OrdinalIgnoreCase) -or $f.FullName.StartsWith($x+'\\',[StringComparison]::OrdinalIgnoreCase)) { $skip=$true } }; if(-not $skip) { $stream=[IO.File]::OpenRead($f.FullName); try { $sha=[Security.Cryptography.SHA256]::Create(); try { $hash=[BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-','') } finally { $sha.Dispose() } } finally { $stream.Dispose() }; Write-Output ($f.FullName+'|'+$hash) } }")
 end
 return M
