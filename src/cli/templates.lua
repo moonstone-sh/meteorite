@@ -633,7 +633,6 @@ function handler_sync.check_partiture()
 end
 
 function handler_sync.watch_supervisor()
-<<<<<<< HEAD
   return [=[
 require("moonstone.variants").install()
 local process = require("clingy.process")
@@ -652,23 +651,6 @@ assert(file:write(platform.windows and "\239\187\191" .. script or script)); ass
 local code = require("clingy.compat").exit_status(os.execute(process.supervisor_command(path)))
 os.exit(code)
 ]=]
-=======
-  return table.concat({
-    "local process = require(\"clingy.process\")",
-    "local argv = { \".moonstone/env/bin/ballad\", \"play\", \"Watch_partiture.lua\", \"--\" }",
-    "for _, value in ipairs(arg) do argv[#argv + 1] = value end",
-    "local script = process.supervisor_script({",
-    "  argv = argv, label = \"Meteorite watch\", stdin_eof = true,",
-    "  lock_dir = \".meteorite/dev/session.lock\",",
-    "  cleanup_files = { \".meteorite/dev/server.pid\" },",
-    "})",
-    "assert(os.execute(\"mkdir -p .meteorite/dev\"))",
-    "local file = assert(io.open(\".meteorite/dev/watch-supervisor.sh\", \"w\"))",
-    "assert(file:write(script));assert(file:close())",
-    "local ok, _, status = os.execute(\"bash .meteorite/dev/watch-supervisor.sh\")",
-    "if not (ok == true or ok == 0 or status == 0) then os.exit(1) end",
-  }, "\n")
->>>>>>> origin/main
 end
 
 return handler_sync
