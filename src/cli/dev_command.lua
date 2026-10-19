@@ -48,12 +48,14 @@ function dev_command.run(argv, deps)
   build_parts[#build_parts + 1] = quote(root .. "/dist/server" .. shell.executable_suffix)
   local build_command = table.concat(build_parts, " ")
   local lua = os.getenv("LUA_BIN") or (deps.read_file(".moonstone/env/bin/lua") and ".moonstone/env/bin/lua" or "lua")
+  local worker_env = worker_env
+  worker_env["LUA_PATH_" .. (_VERSION:match("%d+%.%d+") or "5.4"):gsub("%.", "_")] = package.path
   local script = process.supervisor_script({
     label = "Meteorite dev",
     cwd = root,
     argv = { lua, deps.package_dev_file(), root .. "/" .. graph_input, root .. "/.meteorite/graph/current",
       request.mode, request.backend, build_command, root .. "/dist/server" .. shell.executable_suffix },
-    env = { METEORITE_CLI = cli, METEORITE_BUILD_COMMAND = build_command, LUA_PATH = package.path },
+    env = worker_env,
     stdin_eof = true,
     lock_dir = root .. "/.meteorite/dev/session.lock",
     cleanup_files = { root .. "/.meteorite/dev/server.pid" },

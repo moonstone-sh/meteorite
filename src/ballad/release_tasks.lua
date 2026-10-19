@@ -5,6 +5,11 @@ local release_contract = require("ballad.release_contract")
 local host = require("ballad.release_host")
 local process = require("ballad.process")
 local tasks = {}
+local function lua_environment()
+  local env = { LUA_PATH = package.path }
+  env["LUA_PATH_" .. (_VERSION:match("%d+%.%d+") or "5.4"):gsub("%.", "_")] = package.path
+  return env
+end
 
 local function join(root, value)
   if not value or value == "" then return root end
@@ -64,7 +69,7 @@ function tasks.compile_target_lua(ctx, root, opts, target_lua, plugin_root)
   return ctx:native_task({
     tool = tool,
     args = args,
-    env = tool == "lua" and { LUA_PATH = package.path } or nil,
+    env = tool == "lua" and lua_environment() or nil,
     cwd = root,
     outputs = { output_path },
     inputs = { target_lua.source_payload_path, script },

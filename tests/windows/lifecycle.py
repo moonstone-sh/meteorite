@@ -25,15 +25,16 @@ def cli(*args): run('lua',wrapper,*args)
 def port():
     with socket.socket() as listener:
         listener.bind(('127.0.0.1',0)); return listener.getsockname()[1]
-def request(url,expected):
-    deadline=time.monotonic()+20
+def request(url,expected,seconds=30):
+    deadline=time.monotonic()+seconds
     last=None
     while time.monotonic()<deadline:
         try:
             with urllib.request.urlopen(url,timeout=1) as response:
                 data=response.read(); assert response.status==200
-                assert expected in data,(url,data)
-                return
+                if expected in data: return
+                last=(url,data)
+                time.sleep(.05)
         except (OSError,TimeoutError) as error:
             last=error; time.sleep(.05)
     raise AssertionError((url,last))
@@ -73,7 +74,7 @@ for mode in ('release-static','hybrid_dev'):
         relocated.mkdir(exist_ok=True)
         target=relocated/'server.exe'; shutil.copy2(binary,target)
         output=open(relocated/'server.log','wb')
-        process=subprocess.Popen([str(target)],cwd=fixture,stdout=output,stderr=subprocess.STDOUT,
+        process=subprocess.Popen([str(target)],cwd=relocated,stdout=output,stderr=subprocess.STDOUT,
                                  creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,env=env)
         try:
             request('http://127.0.0.1:'+str(number)+'/health',b'native windows')
@@ -90,3 +91,32 @@ for mode in ('release-static','hybrid_dev'):
         finally:
             if process.poll() is None: process.kill(); process.wait(timeout=10)
             output.close()
+
+# Complete direct dev lifecycle, including an inline Lua edit and retirement.
+number=port()
+entry=fixture/'src/main.lua'
+def application(message):
+    return 'local m=require("meteorite")\nlocal app=m.app({name="windows-dev",port='+str(number)+'})\napp:get("/health",function(c) return c:text("'+message+'") end)\nreturn app\n'
+entry.write_text(application('before edit'))
+devlog=fixture/'dev-session.log'
+with open(devlog,'wb') as output:
+    session=subprocess.Popen([str(moon),'-C',str(fixture),'exec','--','lua',str(wrapper),'dev',
+        '--mode','hybrid_dev','--backend','std_http','--lua-root',str(lua_root)],env=env,
+        stdin=subprocess.PIPE,stdout=output,stderr=subprocess.STDOUT,
+        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+    try:
+        url='http://127.0.0.1:'+str(number)+'/health'
+        request(url,b'before edit',180)
+        entry.write_text(application('after edit'))
+        request(url,b'after edit',90)
+        session.send_signal(signal.CTRL_BREAK_EVENT)
+        session.wait(timeout=15)
+        with socket.socket() as connection:
+            assert connection.connect_ex(('127.0.0.1',number))!=0,'dev server survived session cancellation'
+        print('PASS: Windows dev startup, source edit, refresh and process-tree shutdown',flush=True)
+    except BaseException:
+        print(devlog.read_text(errors='replace'),flush=True)
+        raise
+    finally:
+        if session.poll() is None:
+            session.kill(); session.wait(timeout=10)

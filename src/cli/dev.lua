@@ -326,7 +326,7 @@ local function changed_zig_or_build(previous, current)
   local function filter(text)
     local out = {}
     for line in tostring(text):gmatch("[^\n]+") do
-      if line:match(" zig/") or line:match(" build%.zig$") or line:match(" moonstone%.toml$") then out[#out + 1] = line end
+      if line:match(" zig/") or line:match(" build%.zig$") or line:match(" moonstone%.toml$") or line:gsub("\\", "/"):match("/zig/[^|]*|") or line:gsub("\\", "/"):match("/build%.zig|") or line:gsub("\\", "/"):match("/moonstone%.toml|") then out[#out + 1] = line end
     end
     return table.concat(out, "\n")
   end
