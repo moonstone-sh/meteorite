@@ -18,18 +18,8 @@ local function plugin_root()
   else
     root = path.dirname(root2)
   end
-  -- Ensure absolute path so native tasks with different cwd can locate scripts
-  if root == "" or root == "." then
-    local pipe = io.popen("pwd", "r")
-    root = (pipe:read("*l") or ""):gsub("/+$", "")
-    pipe:close()
-  elseif root:sub(1, 1) ~= "/" then
-    local pipe = io.popen("pwd", "r")
-    local cwd = (pipe:read("*l") or ""):gsub("/+$", "")
-    pipe:close()
-    root = cwd .. "/" .. root
-  end
-  return root
+  -- Preserve drive roots as well as POSIX paths when native tasks change cwd.
+  return path.absolute(root)
 end
 
 local function plugin_build_file()

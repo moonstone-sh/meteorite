@@ -57,7 +57,7 @@ const build_options = @import("build_options");
 pub const path = build_options.dev_events_path;
 
 /// Comptime feature gate. Everything below is dead code when this is false.
-pub const enabled = path.len > 0 and builtin.os.tag != .windows;
+pub const enabled = path.len > 0;
 
 /// Longest line we will emit. A request path is capped by the backends well
 /// below this; anything that still would not fit is dropped rather than
@@ -98,14 +98,26 @@ const tail_min_reserve_bytes = 96;
 
 var open_mutex: Io.Mutex = .init;
 var open_attempted: bool = false;
-var open_fd: std.posix.fd_t = -1;
+var open_fd: if (@import("builtin").os.tag == .windows) ?std.os.windows.HANDLE else std.posix.fd_t = if (@import("builtin").os.tag == .windows) null else -1;
+
+extern "kernel32" fn CreateFileW([*:0]const u16, u32, u32, ?*anyopaque, u32, u32, ?std.os.windows.HANDLE) callconv(.winapi) std.os.windows.HANDLE;
+fn windowsAppendFile() ?std.os.windows.HANDLE {
+    const wide = std.unicode.utf8ToUtf16LeAllocZ(std.heap.page_allocator, path) catch return null;
+    defer std.heap.page_allocator.free(wide);
+    // FILE_APPEND_DATA, shared read/write/delete, OPEN_ALWAYS. Every line is
+    // appended atomically alongside the Lua supervisor's own event stream.
+    const file = CreateFileW(wide, 4, 7, null, 4, 0x80, null);
+    return if (file == std.os.windows.INVALID_HANDLE_VALUE) null else file;
+}
 
 fn handle(io: Io) ?Io.File {
     if (!@atomicLoad(bool, &open_attempted, .acquire)) {
         open_mutex.lockUncancelable(io);
         defer open_mutex.unlock(io);
         if (!open_attempted) {
-            open_fd = std.posix.openat(
+            if (@import("builtin").os.tag == .windows) {
+                open_fd = windowsAppendFile();
+            } else open_fd = std.posix.openat(
                 std.posix.AT.FDCWD,
                 path,
                 .{ .ACCMODE = .WRONLY, .CREAT = true, .APPEND = true },
@@ -114,8 +126,12 @@ fn handle(io: Io) ?Io.File {
             @atomicStore(bool, &open_attempted, true, .release);
         }
     }
-    if (open_fd < 0) return null;
-    return .{ .handle = open_fd, .flags = .{ .nonblocking = false } };
+    if (@import("builtin").os.tag == .windows) {
+        return .{ .handle = open_fd orelse return null, .flags = .{ .nonblocking = false } };
+    } else {
+        if (open_fd < 0) return null;
+        return .{ .handle = open_fd, .flags = .{ .nonblocking = false } };
+    }
 }
 
 /// Append one `kind:"request"` line. Never fails the request it describes: any

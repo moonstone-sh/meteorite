@@ -3,6 +3,7 @@
 local cli_templates = require("cli.templates")
 local json = require("utils.json")
 
+local shell = require("cli.shell")
 local init = {}
 
 local function read_file(path)
@@ -17,7 +18,7 @@ local function write_file(path, content, force)
   local existing = read_file(path)
   if existing ~= nil and not force then return false end
   local parent = path:match("^(.*)/[^/]+$")
-  if parent and parent ~= "" then os.execute("mkdir -p " .. string.format("%q", parent)) end
+  if parent and parent ~= "" then shell.mkdir(parent) end
   local file, err = io.open(path, "wb")
   if not file then error("cannot write " .. path .. ": " .. tostring(err)) end
   file:write(content)
@@ -31,7 +32,7 @@ local function path_join(a, b)
 end
 
 local function shell_quote(value)
-  return "'" .. tostring(value):gsub("'", "'\\''") .. "'"
+  return shell.quote(value)
 end
 
 local function render_template(text, name, lua_ver)
@@ -116,7 +117,7 @@ local function manifest_has_named_entry(document, section, name)
 end
 
 local function apply_manifest_operations(target, build_mode, moon_bin)
-  local export = capture(shell_quote(moon_bin) .. " -C " .. shell_quote(target) .. " manifest export --json 2>/dev/null")
+  local export = capture(shell_quote(moon_bin) .. " -C " .. shell_quote(target) .. " manifest export --json 2>" .. shell.null .. "")
   local revision = export:match('"storage_revision":"([^"]+)"')
   if not revision then error("Moonstone manifest export did not return a storage revision") end
 
@@ -191,16 +192,12 @@ function init.run(argv, config)
   _G.METEORITE_INIT_BUILD_MODE = template_name == "static" and "release-static" or "hybrid"
   local root = template_root(template_name, roots)
   local files = {}
-  local pipe = io.popen("cd " .. shell_quote(root) .. " && find . -type f | sort", "r")
-  if pipe then
-    for line in pipe:lines() do files[#files + 1] = line:gsub("^%./", "") end
-    pipe:close()
-  end
+  for _, rel in ipairs(shell.files(root)) do files[#files + 1] = rel end
   if opts.with_zig then
     files[#files + 1] = "zig/handlers.zig"
     files[#files + 1] = "zig/validators.zig"
   end
-  os.execute("mkdir -p " .. string.format("%q", target))
+  shell.mkdir(target)
   for _, rel in ipairs(files) do
     local source_path = path_join(root, rel)
     local content = read_file(source_path)
@@ -220,7 +217,7 @@ function init.run(argv, config)
   local build_path = path_join(target, "build.zig")
   local generated_build = not read_file(build_path)
   if generated_build and not read_file(path_join(target, "build.zig.zon")) then
-    os.execute("cd " .. shell_quote(target) .. " && zig init --minimal >/dev/null 2>&1")
+    os.execute((shell.windows and "cd /d " or "cd ") .. shell_quote(target) .. " && zig init --minimal >" .. shell.null .. " 2>&1")
   end
   local generated_partitures = {
     ["build.zig"] = cli_templates.project_build_zig(),

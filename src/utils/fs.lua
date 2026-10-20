@@ -19,6 +19,7 @@
 --- @field dirname fun(path: string): string
 
 ---@type FsModule
+local shell = require("cli.shell")
 local fs = {}
 
 -- Try to load luafilesystem, fall back to shell-based implementations
@@ -31,7 +32,7 @@ local has_lfs = lfs_ok and lfs
 function fs.mkdir_p(path)
   if path == "" or path == "." then return end
   -- Try shell mkdir -p first (fast, ubiquitous)
-  os.execute("mkdir -p " .. fs.shell_quote(path))
+  shell.mkdir(path)
 end
 
 --- Quote a path for shell usage.
@@ -39,7 +40,7 @@ end
 ---@param path string
 ---@return string
 function fs.shell_quote(path)
-  return "'" .. tostring(path):gsub("'", "'\\''") .. "'"
+  return shell.quote(path)
 end
 
 --- Check if a path is a directory.
@@ -47,6 +48,7 @@ end
 ---@param path string
 ---@return boolean
 function fs.is_dir(path)
+  if shell.windows then return shell.is_dir(path) end
   if has_lfs then
     return lfs.attributes(path, "mode") == "directory"
   end
@@ -65,6 +67,7 @@ end
 ---@param root string
 ---@return string[]
 function fs.list_files(root)
+  if shell.windows then return shell.files(root) end
   if has_lfs then
     local result = {}
     local function walk(dir, prefix)
@@ -103,6 +106,7 @@ end
 ---@param root string
 ---@return string[]
 function fs.list_symlinks(root)
+  if shell.windows then return shell.symlinks(root) end
   if has_lfs then
     local result = {}
     local function walk(dir, prefix)
@@ -174,6 +178,7 @@ end
 ---@param path string
 ---@return string|nil
 function fs.readlink(path)
+  if shell.windows then return nil end
   if has_lfs then
     return lfs.symlinkattributes(path, "target")
   end
@@ -191,7 +196,7 @@ end
 function fs.hash_text(text)
   local tmp = os.tmpname()
   fs.write_file(tmp, text)
-  local pipe = io.popen("b3sum --no-names " .. fs.shell_quote(tmp) .. " 2>/dev/null", "r")
+  local pipe = io.popen("b3sum --no-names " .. fs.shell_quote(tmp) .. " 2>" .. shell.null, "r")
   local hash = pipe and pipe:read("*l") or ""
   if pipe then pipe:close() end
   os.remove(tmp)

@@ -2,11 +2,18 @@ local path = require("ballad.path")
 local release_assets = require("ballad.release_assets")
 local release_contract = require("ballad.release_contract")
 
+local host = require("ballad.release_host")
+local process = require("ballad.process")
 local tasks = {}
+local function lua_environment()
+  local env = { LUA_PATH = package.path }
+  env["LUA_PATH_" .. (_VERSION:match("%d+%.%d+") or "5.4"):gsub("%.", "_")] = package.path
+  return env
+end
 
 local function join(root, value)
   if not value or value == "" then return root end
-  if value:sub(1, 1) == "/" then return value end
+  if path.is_absolute(value) then return value end
   return path.join(root, value)
 end
 
@@ -53,15 +60,16 @@ function tasks.compile_target_lua(ctx, root, opts, target_lua, plugin_root)
   -- The script runs with cwd=root, so pass output relative to root.
   -- source_payload_path may be relative to the Ballad process cwd; make it absolute.
   local source_arg = target_lua.source_payload_path
-  if source_arg and source_arg ~= "" and source_arg:sub(1, 1) ~= "/" then
-    local pipe = io.popen("pwd", "r")
-    local cwd = (pipe:read("*l") or ""):gsub("/+$", "")
-    pipe:close()
+  if source_arg and source_arg ~= "" and not source_arg:match("^[/\\]") and not source_arg:match("^[A-Za-z]:[/\\]") then
+    local cwd = process.cwd()
     source_arg = cwd .. "/" .. source_arg
   end
+  local tool, args = host.lua_task(plugin_root, source_arg, output, target, opts.optimize or "ReleaseFast")
+  script = args[1]
   return ctx:native_task({
-    tool = "sh",
-    args = { script, source_arg, output, target, opts.optimize or "ReleaseFast" },
+    tool = tool,
+    args = args,
+    env = tool == "lua" and lua_environment() or nil,
     cwd = root,
     outputs = { output_path },
     inputs = { target_lua.source_payload_path, script },
@@ -90,14 +98,14 @@ function tasks.rebuild_lua_cmodules(ctx, root, opts, target_lua, lua_root, plugi
       -- Make source/rockspec paths absolute if relative (they are relative to Ballad process cwd)
       local function to_abs(p)
         if not p or p == "" or p:sub(1, 1) == "/" then return p end
-        local pipe = io.popen("pwd", "r")
-        local cwd = (pipe:read("*l") or ""):gsub("/+$", "")
-        pipe:close()
+        local cwd = process.cwd()
         return cwd .. "/" .. p
       end
+      local tool, args = host.cmodule_task(plugin_root, to_abs(package.source_payload_path), to_abs(package.rockspec_payload_path), lua_root_arg, output, target, package_id)
+      script = args[1]
       outputs[#outputs + 1] = ctx:native_task({
-        tool = "sh",
-        args = { script, to_abs(package.source_payload_path), to_abs(package.rockspec_payload_path), lua_root_arg, output, target, package_id },
+        tool = tool,
+        args = args,
         cwd = root,
         outputs = { output_path },
         inputs = { package.source_payload_path, package.rockspec_payload_path, script },

@@ -415,12 +415,13 @@ function handler_sync.moonstone_scripts(build_mode)
   local release_mode = build_mode == "release-static" and "static" or "hybrid"
   return {
     { key = "graph", command = "meteorite graph src/main.lua .meteorite/graph/current " .. tostring(build_mode or "hybrid") .. " fast_http" },
-    { key = "dev", command = "moon exec -- lua Watch_supervisor.lua --mode hybrid_dev --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
-    { key = "build", command = "moon exec -- ballad play Dev_partiture.lua -- --mode hybrid_dev --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
-    { key = "release", command = "moon exec -- ballad play partiture.lua -- --mode " .. release_mode .. " --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
-    { key = "check", command = "moon exec -- ballad play Check_partiture.lua -- --mode " .. release_mode .. " --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
-    { key = "check-release", command = "moon exec -- ballad play Check_partiture.lua -- --mode " .. release_mode .. " --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
-    { key = "check-static", command = "moon exec -- ballad play Check_partiture.lua -- --mode static --backend fast_http --router-dispatch param_matchers" },
+    { key = "dev", command = "lua Watch_supervisor.lua --mode hybrid_dev --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
+    { key = "build", command = "moon exec ballad -- play Dev_partiture.lua -- --mode hybrid_dev --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
+    { key = "release", command = "moon exec ballad -- play partiture.lua -- --mode " .. release_mode .. " --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
+    { key = "check", command = "moon exec ballad -- play Check_partiture.lua -- --mode " .. release_mode .. " --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
+    { key = "check-release", command = "moon exec ballad -- play Check_partiture.lua -- --mode " .. release_mode .. " --backend fast_http --hybrid-profile optimized --router-dispatch param_matchers" },
+    { key = "check-static", command = "moon exec ballad -- play Check_partiture.lua -- --mode static --backend fast_http --router-dispatch param_matchers" },
+
     { key = "doctor", command = "meteorite doctor" },
     { key = "invoke-health", command = "meteorite invoke --json src/main.lua GET /health" },
   }
@@ -632,21 +633,24 @@ function handler_sync.check_partiture()
 end
 
 function handler_sync.watch_supervisor()
-  return table.concat({
-    "local process = require(\"clingy.process\")",
-    "local argv = { \".moonstone/env/bin/ballad\", \"play\", \"Watch_partiture.lua\", \"--\" }",
-    "for _, value in ipairs(arg) do argv[#argv + 1] = value end",
-    "local script = process.supervisor_script({",
-    "  argv = argv, label = \"Meteorite watch\", stdin_eof = true,",
-    "  lock_dir = \".meteorite/dev/session.lock\",",
-    "  cleanup_files = { \".meteorite/dev/server.pid\" },",
-    "})",
-    "assert(os.execute(\"mkdir -p .meteorite/dev\"))",
-    "local file = assert(io.open(\".meteorite/dev/watch-supervisor.sh\", \"w\"))",
-    "assert(file:write(script));assert(file:close())",
-    "local ok, _, status = os.execute(\"bash .meteorite/dev/watch-supervisor.sh\")",
-    "if not (ok == true or ok == 0 or status == 0) then os.exit(1) end",
-  }, "\n")
+  return [=[
+require("moonstone.variants").install()
+local process = require("clingy.process")
+local platform = require("clingy.platform")
+local argv = { "moon", "exec", "--", "ballad", "play", "Watch_partiture.lua", "--" }
+for _, value in ipairs(arg) do argv[#argv + 1] = value end
+local script = process.supervisor_script({
+  argv = argv, label = "Meteorite watch", stdin_eof = true,
+  lock_dir = ".meteorite/dev/session.lock",
+  cleanup_files = { ".meteorite/dev/server.pid" },
+})
+platform.mkdir(".meteorite/dev")
+local path = ".meteorite/dev/watch-supervisor" .. process.supervisor_extension()
+local file = assert(io.open(path, "wb"))
+assert(file:write(platform.windows and "\239\187\191" .. script or script)); assert(file:close())
+local code = require("clingy.compat").exit_status(os.execute(process.supervisor_command(path)))
+os.exit(code)
+]=]
 end
 
 return handler_sync

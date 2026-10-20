@@ -1,3 +1,4 @@
+local shell = require("cli.shell")
 --- Meteorite owns refresh decisions; Clingy owns the OS process group.
 local dev_command = {}
 
@@ -31,8 +32,7 @@ function dev_command.run(argv, deps)
   local graph_input = request.graph_input or "src/main.lua"
   local state_dir = root .. "/.meteorite/dev"
   local mkdir_p = deps.mkdir_p or function(dir)
-    local ok = os.execute("mkdir -p " .. quote(dir))
-    assert(ok == true or ok == 0, "cannot create Meteorite dev state directory")
+    shell.mkdir(dir)
   end
   local build_parts = {
     "zig build --build-file", quote(deps.package_build_file()),
@@ -45,25 +45,26 @@ function dev_command.run(argv, deps)
     build_parts[#build_parts + 1] = "-Ddev-events=" .. quote(dev_command.events_log_path(root))
   end
   build_parts[#build_parts + 1] = "install-server --"
-  build_parts[#build_parts + 1] = quote(root .. "/dist/server")
+  build_parts[#build_parts + 1] = quote(root .. "/dist/server" .. shell.executable_suffix)
   local build_command = table.concat(build_parts, " ")
   local lua = os.getenv("LUA_BIN") or (deps.read_file(".moonstone/env/bin/lua") and ".moonstone/env/bin/lua" or "lua")
+  local worker_env = { METEORITE_CLI = cli, METEORITE_BUILD_COMMAND = build_command, LUA_PATH = package.path }
+  worker_env["LUA_PATH_" .. (_VERSION:match("%d+%.%d+") or "5.4"):gsub("%.", "_")] = package.path
   local script = process.supervisor_script({
     label = "Meteorite dev",
     cwd = root,
     argv = { lua, deps.package_dev_file(), root .. "/" .. graph_input, root .. "/.meteorite/graph/current",
-      request.mode, request.backend, build_command, root .. "/dist/server" },
-    env = { METEORITE_CLI = cli, METEORITE_BUILD_COMMAND = build_command },
+      request.mode, request.backend, build_command, root .. "/dist/server" .. shell.executable_suffix },
+    env = worker_env,
     stdin_eof = true,
     lock_dir = root .. "/.meteorite/dev/session.lock",
     cleanup_files = { root .. "/.meteorite/dev/server.pid" },
   })
-  local script_file = root .. "/.meteorite/dev/supervisor.sh"
+  local script_file = root .. "/.meteorite/dev/supervisor" .. (process.supervisor_extension and process.supervisor_extension() or ".sh")
   local write = deps.write_file or function(path, content)
-    local ok = os.execute("mkdir -p " .. quote(root .. "/.meteorite/dev"))
-    assert(ok == true or ok == 0, "cannot create Meteorite dev state directory")
+    shell.mkdir(root .. "/.meteorite/dev")
     local file = assert(io.open(path, "w"))
-    assert(file:write(content))
+    assert(file:write(shell.windows and "\239\187\191" .. content or content))
     assert(file:close())
   end
   write(script_file, script)
@@ -71,7 +72,7 @@ function dev_command.run(argv, deps)
 
   -- The package launcher execs Bash after this Lua preflight. For direct Lua
   -- invocations the same supervisor also detects loss of its original parent.
-  if not deps.run_command("exec bash " .. quote(script_file)) then os.exit(1) end
+  if not deps.run_command(process.supervisor_command and process.supervisor_command(script_file) or ("exec bash " .. quote(script_file))) then os.exit(1) end
 end
 
 return dev_command
